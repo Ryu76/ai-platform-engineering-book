@@ -25,3 +25,21 @@ def test_offline_chat_cli_starts_answers_and_exits_without_network() -> None:
     assert "오프라인 데모 응답: 'AI Platform이란 무엇인가요?' 요청을 기록했습니다." in result.stdout
     assert "대화를 마칩니다." in result.stdout
     assert result.stderr == ""
+
+
+def test_offline_chat_cli_handles_help_and_quit_without_a_demo_response() -> None:
+    """도움말과 종료 명령은 별도 프로세스에서도 로컬 처리되어야 한다."""
+    result = subprocess.run(
+        [sys.executable, str(CHAT_CLI), "--offline-demo"],
+        cwd=ROOT,
+        input=" /HELP \n/quit\n",
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=10,
+    )
+
+    assert "질문을 입력하면 선택한 LLM에 전송될 수 있습니다" in result.stdout
+    assert "대화를 마칩니다." in result.stdout
+    assert "오프라인 데모 응답:" not in result.stdout
+    assert result.stderr == ""
