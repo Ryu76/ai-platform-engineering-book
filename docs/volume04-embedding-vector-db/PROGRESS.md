@@ -124,7 +124,7 @@ uv run python examples/volume04/reindex_lifecycle.py
 
 ## 남은 PRD 완료 조건
 
-- [ ] Volume 문서의 나머지 장을 작성한다.
+- [x] Volume 문서의 나머지 장과 권 단위 완료·인계 장을 작성한다.
 - [ ] Qdrant Docker Compose 실행 및 collection 생성을 문서화·검증한다.
 - [x] 결정적 local mock에서 vector와 metadata/payload 저장 및 query 검색을 구현·검증했다.
 - [x] 결정적 local mock에서 검색 결과 해석을 실습으로 검증했다.
@@ -132,8 +132,8 @@ uv run python examples/volume04/reindex_lifecycle.py
 - [x] 결정적 local mock에서 정답 ID 기반 top-k 검색 품질과 no-answer gate를 구현·검증했다.
 - [x] 결정적 local mock에서 stale point 삭제와 stable ID의 versioned 재색인 lifecycle을 미니 프로젝트로 구현·검증했다.
 - [ ] Qdrant용 `docker-compose.yml`, `scripts/index_documents.py`를 추가하고 검증한다. (`vector_store.py`는 완료)
-- [ ] 권 단위 완료 체크리스트를 작성·검증한다.
-- [ ] 다음 권(RAG) 인계 결과물을 정리한다.
+- [x] 권 단위 완료 체크리스트를 작성·검증한다.
+- [x] 다음 권(RAG) 인계 결과물을 정리한다.
 
 ## 2026-08-10 — Slice 05 완료
 
@@ -172,6 +172,49 @@ uv run python examples/volume04/reindex_lifecycle.py
 
 또한 Python으로 05장의 `## 1.`부터 `## 14.`까지의 14개 섹션, README의 장 링크, 이 진행 기록의 Slice 05 항목을 검증했습니다. `uv`는 이 호스트의 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고만 있었고, uv가 프로젝트 환경으로 검증을 완료했습니다.
 
+## 2026-08-10 — Slice 06 완료
+
+### 추가한 결과물
+
+- `06-completion-checklist-rag-handoff.md`
+  - local mock DoD와 별도 허가가 필요한 실제 Qdrant integration DoD를 명확히 분리
+  - 완료 표식과 cron pause의 사전 조건을 기록하고, 현재는 실제 database 증거가 없어 완료하지 않음을 명시
+  - Volume 05 RAG의 stable chunk ID, payload/authorization filter, score policy, generation-aware lifecycle 인계 contract 정리
+- `tests/unit/test_volume04_learning_materials.py`
+  - 01–06장의 14개 학습 섹션, README의 장·예제·Volume 04 테스트 연결, 실제 Qdrant 미검증 상태를 구조적으로 검증
+- `README.md`
+  - 06장 링크, 학습 자료 검사 명령, RAG 인계 링크 반영
+
+### 범위 확인
+
+- 외부 API, 모델 다운로드, Docker, Qdrant, PostgreSQL, Chroma, 비밀값을 사용하지 않았습니다.
+- 허용된 Volume 04 문서·예제·테스트·embeddings source 외의 파일은 변경하지 않았습니다.
+- 실제 Qdrant Docker Compose와 `scripts/index_documents.py`는 cron 허용 경로 밖이므로 생성하거나 수정하지 않았습니다.
+
+### 검증 결과
+
+```bash
+# 실행 위치: 저장소 루트
+uv run pytest tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py tests/unit/test_volume04_learning_materials.py -q
+# 34 passed in 0.22s
+uv run ruff check src/ai_platform/embeddings examples/volume04 tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py tests/unit/test_volume04_learning_materials.py
+# All checks passed!
+uv run mypy src/ai_platform/embeddings
+# Success: no issues found in 5 source files
+uv run python examples/volume04/embedding_similarity.py
+# query_dimensions=64; retry document score=0.548로 1위
+uv run python examples/volume04/vector_store_search.py
+# collection_size=3; retry-guide score=0.548 topic=api
+uv run python examples/volume04/retrieval_quality.py
+# precision_at_1=1.0; recall_at_1=1.0; mrr=1.0; hit_at_1=True; answerable=True
+uv run python examples/volume04/reindex_lifecycle.py
+# deleted_count=1; reindexed_version=2; collection_size=3; top_1_recovered=True
+git diff --check
+# 공백 오류 없음
+```
+
+`uv`는 이 호스트의 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고만 있었고 프로젝트 환경으로 검증했습니다. 학습 자료 테스트는 01–06장의 14개 섹션, README 링크, 실제 Qdrant 미검증 상태를 확인했습니다.
+
 ## 다음 slice
 
-Volume 04 전체 완료 체크리스트와 Volume 05 RAG 인계 계약을 문서화하고, 기존 결정적 local mock의 결과물·테스트·운영상 미검증 항목을 한 곳에서 검증 가능하게 정리합니다. Qdrant Docker Compose와 실제 service 검증은 이 cron의 제한 때문에 실행하지 않습니다.
+실제 vector database DoD는 현재 cron 범위 밖입니다. 별도 허가된 local integration에서 pinned Qdrant의 schema, payload filter, ID upsert/delete, versioned reindex parity를 실행·기록합니다. 그 전에는 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않습니다.

@@ -22,7 +22,7 @@
 | [03](03-retrieval-quality-no-answer.md) | 검색 품질 측정과 no-answer gate | 완료 |
 | [04](04-reindex-lifecycle-mini-project.md) | 결정적 local mock 삭제·재색인 미니 프로젝트 | 완료 |
 | [05](05-vector-db-migration-contracts.md) | Local mock에서 Qdrant·pgvector·Chroma로 이행하는 계약 | 완료 |
-| 06 | Qdrant 운영 이행과 lifecycle 검증 | 예정 |
+| [06](06-completion-checklist-rag-handoff.md) | 권 완료 기준과 Volume 05 RAG 인계 | 완료(실제 DB 통합은 미완료) |
 
 진행 기록과 남은 완료 조건은 [PROGRESS.md](PROGRESS.md)에서 확인합니다.
 
@@ -38,9 +38,10 @@ uv run pytest tests/unit/test_volume04_embedding_service.py -q
 uv run pytest tests/unit/test_volume04_vector_store.py -q
 uv run pytest tests/unit/test_volume04_retrieval_evaluation.py -q
 uv run pytest tests/unit/test_volume04_reindex_lifecycle.py -q
+uv run pytest tests/unit/test_volume04_learning_materials.py -q
 ```
 
-첫 명령은 로컬 mock 임베딩으로 세 문서를 점수순으로 출력합니다. 두 번째 명령은 같은 벡터를 collection과 payload에 저장하고 metadata filter 검색을 수행합니다. 세 번째 명령은 안정적인 point ID로 top-k 검색 품질과 보수적인 score gate를 출력합니다. 네 번째 명령은 오래된 point를 삭제하고 같은 ID의 version 2 vector를 재색인합니다. 테스트 명령은 외부 서비스 없이 구현 계약을 검증합니다.
+첫 명령은 로컬 mock 임베딩으로 세 문서를 점수순으로 출력합니다. 두 번째 명령은 같은 벡터를 collection과 payload에 저장하고 metadata filter 검색을 수행합니다. 세 번째 명령은 안정적인 point ID로 top-k 검색 품질과 보수적인 score gate를 출력합니다. 네 번째 명령은 오래된 point를 삭제하고 같은 ID의 version 2 vector를 재색인합니다. 마지막 테스트는 01–06장의 14개 학습 섹션, README 링크, 미완료 실제 DB 상태를 검사합니다. 모든 테스트는 외부 서비스 없이 구현·문서 계약을 검증합니다.
 
 ## 결과물 로드맵
 
@@ -51,8 +52,9 @@ uv run pytest tests/unit/test_volume04_reindex_lifecycle.py -q
 - `examples/volume04/`: 네트워크 없는 실행 예제
 - `tests/unit/test_volume04_*.py`: Volume 04 전용 단위 테스트
 - `05-vector-db-migration-contracts.md`: local mock과 Qdrant·pgvector·Chroma 사이의 schema, filter, score, lifecycle 이행 계약
+- `06-completion-checklist-rag-handoff.md`: 결정적으로 확인한 DoD, 실제 DB 통합의 미완료 조건, Volume 05 RAG 인계 contract
 - Qdrant Docker Compose와 실제 index script: 명시적으로 허가된 local integration slice에서만 추가·검증 예정
 
 ## 다음 권으로의 인계
 
-Volume 05 RAG는 이 권에서 검증한 `EmbeddingModel`, `VectorPoint`, 검색 결과의 metadata와 삭제·재색인 lifecycle 경계를 이용해 최신 chunk를 색인하고 검색합니다. 운영용 모델 또는 Qdrant 연결은 명시적으로 설정한 뒤에만 추가합니다.
+Volume 05 RAG는 이 권에서 검증한 `EmbeddingModel`, `VectorPoint`, 검색 결과의 metadata와 삭제·재색인 lifecycle 경계를 이용해 최신 chunk를 색인하고 검색합니다. stable chunk ID, tenant/ACL filter-before-use, backend score 재평가, generation-aware reindex의 구체적인 인계 조건은 [06장](06-completion-checklist-rag-handoff.md)을 따릅니다. 운영용 모델 또는 Qdrant 연결은 명시적으로 설정한 뒤에만 추가합니다.
