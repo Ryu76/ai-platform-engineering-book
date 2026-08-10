@@ -6,6 +6,7 @@ import pytest
 
 from ai_platform.llm.client import (
     ChatMessage,
+    GenerationParameters,
     HttpResponse,
     LlmClient,
     LlmConfigurationError,
@@ -122,3 +123,64 @@ def test_message_rejects_unknown_role_and_empty_content() -> None:
         ChatMessage(role="tool", content="허용되지 않는 역할")
     with pytest.raises(LlmConfigurationError, match="content"):
         ChatMessage(role="user", content="   ")
+
+
+def test_client_serializes_explicit_generation_parameters() -> None:
+    transport = RecordingTransport(
+        HttpResponse(
+            status_code=200,
+            payload={"choices": [{"message": {"content": "고정된 응답"}}]},
+        )
+    )
+    client = LlmClient(
+        model="offline-test-model",
+        api_key="unit-test-token",
+        transport=transport,
+    )
+
+    client.complete(
+        [ChatMessage(role="system", content="정확한 한국어로 답하세요.")],
+        generation=GenerationParameters(
+            temperature=0.2,
+            top_p=0.9,
+            max_output_tokens=120,
+            stop_sequences=("<끝>", "\n\n사용자:"),
+        ),
+    )
+
+    assert transport.payload["temperature"] == 0.2
+    assert transport.payload["top_p"] == 0.9
+    assert transport.payload["max_tokens"] == 120
+    assert transport.payload["stop"] == ["<끝>", "\n\n사용자:"]
+
+
+@pytest.mark.parametrize(
+    "parameters",
+    [GenerationParameters(temperature=0.0), GenerationParameters(top_p=1.0)],
+)
+def test_generation_parameters_accept_boundary_values(parameters: GenerationParameters) -> None:
+    assert parameters.as_payload()
+
+
+@pytest.mark.parametrize(
+    ("keyword", "value", "expected_message"),
+    [
+        ("temperature", -0.1, "temperature"),
+        ("temperature", 2.1, "temperature"),
+        ("top_p", 0.0, "top_p"),
+        ("top_p", 1.1, "top_p"),
+        ("max_output_tokens", 0, "max_output_tokens"),
+    ],
+)
+def test_generation_parameters_reject_invalid_numeric_values(
+    keyword: str, value: float | int, expected_message: str
+) -> None:
+    with pytest.raises(LlmConfigurationError, match=expected_message):
+        GenerationParameters(**{keyword: value})
+
+
+def test_generation_parameters_reject_empty_or_too_many_stop_sequences() -> None:
+    with pytest.raises(LlmConfigurationError, match="must not be empty"):
+        GenerationParameters(stop_sequences=("",))
+    with pytest.raises(LlmConfigurationError, match="at most four"):
+        GenerationParameters(stop_sequences=("a", "b", "c", "d", "e"))

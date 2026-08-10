@@ -41,6 +41,48 @@ class ChatMessage:
 
 
 @dataclass(frozen=True, slots=True)
+class GenerationParameters:
+    """재현 가능한 텍스트 생성을 위해 명시적으로 선택하는 파라미터다."""
+
+    temperature: float | None = None
+    top_p: float | None = None
+    max_output_tokens: int | None = None
+    stop_sequences: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """제공자에 요청하기 전에 안전한 공통 범위를 검증한다."""
+        if self.temperature is not None and (
+            isinstance(self.temperature, bool) or not 0.0 <= self.temperature <= 2.0
+        ):
+            raise LlmConfigurationError("temperature must be between 0 and 2")
+        if self.top_p is not None and (
+            isinstance(self.top_p, bool) or not 0.0 < self.top_p <= 1.0
+        ):
+            raise LlmConfigurationError("top_p must be greater than 0 and at most 1")
+        if self.max_output_tokens is not None and (
+            isinstance(self.max_output_tokens, bool) or self.max_output_tokens <= 0
+        ):
+            raise LlmConfigurationError("max_output_tokens must be a positive integer")
+        if len(self.stop_sequences) > 4:
+            raise LlmConfigurationError("at most four stop sequences are supported")
+        if any(not sequence.strip() for sequence in self.stop_sequences):
+            raise LlmConfigurationError("stop sequences must not be empty")
+
+    def as_payload(self) -> dict[str, object]:
+        """선택한 값만 OpenAI Chat Completions 호환 JSON으로 변환한다."""
+        payload: dict[str, object] = {}
+        if self.temperature is not None:
+            payload["temperature"] = self.temperature
+        if self.top_p is not None:
+            payload["top_p"] = self.top_p
+        if self.max_output_tokens is not None:
+            payload["max_tokens"] = self.max_output_tokens
+        if self.stop_sequences:
+            payload["stop"] = list(self.stop_sequences)
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
 class TokenUsage:
     """제공자가 반환한 입력·출력 토큰 사용량이다."""
 
@@ -140,8 +182,13 @@ class LlmClient:
         self._timeout_seconds = timeout_seconds
         self._transport = transport or UrllibJsonTransport()
 
-    def complete(self, messages: list[ChatMessage]) -> LlmResponse:
-        """메시지를 전송하고 OpenAI Chat Completions 호환 응답을 해석한다."""
+    def complete(
+        self,
+        messages: list[ChatMessage],
+        *,
+        generation: GenerationParameters | None = None,
+    ) -> LlmResponse:
+        """메시지와 선택한 생성 파라미터를 전송하고 응답을 해석한다."""
         if not messages:
             raise LlmConfigurationError("at least one message is required")
 
@@ -151,6 +198,8 @@ class LlmClient:
                 {"role": message.role, "content": message.content} for message in messages
             ],
         }
+        if generation is not None:
+            payload.update(generation.as_payload())
         response = self._transport.post_json(
             url=f"{self._base_url}/chat/completions",
             headers={

@@ -2,6 +2,7 @@
 
 from ai_platform.llm.client import (
     ChatMessage,
+    GenerationParameters,
     LlmClient,
     LlmConfigurationError,
     LlmNetworkError,
@@ -13,6 +14,7 @@ from ai_platform.llm.client import (
 
 __all__ = [
     "ChatMessage",
+    "GenerationParameters",
     "LlmClient",
     "LlmConfigurationError",
     "LlmNetworkError",
