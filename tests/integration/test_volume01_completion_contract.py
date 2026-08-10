@@ -111,3 +111,34 @@ def test_volume01_why_it_matters_is_a_self_contained_safe_boundary_chapter() -> 
     assert "네트워크와 API 키를 사용하지 않습니다" in chapter
     assert "사람 승인" in chapter
     assert "](03-theory.md)" in chapter
+
+
+def test_volume01_theory_is_a_self_contained_token_and_context_chapter() -> None:
+    """세 번째 장은 토큰 예산과 Transformer 개요를 안전한 실행 경계에 연결해야 한다."""
+    chapter = (VOLUME / "03-theory.md").read_text(encoding="utf-8")
+
+    required_sections = (
+        "## 1. 학습 목표",
+        "## 2. 왜 필요한가",
+        "## 3. 핵심 개념",
+        "## 4. 동작 구조",
+        "## 5. 실습 환경",
+        "## 6. 단계별 실습",
+        "## 7. 코드 설명",
+        "## 8. 정상 실행 결과",
+        "## 9. 오류 해결",
+        "## 10. 응용 실습",
+        "## 11. 실무 적용",
+        "## 12. 과제",
+        "## 13. 완료 체크리스트",
+        "## 14. 핵심 정리",
+    )
+
+    assert all(section in chapter for section in required_sections)
+    for concept in ("머신러닝", "딥러닝", "생성형 AI", "Tokenizer", "Transformer"):
+        assert concept in chapter
+    assert "입력 토큰 + 출력 토큰 ≤ 모델의 Context Window" in chapter
+    assert "examples/volume01/chat_cli.py --offline-demo" in chapter
+    assert "tests/unit/test_llm_client.py tests/unit/test_chat.py -q" in chapter
+    assert "네트워크와 API 키를 사용하지 않습니다" in chapter
+    assert "](04-environment-setup.md)" in chapter
