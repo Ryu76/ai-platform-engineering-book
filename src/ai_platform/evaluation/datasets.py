@@ -1,33 +1,70 @@
-"""Volume 10 실습에서 공통으로 쓰는 고정 골든 데이터셋."""
+"""Volume 10 실습에서 공통으로 쓰는 고정·버전 관리 골든 데이터셋."""
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from ai_platform.evaluation.golden_dataset import GoldenCase, GoldenDataset
 from ai_platform.evaluation.retrieval_metrics import RetrievalCase
 
-FIXED_RETRIEVAL_CASES: tuple[RetrievalCase, ...] = (
-    RetrievalCase(
-        case_id="access-reset",
-        query="비밀번호를 잊었을 때 계정 접근을 복구하는 절차는 무엇인가요?",
-        relevant_document_ids=("identity-access",),
-    ),
-    RetrievalCase(
-        case_id="expense-receipt",
-        query="출장 식비 영수증을 제출하는 규정은 어디에 있나요?",
-        relevant_document_ids=("finance-expense",),
-    ),
-    RetrievalCase(
-        case_id="incident-response",
-        query="의심스러운 로그인 알림을 받았을 때의 초기 대응 절차는 무엇인가요?",
-        relevant_document_ids=("security-incident", "operations-runbook"),
-    ),
-    RetrievalCase(
-        case_id="benefits-enrollment",
-        query="복지 제도 가입 기간과 신청 방법을 알려 주세요.",
-        relevant_document_ids=("people-benefits",),
+FIXED_GOLDEN_DATASET = GoldenDataset(
+    dataset_id="volume10-support-policy",
+    version="1.0.0",
+    cases=(
+        GoldenCase(
+            case_id="access-reset",
+            query="비밀번호를 잊었을 때 계정 접근을 복구하는 절차는 무엇인가요?",
+            category="identity",
+            expected_response="answer",
+            relevant_document_ids=("identity-access",),
+            label_rationale="계정 복구 절차는 identity-access 정책에만 정의되어 있다.",
+            source_reference="policy-catalog-v1:identity-access",
+        ),
+        GoldenCase(
+            case_id="expense-receipt",
+            query="출장 식비 영수증을 제출하는 규정은 어디에 있나요?",
+            category="finance",
+            expected_response="answer",
+            relevant_document_ids=("finance-expense",),
+            label_rationale="출장 경비와 영수증 제출 규칙의 기준 문서는 finance-expense다.",
+            source_reference="policy-catalog-v1:finance-expense",
+        ),
+        GoldenCase(
+            case_id="incident-response",
+            query="의심스러운 로그인 알림을 받았을 때의 초기 대응 절차는 무엇인가요?",
+            category="security",
+            expected_response="answer",
+            relevant_document_ids=("security-incident", "operations-runbook"),
+            label_rationale="보안 신고와 초기 운영 절차 두 문서를 모두 근거로 삼는다.",
+            source_reference="policy-catalog-v1:security-incident,operations-runbook",
+        ),
+        GoldenCase(
+            case_id="benefits-enrollment",
+            query="복지 제도 가입 기간과 신청 방법을 알려 주세요.",
+            category="people",
+            expected_response="answer",
+            relevant_document_ids=("people-benefits",),
+            label_rationale="복지 가입 기간과 신청 흐름은 people-benefits에 정의되어 있다.",
+            source_reference="policy-catalog-v1:people-benefits",
+        ),
+        GoldenCase(
+            case_id="office-parking",
+            query="사무실 주차권을 신청하려면 어떻게 해야 하나요?",
+            category="facilities",
+            expected_response="abstain",
+            relevant_document_ids=(),
+            label_rationale="고정 정책 카탈로그에는 사무실 주차권 정책이 포함되지 않는다.",
+            source_reference="policy-catalog-v1:intentional-absence",
+        ),
     ),
 )
-"""변하지 않는 질의·정답 문서 쌍; 외부 문서나 API에서 읽지 않는다."""
+"""공개 가능한 고정 사례와 라벨 근거; 버전 변경 없이는 기준 비교를 바꾸지 않는다."""
+
+FIXED_RETRIEVAL_CASES: tuple[RetrievalCase, ...] = tuple(
+    RetrievalCase(case.case_id, case.query, case.relevant_document_ids)
+    for case in FIXED_GOLDEN_DATASET.cases
+    if case.expected_response == "answer"
+)
+"""검색 지표의 양성 정답 사례만 선택한 고정 부분집합; no-answer는 별도 정확도로 평가한다."""
 
 FIXED_RETRIEVAL_RESULTS_AT_3: Mapping[str, Sequence[str]] = {
     "access-reset": ("identity-access", "service-overview", "security-incident"),

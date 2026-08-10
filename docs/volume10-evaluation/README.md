@@ -7,7 +7,7 @@
 ## 장 목록
 
 1. [학습 목표와 결정론적 평가 출발점](01-learning-objectives.md)
-2. 골든 데이터셋 설계와 버전 관리 *(작성 예정)*
+2. [골든 데이터셋 설계와 버전 관리](02-golden-dataset.md)
 3. 검색 품질: Recall·Precision·Hit Rate·MRR·NDCG *(작성 예정)*
 4. 응답 정확도·환각·인용 평가 *(작성 예정)*
 5. Router·Agent Task Success 평가 *(작성 예정)*
@@ -16,14 +16,15 @@
 8. 미니 프로젝트: 오프라인 평가 파이프라인 *(작성 예정)*
 9. 문제 해결·과제·면접 질문·요약·체크리스트 *(작성 예정)*
 
-## 이번 권의 첫 실행 경로
+## 이번 권의 오프라인 실행 경로
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
+uv run python examples/volume10/golden_dataset_audit.py
 uv run python examples/volume10/retrieval_quality.py
-uv run pytest tests/evaluation/test_retrieval_metrics.py -q
+uv run pytest tests/evaluation/test_golden_dataset.py tests/evaluation/test_retrieval_metrics.py -q
 ```
 
-두 명령은 `src/ai_platform/evaluation/datasets.py`의 고정 질의·정답·순위만 읽습니다. LLM, 벡터 데이터베이스, 네트워크, API 키를 사용하지 않습니다.
+세 명령은 `src/ai_platform/evaluation/datasets.py`의 공개 가능한 고정 질의·라벨·정답·순위만 읽습니다. LLM, 벡터 데이터베이스, 네트워크, API 키를 사용하지 않습니다. `abstain` no-answer 사례는 검색 Recall과 분리되어 있으며, 답변 보류 평가는 후속 장에서 추가합니다.
 
 [진행 기록](PROGRESS.md)

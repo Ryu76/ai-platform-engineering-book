@@ -3,8 +3,25 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 11 — Volume 10 Evaluation**
-- 이번 슬라이스: **고정 골든 데이터셋 기반의 결정론적 RAG 검색 평가 출발점**
-- 완료 선언: 아직 하지 않음. Volume 10의 골든 데이터셋 관리, 답변·인용·환각 평가, Router·Agent 평가, Latency·Token·Cost, 회귀 리포트, 미니 프로젝트, 전체 체크리스트가 남아 있습니다.
+- 이번 슬라이스: **버전 관리되는 고정 골든 데이터셋과 no-answer 라벨 계약**
+- 완료 선언: 아직 하지 않음. Volume 10의 답변·인용·환각 평가, Router·Agent 평가, Latency·Token·Cost, 회귀 리포트, 미니 프로젝트, 전체 체크리스트가 남아 있습니다.
+
+## 이번 슬라이스 (2026-08-10)
+
+- `docs/volume10-evaluation/02-golden-dataset.md`
+  - PRD 장 구조의 14개 섹션으로 골든 데이터셋의 라벨 근거·출처 참조·대표성·버전 정책·no-answer 분리 원칙을 작성했습니다.
+  - 실제 고객 데이터·API 키·네트워크·라이브 모델을 사용하지 않는 고정 데이터 경계를 명시했습니다.
+- `src/ai_platform/evaluation/golden_dataset.py`
+  - `GoldenCase`, `GoldenDataset`, 결정론적 구성 요약과 answer/abstain·고유 ID·시맨틱 버전 입력 계약을 구현했습니다.
+- `src/ai_platform/evaluation/datasets.py`
+  - `volume10-support-policy@1.0.0`의 고정 다섯 사례(답변 4, no-answer 1), 라벨 근거, 출처 참조를 정의했습니다.
+  - 기존 검색 지표에는 양성 answer 사례만 전달하여 no-answer를 Recall 분모에 섞지 않게 했습니다.
+- `examples/volume10/golden_dataset_audit.py`
+  - 데이터셋 ID·버전·사례 수·기대 동작 수·정렬된 카테고리를 외부 호출 없이 출력합니다.
+- `tests/evaluation/test_golden_dataset.py`
+  - 고정 매니페스트, no-answer 분리, 모순된 라벨, 중복 사례 ID, 잘못된 버전을 검증합니다.
+- `tests/evaluation/test_volume10_completion_contract.py`, `docs/volume10-evaluation/README.md`
+  - 두 번째 장의 14개 필수 섹션, 실제 산출물, 오프라인 실행 경로와 README 링크를 계약으로 연결했습니다.
 
 ## 이번에 완료한 파일
 
@@ -53,11 +70,37 @@ $ uv run python scripts/validate_docs.py
 
 전체 품질 검사와 전체 테스트는 이 기록 이후 수정된 파일까지 포함해 이번 슬라이스 종료 전에 다시 실행합니다.
 
+### 골든 데이터셋 슬라이스 검증 (2026-08-10)
+
+```text
+$ uv run python examples/volume10/golden_dataset_audit.py
+Dataset: volume10-support-policy
+Version: 1.0.0
+Cases: 5
+Answer cases: 4
+Abstain cases: 1
+Categories: facilities=1, finance=1, identity=1, people=1, security=1
+
+$ uv run pytest tests/evaluation -q
+16 passed
+
+$ uv run ruff check src/ai_platform/evaluation tests/evaluation examples/volume10
+All checks passed!
+
+$ uv run mypy src/ai_platform/evaluation
+Success: no issues found in 4 source files
+
+$ uv run python scripts/validate_code_blocks.py && uv run python scripts/validate_docs.py
+코드 블록 검증 통과
+문서 검증 통과: Volume 11개
+```
+
 ## 알려진 차단 사항
 
-- Volume 10은 첫 장과 검색 평가 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
-- 고정 Top-3 순위는 평가 계산을 설명하기 위한 기록된 입력입니다. 실제 Retriever에 연결하는 통합 평가와 데이터셋 버전 관리 정책은 후속 장에서 구현합니다.
+- Volume 10은 두 장, 버전 관리되는 골든 데이터셋, 검색 평가 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
+- `abstain` no-answer 사례는 고정·검증됐지만, 답변 보류 정확도·환각·인용 평가는 후속 장에서 별도 결정론적 지표로 구현해야 합니다.
+- 고정 Top-3 순위는 평가 계산을 설명하기 위한 기록된 입력입니다. 실제 Retriever에 연결하는 통합 평가와 데이터셋 변경 승인 정책은 후속 장에서 구현합니다.
 
 ## 다음 작업
 
-- 골든 데이터셋의 라벨 기준, 대표성, 버전 관리, no-answer 사례 정책을 다루는 두 번째 장과 해당 계약 테스트를 작성합니다.
+- 고정 골든 데이터셋을 기준으로 Recall·Precision·Hit Rate·MRR·NDCG의 트레이드오프와 실패 사례 해석을 다루는 세 번째 장을 작성합니다.
