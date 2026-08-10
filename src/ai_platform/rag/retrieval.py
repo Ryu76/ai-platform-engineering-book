@@ -347,6 +347,72 @@ class ContextBudgetIndex:
         return candidates
 
 
+@dataclass(frozen=True, slots=True)
+class DocumentDiversityConfig:
+    """문서별 근거 집중을 제한하는 후보 수와 문서당 청크 수다."""
+
+    candidate_count: int = 10
+    max_chunks_per_document: int = 1
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("candidate_count", self.candidate_count),
+            ("max_chunks_per_document", self.max_chunks_per_document),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 20:
+                raise RagConfigurationError(f"{field_name} must be an integer between 1 and 20")
+
+
+class DocumentDiversityIndex:
+    """원래 검색 순위를 보존하면서 문서별 근거 집중을 제한한다.
+
+    이 경계는 이미 인용 가능한 제한 후보만 받으며, 새 청크·점수·메타데이터를 만들지
+    않는다. 높은 순위 문서가 문서당 제한을 모두 사용하면 해당 문서의 나머지 청크는
+    건너뛰고 다른 문서의 근거를 선택한다. 따라서 생성기에 전달하는 근거가 한 문서에
+    과도하게 집중되는 것을 막으면서도 각 선택 청크의 인용 경계는 바꾸지 않는다.
+    """
+
+    def __init__(
+        self, *, index: SearchableIndex, config: DocumentDiversityConfig | None = None
+    ) -> None:
+        if not hasattr(index, "search"):
+            raise RagConfigurationError("index must provide a search method")
+        self._index = index
+        self._config = config or DocumentDiversityConfig()
+
+    def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
+        """문서별 청크 제한 안에서 원래 순위의 전체 근거를 반환한다."""
+        _validate_search_input(query=query, top_k=top_k)
+        candidates = self._validated_candidates(
+            self._index.search(query, top_k=self._config.candidate_count)
+        )
+        selected: list[SearchHit] = []
+        selected_per_document: Counter[str] = Counter()
+        for candidate in candidates:
+            document_id = candidate.chunk.document_id
+            if selected_per_document[document_id] >= self._config.max_chunks_per_document:
+                continue
+            selected.append(candidate)
+            selected_per_document[document_id] += 1
+            if len(selected) == top_k:
+                break
+        return tuple(selected)
+
+    def _validated_candidates(self, candidates: tuple[SearchHit, ...]) -> tuple[SearchHit, ...]:
+        if not isinstance(candidates, tuple):
+            raise RagConfigurationError("index must return a tuple of SearchHit values")
+        if len(candidates) > self._config.candidate_count:
+            raise RagConfigurationError("index returned more candidates than requested")
+        candidate_ids: set[str] = set()
+        for candidate in candidates:
+            if not isinstance(candidate, SearchHit):
+                raise RagConfigurationError("index must return SearchHit values")
+            if candidate.chunk.chunk_id in candidate_ids:
+                raise RagConfigurationError("index must not return duplicate candidate chunk IDs")
+            candidate_ids.add(candidate.chunk.chunk_id)
+        return candidates
+
+
 class QueryTransformer(Protocol):
     """원 질문을 보존한 결정론적 질의 변형 경계다.
 

@@ -9,6 +9,8 @@ from ai_platform.rag import (
     ContextBudgetIndex,
     DenseCandidate,
     DocumentChunk,
+    DocumentDiversityConfig,
+    DocumentDiversityIndex,
     HybridRagIndex,
     LocalMarkdownLoader,
     LocalPdfLoader,
@@ -96,8 +98,12 @@ def main() -> None:
         index=hybrid_index, transformer=SampleQueryTransformer()
     )
     reranked_index = RerankingIndex(index=transformed_index, reranker=SampleEvidenceReranker())
-    index = ContextBudgetIndex(
+    diverse_index = DocumentDiversityIndex(
         index=reranked_index,
+        config=DocumentDiversityConfig(candidate_count=3, max_chunks_per_document=1),
+    )
+    index = ContextBudgetIndex(
+        index=diverse_index,
         config=ContextBudgetConfig(candidate_count=3, max_context_characters=600),
     )
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())

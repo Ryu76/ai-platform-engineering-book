@@ -11,6 +11,8 @@ from ai_platform.rag import (
     ContextBudgetIndex,
     DenseCandidate,
     DocumentChunk,
+    DocumentDiversityConfig,
+    DocumentDiversityIndex,
     HybridRagIndex,
     HybridSearchConfig,
     LocalMarkdownLoader,
@@ -499,6 +501,80 @@ def test_context_budget_index_returns_no_answer_without_truncating_an_oversized_
     assert generator.calls == []
 
 
+def test_document_diversity_index_limits_ranked_contexts_per_document_and_preserves_citations() -> (
+    None
+):
+    source = RecordingSearchIndex(
+        (
+            _hit(chunk_id="shipping#1", document_id="shipping", text="first shipping", score=0.9),
+            _hit(chunk_id="shipping#2", document_id="shipping", text="second shipping", score=0.8),
+            _hit(chunk_id="returns#1", document_id="returns", text="return evidence", score=0.7),
+        )
+    )
+    index = DocumentDiversityIndex(
+        index=source,
+        config=DocumentDiversityConfig(candidate_count=3, max_chunks_per_document=1),
+    )
+
+    hits = index.search("근거", top_k=2)
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["shipping#1", "returns#1"]
+    assert [hit.score for hit in hits] == [0.9, 0.7]
+    assert hits[1].citation(label=2).source_uri == "local://returns"
+    assert source.calls == [("근거", 3)]
+
+
+def test_document_diversity_index_allows_configured_multiple_chunks_without_reordering() -> None:
+    source = RecordingSearchIndex(
+        (
+            _hit(chunk_id="shipping#1", document_id="shipping", text="first", score=0.9),
+            _hit(chunk_id="shipping#2", document_id="shipping", text="second", score=0.8),
+            _hit(chunk_id="returns#1", document_id="returns", text="return", score=0.7),
+        )
+    )
+    index = DocumentDiversityIndex(
+        index=source,
+        config=DocumentDiversityConfig(candidate_count=3, max_chunks_per_document=2),
+    )
+
+    hits = index.search("근거", top_k=3)
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["shipping#1", "shipping#2", "returns#1"]
+
+
+@pytest.mark.parametrize(
+    "hits, config, message",
+    [
+        ([_hit(chunk_id="first#1", document_id="first", text="evidence")], None, "tuple"),
+        (
+            (
+                _hit(chunk_id="same#1", document_id="first", text="first"),
+                _hit(chunk_id="same#1", document_id="second", text="second"),
+            ),
+            None,
+            "duplicate candidate",
+        ),
+        (
+            (
+                _hit(chunk_id="first#1", document_id="first", text="first"),
+                _hit(chunk_id="second#1", document_id="second", text="second"),
+            ),
+            DocumentDiversityConfig(candidate_count=1),
+            "more candidates than requested",
+        ),
+    ],
+)
+def test_document_diversity_index_rejects_untrusted_search_candidates(
+    hits: tuple[SearchHit, ...] | list[SearchHit],
+    config: DocumentDiversityConfig | None,
+    message: str,
+) -> None:
+    index = DocumentDiversityIndex(index=RecordingSearchIndex(hits), config=config)
+
+    with pytest.raises(RagConfigurationError, match=message):
+        index.search("근거")
+
+
 @pytest.mark.parametrize(
     "hits, config, message",
     [
@@ -666,6 +742,9 @@ def test_chunking_config_accepts_minimum_safe_size() -> None:
         lambda: ContextBudgetConfig(candidate_count=21),
         lambda: ContextBudgetConfig(max_context_characters=True),
         lambda: ContextBudgetConfig(max_context_characters=20_001),
+        lambda: DocumentDiversityConfig(candidate_count=0),
+        lambda: DocumentDiversityConfig(max_chunks_per_document=True),
+        lambda: DocumentDiversityConfig(max_chunks_per_document=21),
         lambda: LocalRagIndex([]),
         lambda: LocalRagIndex(
             [

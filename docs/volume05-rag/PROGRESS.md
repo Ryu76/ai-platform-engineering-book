@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 결정론적 문서 수준 검색 다양성 슬라이스 완료
+
+### 완료
+
+- `DocumentDiversityConfig`와 `DocumentDiversityIndex`를 추가했습니다. 이 경계는 이미 검색된 제한 후보만 받고, 원래 순위를 유지하면서 문서별로 선택할 수 있는 전체 청크 수를 명시적으로 제한합니다.
+- 제한에 도달한 상위 문서의 후속 청크는 건너뛰어 다음 문서의 근거를 선택합니다. 선택된 `SearchHit`를 그대로 반환하므로 점수·텍스트·매칭 용어·출처 URI·문자 범위와 인용 경계가 변하지 않습니다.
+- 후보 수와 문서당 청크 수는 각각 1~20으로 제한했습니다. 기반 인덱스가 tuple 이외 값, 요청보다 많은 후보, 중복 청크 ID, `SearchHit` 이외 값을 반환하면 거부합니다.
+- 예제의 로컬 Mock Hybrid/RRF·질의 변형·재순위화 체인과 전체 청크 컨텍스트 예산 사이에 후보 3개·문서당 1개 `DocumentDiversityIndex`를 연결했습니다. 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+- 문서당 제한으로 다음 문서 근거 선택, 구성 가능한 다중 청크 순서, 인용 보존, 비신뢰 검색 후보와 설정 범위를 Volume 05 단위 테스트에 추가했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 86 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 5 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 3 source files
+uv run python examples/volume05/local_rag.py
+# 배송·반품·PDF 교환 근거와 인용, 주차장 할인 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 로컬 검색 근거의 신뢰도 임계값과 abstention 계약을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 결정론적 전체 청크 컨텍스트 예산 슬라이스 완료
 
 ### 완료
