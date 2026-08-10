@@ -1,5 +1,15 @@
 """Offline-safe multi-agent orchestration primitives for Volume 07."""
 
+from ai_platform.agents.conflict import (
+    BoundedConflictResolutionWorkflow,
+    ConflictApproval,
+    ConflictContext,
+    ConflictMessage,
+    ConflictProposal,
+    ConflictResolutionResult,
+    ConflictResolutionStatus,
+    DeterministicMockConflictAgent,
+)
 from ai_platform.agents.delegation import (
     ApprovalGatedDelegationWorkflow,
     DelegationApproval,
@@ -33,8 +43,16 @@ __all__ = [
     "AgentMessage",
     "AgentProtocolError",
     "AgentResponse",
+    "BoundedConflictResolutionWorkflow",
     "BoundedReviewWorkflow",
+    "ConflictApproval",
+    "ConflictContext",
+    "ConflictMessage",
+    "ConflictProposal",
+    "ConflictResolutionResult",
+    "ConflictResolutionStatus",
     "DeterministicMockAgent",
+    "DeterministicMockConflictAgent",
     "DeterministicMockCoordinator",
     "DeterministicMockWorker",
     "DelegationApproval",

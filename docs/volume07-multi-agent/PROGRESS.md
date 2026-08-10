@@ -16,6 +16,13 @@
 - Worker 재시도는 `max_worker_attempts` 양의 정수로 제한한다. 실패 시 fallback하거나 뒤 task를 실행하지 않고 `worker_retry_limit_reached`로 fail-closed한다.
 - `examples/volume07/offline_approved_delegation.py`와 `tests/volume07/test_approval_gated_delegation.py`는 라이브 API·비밀값 없이 이 경계를 재현하고 검증한다.
 
+## 2026-08-10 — Slice 03: 유한 충돌 해결과 완료 승인
+
+- `src/ai_platform/agents/conflict.py`에 Planner와 Reviewer 등 역할별 결정론적 Mock proposal 경계와 immutable conflict audit message 모델을 추가했다.
+- `BoundedConflictResolutionWorkflow`는 Agent 수와 conflict round를 양의 정수 상한으로 제한한다. 모든 proposal option이 정확히 같을 때만 consensus recommendation을 만들며, 다수결·추측·fallback으로 충돌의 승자를 고르지 않는다.
+- 기본 `PENDING`은 consensus recommendation에서 멈추고, `APPROVED`에서만 `completed`가 된다. `REJECTED`는 모든 Agent 호출 전에 종료한다. 합의하지 못하면 `conflict_limit_reached`로 fail-closed한다.
+- `examples/volume07/offline_conflict_resolution.py`와 `tests/volume07/test_bounded_conflict_resolution.py`는 API·비밀값·장기 메모리 없이 이 경계를 재현하고 검증한다.
+
 ## 완료 상태
 
 Volume 07 전체 PRD Definition of Done은 아직 완료되지 않았다. 따라서 `VOLUME07_COMPLETE=true`는 설정하지 않았고, cron self-pause도 하지 않는다.

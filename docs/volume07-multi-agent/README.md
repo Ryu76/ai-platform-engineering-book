@@ -8,7 +8,7 @@ Planner, Researcher, Developer, Reviewer, QA 역할의 메시지·상태·도구
 
 1. [결정론적 다중 에이전트 검토 워크플로](01-bounded-review-workflow.md) — 역할 메시지, 재작업 상한, QA 사람 승인 게이트
 2. [승인 게이트가 있는 유한 위임](02-approved-bounded-delegation.md) — 검토 가능한 manifest, 담당자 allow-list, Worker 재시도 상한
-3. 충돌 해결 정책 · 장기 메모리 범위 · Hermes 구조 비교 · 미니 프로젝트 (작성 예정)
+3. [유한 충돌 해결과 사람 승인](03-bounded-conflict-resolution.md) — exact consensus, 충돌 round 상한, 완료 승인 게이트
 
 ## 진행 상태
 
