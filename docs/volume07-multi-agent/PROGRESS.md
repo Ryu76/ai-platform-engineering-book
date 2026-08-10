@@ -8,6 +8,14 @@
 - `examples/volume07/offline_review_workflow.py`는 라이브 API·비밀값 없이 승인 대기와 명시 승인을 재현한다.
 - `tests/volume07/test_bounded_review_workflow.py`로 이 slice의 안전 계약을 검증한다.
 
+## 2026-08-10 — Slice 02: 승인된 유한 위임과 Worker 재시도 상한
+
+- `src/ai_platform/agents/delegation.py`에 Coordinator 계획과 Worker 실행을 분리하는 결정론적 Mock 경계, immutable manifest/audit message 모델을 추가했다.
+- `ApprovalGatedDelegationWorkflow`는 task 수, 고유 task ID, 비어 있지 않은 지시문, 담당자 allow-list를 Worker 호출 전에 검사한다.
+- 기본 `PENDING`은 Coordinator manifest만 남기고 멈추며, `APPROVED`에서만 manifest의 Worker를 호출한다. `REJECTED`는 모든 Agent 호출 전에 종료한다.
+- Worker 재시도는 `max_worker_attempts` 양의 정수로 제한한다. 실패 시 fallback하거나 뒤 task를 실행하지 않고 `worker_retry_limit_reached`로 fail-closed한다.
+- `examples/volume07/offline_approved_delegation.py`와 `tests/volume07/test_approval_gated_delegation.py`는 라이브 API·비밀값 없이 이 경계를 재현하고 검증한다.
+
 ## 완료 상태
 
 Volume 07 전체 PRD Definition of Done은 아직 완료되지 않았다. 따라서 `VOLUME07_COMPLETE=true`는 설정하지 않았고, cron self-pause도 하지 않는다.

@@ -1,5 +1,18 @@
 """Offline-safe multi-agent orchestration primitives for Volume 07."""
 
+from ai_platform.agents.delegation import (
+    ApprovalGatedDelegationWorkflow,
+    DelegationApproval,
+    DelegationContext,
+    DelegationMessage,
+    DelegationPlan,
+    DelegationResult,
+    DelegationStatus,
+    DelegationTask,
+    DeterministicMockCoordinator,
+    DeterministicMockWorker,
+    WorkerResponse,
+)
 from ai_platform.agents.workflow import (
     AgentContext,
     AgentMessage,
@@ -15,15 +28,26 @@ from ai_platform.agents.workflow import (
 )
 
 __all__ = [
+    "ApprovalGatedDelegationWorkflow",
     "AgentContext",
     "AgentMessage",
     "AgentProtocolError",
     "AgentResponse",
     "BoundedReviewWorkflow",
     "DeterministicMockAgent",
+    "DeterministicMockCoordinator",
+    "DeterministicMockWorker",
+    "DelegationApproval",
+    "DelegationContext",
+    "DelegationMessage",
+    "DelegationPlan",
+    "DelegationResult",
+    "DelegationStatus",
+    "DelegationTask",
     "HumanApproval",
     "ReviewDecision",
     "WorkflowConfigurationError",
     "WorkflowResult",
     "WorkflowStatus",
+    "WorkerResponse",
 ]
