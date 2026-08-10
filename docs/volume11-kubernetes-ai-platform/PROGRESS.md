@@ -2,6 +2,40 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 07: HPA CPU 확장 계약의 오프라인 경계
+
+### 완료한 범위
+
+- `k8s/volume11/autoscaling/`에 기본 API Kustomize 집합과 분리된 `autoscaling/v2` HPA 로컬 렌더링 집합을 추가했습니다.
+  - HPA는 존재하지 않는 `Deployment/ai-platform-api-example`만 target으로 참조하며, 기본 Deployment `ai-platform-api`와 의도적으로 다릅니다.
+  - `minReplicas: 2`, `maxReplicas: 5`, CPU `averageUtilization: 70`의 최소 확장 계약만 선언합니다.
+  - Secret·토큰·암호·주소·이미지·metrics server 설정을 포함하지 않았고, 기본 `k8s/volume11/kustomization.yaml`에도 포함하지 않았습니다.
+  - 따라서 로컬 렌더링은 HPA YAML 계약만 읽으며 metric 수집, 부하 생성, Deployment scale 또는 클러스터 연결을 만들지 않습니다.
+- [HPA: CPU 기반 확장 계약을 오프라인으로 읽기](07-hpa-cpu-scaling-boundary.md) 장을 작성했습니다.
+  - CPU utilization이 CPU request 대비 비율이라는 점, min/max replica가 capacity·비용·SLO를 보장하지 않는다는 점, metrics pipeline과 운영 전 검토 경계를 설명합니다.
+  - `kubectl kustomize` 로컬 렌더링과 오프라인 테스트만 안내하며 `apply`, `create`, metrics server 설치, 실제 target 변경 및 클러스터 연결을 명시적으로 제외합니다.
+- Volume README와 통합 테스트를 갱신해 새 장 링크, 예제 target, min/max 범위, CPU resource utilization target, Secret·인증 값 부재 및 기본 Kustomize 집합에서의 제외를 검사합니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `kubectl kustomize k8s/volume11/autoscaling` 및 `kubectl kustomize k8s/volume11` 경계 검사 | 통과 — autoscaling 출력에 `HorizontalPodAutoscaler` 1개와 placeholder target/2~5/CPU 70%만, 기본 출력에는 HPA 없음; 모두 로컬 렌더링이며 클러스터 연결·리소스 생성 없음 |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 20 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 11 source files 문제 없음, 전체 81 passed |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- Rolling Update/Rollback 예제 작성하기
+- 로그·메트릭·추적, 장애 대응과 비용 관리 장 작성하기
+- Volume 미니 프로젝트, 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 이미지·자리표시자·로컬 렌더링만으로 Deployment의 Rolling Update 전략과 rollback 검토 경계를 추가하고, 실제 이미지 교체, rollout 실행, 클러스터 적용은 하지 않습니다.
+
 ## 2026-08-11 — Slice 06: PVC 수명 주기·접근 모드·보존의 오프라인 경계
 
 ### 완료한 범위

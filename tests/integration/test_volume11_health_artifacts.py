@@ -176,6 +176,39 @@ def test_pvc_is_placeholder_and_excluded_from_base_apply_set() -> None:
     assert "- storage/" not in base_kustomization
 
 
+def test_hpa_uses_a_non_base_example_target_and_is_excluded_from_base_apply_set() -> None:
+    """Autoscaling lessons stay render-only and cannot scale the base API example."""
+    hpa = (ROOT / "k8s/volume11/autoscaling/hpa.yaml").read_text(encoding="utf-8")
+    autoscaling_kustomization = (
+        ROOT / "k8s/volume11/autoscaling/kustomization.yaml"
+    ).read_text(encoding="utf-8")
+    base_kustomization = (ROOT / "k8s/volume11/kustomization.yaml").read_text(
+        encoding="utf-8"
+    )
+    deployment = (ROOT / "k8s/volume11/deployment.yaml").read_text(encoding="utf-8")
+
+    assert "apiVersion: autoscaling/v2" in hpa
+    assert "kind: HorizontalPodAutoscaler" in hpa
+    assert "name: ai-platform-api-example" in hpa
+    assert "namespace: ai-platform-example" in hpa
+    assert "apiVersion: apps/v1" in hpa
+    assert "kind: Deployment" in hpa
+    assert "minReplicas: 2" in hpa
+    assert "maxReplicas: 5" in hpa
+    assert "type: Resource" in hpa
+    assert "name: cpu" in hpa
+    assert "type: Utilization" in hpa
+    assert "averageUtilization: 70" in hpa
+    assert "name: ai-platform-api\n" in deployment
+    assert "name: ai-platform-api-example" not in deployment
+    assert "TOKEN" not in hpa
+    assert "PASSWORD" not in hpa
+    assert "secretRef:" not in hpa
+    assert "- hpa.yaml" in autoscaling_kustomization
+    assert "- hpa.yaml" not in base_kustomization
+    assert "- autoscaling/" not in base_kustomization
+
+
 def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification() -> None:
     """The chapters document exact local files, commands, and deployment boundaries."""
     health_chapter = (VOLUME / "01-health-probes.md").read_text(encoding="utf-8")
@@ -194,6 +227,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     pvc_chapter = (VOLUME / "06-pvc-lifecycle-access-retention.md").read_text(
         encoding="utf-8"
     )
+    hpa_chapter = (VOLUME / "07-hpa-cpu-scaling-boundary.md").read_text(encoding="utf-8")
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
@@ -202,6 +236,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "](04-ingress-http-boundary.md)" in readme
     assert "](05-job-cronjob-completion-retry.md)" in readme
     assert "](06-pvc-lifecycle-access-retention.md)" in readme
+    assert "](07-hpa-cpu-scaling-boundary.md)" in readme
     combined_chapters = (
         health_chapter
         + dependency_chapter
@@ -209,6 +244,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         + ingress_chapter
         + batch_chapter
         + pvc_chapter
+        + hpa_chapter
     )
     for relative_path in (
         "src/ai_platform/api/health.py",
@@ -223,6 +259,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         "k8s/volume11/batch/job.yaml",
         "k8s/volume11/batch/cronjob.yaml",
         "k8s/volume11/storage/pvc.yaml",
+        "k8s/volume11/autoscaling/hpa.yaml",
     ):
         assert relative_path in combined_chapters
     expected_command = (
@@ -243,6 +280,10 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "kubectl kustomize k8s/volume11/storage" in pvc_chapter
     assert "example-storage-class" in pvc_chapter
     assert "PersistentVolumeClaim" in pvc_chapter
+    assert "kubectl kustomize k8s/volume11/autoscaling" in hpa_chapter
+    assert "HorizontalPodAutoscaler" in hpa_chapter
+    assert "averageUtilization: 70" in hpa_chapter
+    assert "ai-platform-api-example" in hpa_chapter
     assert "클러스터에 적용하거나 배포하지 않습니다" in (
         health_chapter + dependency_chapter + ingress_chapter
     )
