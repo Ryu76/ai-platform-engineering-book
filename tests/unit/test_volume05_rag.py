@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
 from ai_platform.rag import (
     ChunkingConfig,
+    LocalMarkdownLoader,
     LocalRagIndex,
     RagConfigurationError,
     RagPipeline,
@@ -24,6 +26,66 @@ class RecordingGenerator:
     def generate(self, *, query: str, contexts: tuple[SearchHit, ...]) -> str:
         self.calls.append((query, contexts))
         return self.response
+
+
+def test_markdown_loader_cleans_local_content_and_derives_safe_metadata(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+    path = root / "guides" / "shipping policy.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "\ufeff# 배송   안내 #\r\n\r\n배송\t상태는 주문 번호로 확인합니다.\r\n\r\n\r\n",
+        encoding="utf-8",
+    )
+
+    document = LocalMarkdownLoader(root=root).load(Path("guides/shipping policy.md"))
+
+    assert document.document_id == "local:guides/shipping policy.md"
+    assert document.title == "배송 안내"
+    assert document.source_uri == "local://volume05/guides/shipping%20policy.md"
+    assert document.content == "# 배송 안내 #\n\n배송 상태는 주문 번호로 확인합니다."
+
+
+def test_markdown_loader_uses_clean_filename_when_document_has_no_title(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+    root.mkdir()
+    (root / "return_policy.markdown").write_text("반품 조건입니다.", encoding="utf-8")
+
+    document = LocalMarkdownLoader(root=root).load(Path("return_policy.markdown"))
+
+    assert document.title == "return policy"
+    assert document.content == "반품 조건입니다."
+
+
+@pytest.mark.parametrize(
+    "relative_path, content, message",
+    [
+        (Path("../outside.md"), "outside", "stay within root"),
+        (Path("notes.txt"), "not Markdown", "only Markdown"),
+        (Path("empty.md"), " \r\n\t ", "no usable content"),
+        (Path("unsafe.md"), "safe\x00unsafe", "NUL"),
+    ],
+)
+def test_markdown_loader_rejects_unsafe_or_unusable_input(
+    tmp_path: Path, relative_path: Path, content: str, message: str
+) -> None:
+    root = tmp_path / "knowledge"
+    root.mkdir()
+    if relative_path.parts[0] != "..":
+        (root / relative_path).write_text(content, encoding="utf-8")
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalMarkdownLoader(root=root).load(relative_path)
+
+
+def test_markdown_loader_rejects_non_utf8_file_and_invalid_root(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+    root.mkdir()
+    (root / "legacy.md").write_bytes(b"\xff\xfe")
+
+    with pytest.raises(RagConfigurationError, match="UTF-8"):
+        LocalMarkdownLoader(root=root).load(Path("legacy.md"))
+    with pytest.raises(RagConfigurationError, match="existing directory"):
+        LocalMarkdownLoader(root=tmp_path / "missing")
 
 
 def _index() -> LocalRagIndex:

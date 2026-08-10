@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_platform.rag import LocalRagIndex, RagPipeline, SearchHit, SourceDocument
+from ai_platform.rag import LocalMarkdownLoader, LocalRagIndex, RagPipeline, SearchHit
 
 
 class SampleOnlyGenerator:
@@ -17,17 +17,9 @@ class SampleOnlyGenerator:
 
 def main() -> None:
     """저장소의 샘플 텍스트만 인덱싱하고 두 질문의 결과를 출력한다."""
-    sample_path = Path(__file__).with_name("sample_data") / "handbook.txt"
-    index = LocalRagIndex(
-        [
-            SourceDocument(
-                document_id="customer-handbook",
-                title="고객 안내서",
-                source_uri="local://examples/volume05/handbook.txt",
-                content=sample_path.read_text(encoding="utf-8"),
-            )
-        ]
-    )
+    sample_root = Path(__file__).with_name("sample_data")
+    document = LocalMarkdownLoader(root=sample_root).load(Path("handbook.md"))
+    index = LocalRagIndex([document])
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
 
     for query in ("배송 상태는 어떻게 확인하나요?", "주차장 할인 정책이 있나요?"):
