@@ -38,6 +38,8 @@ class WorkflowStatus(StrEnum):
     COMPLETED = "completed"
     REJECTED = "rejected"
     REVIEW_REJECTED = "review_rejected"
+    ERROR = "error"
+    FAILED = "failed"
 
 
 RISKY_ACTIONS = frozenset({ActionKind.DELETE, ActionKind.DEPLOY, ActionKind.SEND})
@@ -89,6 +91,28 @@ class ReviewDecision:
 
 
 @dataclass(frozen=True)
+class RetryPlan:
+    """오프라인 실패 횟수와 재시도 상한을 고정하는 결정론적 입력이다.
+
+    ``failures_before_success``만큼의 실행 시뮬레이션이 실패한 뒤 성공한다. 상한보다
+    많은 실패가 필요하면 Error Node는 ``FAILED`` END로 끝낸다.
+    """
+
+    failures_before_success: int
+    max_retries: int
+    source: str = "offline-retry-plan"
+
+    def __post_init__(self) -> None:
+        """음수와 감사할 수 없는 출처를 Node 실행 전에 거부한다."""
+        if self.failures_before_success < 0:
+            raise ValueError("failures_before_success must not be negative")
+        if self.max_retries < 0:
+            raise ValueError("max_retries must not be negative")
+        if not self.source.strip():
+            raise ValueError("retry source must not be empty")
+
+
+@dataclass(frozen=True)
 class WorkflowState:
     """Node 사이에서 전달되는 불변 상태다."""
 
@@ -101,13 +125,31 @@ class WorkflowState:
     selected_route: RouteKind | None
     result: str | None
     events: tuple[WorkflowEvent, ...]
+    retry_failures_before_success: int = 0
+    retry_max_retries: int = 0
+    retry_source: str = "offline-retry-plan"
+    attempt_count: int = 0
 
     @classmethod
-    def start(cls, *, task: str, action: ActionKind) -> WorkflowState:
+    def start(
+        cls,
+        *,
+        task: str,
+        action: ActionKind,
+        retry_failures_before_success: int = 0,
+        retry_max_retries: int = 0,
+        retry_source: str = "offline-retry-plan",
+    ) -> WorkflowState:
         """검증된 START 상태를 만든다."""
         normalized_task = task.strip()
         if not normalized_task:
             raise ValueError("task must not be empty")
+        if retry_failures_before_success < 0:
+            raise ValueError("retry_failures_before_success must not be negative")
+        if retry_max_retries < 0:
+            raise ValueError("retry_max_retries must not be negative")
+        if not retry_source.strip():
+            raise ValueError("retry_source must not be empty")
         return cls(
             task=normalized_task,
             action=action,
@@ -118,6 +160,10 @@ class WorkflowState:
             selected_route=None,
             result=None,
             events=(),
+            retry_failures_before_success=retry_failures_before_success,
+            retry_max_retries=retry_max_retries,
+            retry_source=retry_source.strip(),
+            attempt_count=0,
         )
 
     def record(
@@ -130,6 +176,7 @@ class WorkflowState:
         review_approved: bool | None = None,
         selected_route: RouteKind | None = None,
         result: str | None = None,
+        attempt_count: int | None = None,
     ) -> WorkflowState:
         """상태 변경과 함께 순서가 정해진 이벤트를 추가한다."""
         event = WorkflowEvent(sequence=len(self.events) + 1, node=node, detail=detail)
@@ -144,5 +191,6 @@ class WorkflowState:
             ),
             selected_route=self.selected_route if selected_route is None else selected_route,
             result=self.result if result is None else result,
+            attempt_count=self.attempt_count if attempt_count is None else attempt_count,
             events=(*self.events, event),
         )

@@ -158,3 +158,55 @@ def execute_node(state: WorkflowState) -> WorkflowState:
         status=WorkflowStatus.COMPLETED,
         result=result,
     )
+
+
+def retry_execute_node(state: WorkflowState) -> WorkflowState:
+    """고정된 실패 계획에 따라 한 번의 오프라인 실행 시도를 기록한다."""
+    if state.status is not WorkflowStatus.READY:
+        raise ValueError("retry_execute_node requires a ready state")
+    attempt_count = state.attempt_count + 1
+    if state.attempt_count < state.retry_failures_before_success:
+        return state.record(
+            node="execute",
+            detail=(
+                f"{state.retry_source} 계획의 오프라인 실행 시도 {attempt_count}가 "
+                "결정론적으로 실패했습니다."
+            ),
+            status=WorkflowStatus.ERROR,
+            attempt_count=attempt_count,
+        )
+    result = f"오프라인 시뮬레이션 완료: {state.action.value} / {state.task}"
+    return state.record(
+        node="execute",
+        detail=(
+            f"{state.retry_source} 계획의 오프라인 실행 시도 {attempt_count}가 "
+            "성공했습니다."
+        ),
+        status=WorkflowStatus.COMPLETED,
+        result=result,
+        attempt_count=attempt_count,
+    )
+
+
+def error_node(state: WorkflowState) -> WorkflowState:
+    """실패를 감사하고, 상한 안에서만 READY 재시도 Edge로 되돌린다."""
+    if state.status is not WorkflowStatus.ERROR:
+        raise ValueError("error_node requires an error state")
+    retries_used = state.attempt_count - 1
+    if retries_used < state.retry_max_retries:
+        return state.record(
+            node="error",
+            detail=(
+                f"재시도 {retries_used + 1}/{state.retry_max_retries}를 허용합니다. "
+                "외부 부작용 없이 실행 시뮬레이션으로 돌아갑니다."
+            ),
+            status=WorkflowStatus.READY,
+        )
+    return state.record(
+        node="error",
+        detail=(
+            f"재시도 상한 {state.retry_max_retries}에 도달했습니다. "
+            "실행 시뮬레이션을 중단합니다."
+        ),
+        status=WorkflowStatus.FAILED,
+    )

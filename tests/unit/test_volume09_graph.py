@@ -7,6 +7,8 @@ from ai_platform.graph import (
     ActionKind,
     DeterministicWorkflow,
     PlannerDeveloperReviewerWorkflow,
+    RetryPlan,
+    RetryWorkflow,
     ReviewDecision,
     RoutedWorkflow,
     RouteKind,
@@ -253,3 +255,80 @@ def test_review_decision_rejects_blank_audit_fields() -> None:
 
     with pytest.raises(ValueError, match="review source"):
         ReviewDecision(approved=True, feedback="통과", source=" ")
+
+
+def test_retry_workflow_recovers_within_its_fixed_retry_limit() -> None:
+    """첫 실패 뒤 Error Node가 허용한 한 번의 재시도로 안전 작업을 완료한다."""
+    workflow = RetryWorkflow()
+
+    completed = workflow.invoke(
+        run_id="retry-recover-001",
+        task="로컬 문자열을 변환한다",
+        action=ActionKind.TRANSFORM,
+        retry_plan=RetryPlan(failures_before_success=1, max_retries=1),
+    )
+
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert completed.attempt_count == 2
+    assert [event.node for event in completed.events] == [
+        "plan",
+        "approval",
+        "execute",
+        "error",
+        "execute",
+    ]
+
+
+def test_retry_workflow_ends_at_error_node_when_retry_limit_is_exhausted() -> None:
+    """실패가 상한을 넘으면 추가 시도 없이 FAILED END로 종료한다."""
+    failed = RetryWorkflow().invoke(
+        run_id="retry-failed-001",
+        task="로컬 문자열을 변환한다",
+        action=ActionKind.TRANSFORM,
+        retry_plan=RetryPlan(failures_before_success=2, max_retries=1),
+    )
+
+    assert failed.status is WorkflowStatus.FAILED
+    assert failed.result is None
+    assert failed.attempt_count == 2
+    assert [event.node for event in failed.events] == [
+        "plan",
+        "approval",
+        "execute",
+        "error",
+        "execute",
+        "error",
+    ]
+
+
+def test_retry_workflow_requires_approval_before_a_risky_attempt_or_retry() -> None:
+    """위험 작업은 재시도 계획이 있어도 승인 전에는 실행 시도를 시작하지 않는다."""
+    workflow = RetryWorkflow()
+    waiting = workflow.invoke(
+        run_id="retry-risky-001",
+        task="학습용 배포를 준비한다",
+        action=ActionKind.DEPLOY,
+        retry_plan=RetryPlan(failures_before_success=1, max_retries=1),
+    )
+
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert waiting.attempt_count == 0
+    assert "execute" not in [event.node for event in waiting.events]
+
+    rejected = workflow.resume(run_id="retry-risky-001", approved=False)
+
+    assert rejected.status is WorkflowStatus.REJECTED
+    assert rejected.attempt_count == 0
+    assert "execute" not in [event.node for event in rejected.events]
+
+
+def test_retry_plan_rejects_negative_limits_and_blank_source() -> None:
+    """재시도 입력은 재현 가능한 양수 범위와 감사 출처를 강제한다."""
+    with pytest.raises(ValueError, match="failures_before_success"):
+        RetryPlan(failures_before_success=-1, max_retries=0)
+
+    with pytest.raises(ValueError, match="max_retries"):
+        RetryPlan(failures_before_success=0, max_retries=-1)
+
+    with pytest.raises(ValueError, match="retry source"):
+        RetryPlan(failures_before_success=0, max_retries=0, source=" ")

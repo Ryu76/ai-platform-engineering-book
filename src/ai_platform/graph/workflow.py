@@ -5,16 +5,19 @@ from ai_platform.graph.checkpointer import MemoryCheckpointer
 from ai_platform.graph.nodes import (
     approval_node,
     developer_node,
+    error_node,
     execute_node,
     plan_node,
     resolve_approval_node,
     resolve_route_review_node,
+    retry_execute_node,
     reviewer_node,
     route_node,
     specialist_node,
 )
 from ai_platform.graph.state import (
     ActionKind,
+    RetryPlan,
     ReviewDecision,
     RouteKind,
     RouterDecision,
@@ -178,4 +181,62 @@ class PlannerDeveloperReviewerWorkflow:
         state = approval_node(state)
         if state.status is WorkflowStatus.READY:
             state = execute_node(state)
+        return state
+
+
+class RetryWorkflow:
+    """제한된 재시도와 Error Node를 갖는 오프라인 참조 Workflow다.
+
+    실패 여부는 ``RetryPlan``으로 고정하므로 시간, 네트워크, 외부 도구에 의존하지
+    않는다. 위험 ActionKind는 첫 실행과 모든 재시도 전에 같은 사람 승인 경계를
+    통과해야 하며, 승인 거절 시 시도 자체가 시작되지 않는다.
+    """
+
+    def __init__(self, *, checkpointer: MemoryCheckpointer | None = None) -> None:
+        """선택한 Checkpointer와 재시도 Workflow를 연결한다."""
+        self._checkpointer = checkpointer or MemoryCheckpointer()
+
+    def invoke(
+        self,
+        *,
+        run_id: str,
+        task: str,
+        action: ActionKind,
+        retry_plan: RetryPlan,
+    ) -> WorkflowState:
+        """계획과 승인 뒤, 성공·상한 실패·승인 interrupt까지 진행한다."""
+        state = WorkflowState.start(
+            task=task,
+            action=action,
+            retry_failures_before_success=retry_plan.failures_before_success,
+            retry_max_retries=retry_plan.max_retries,
+            retry_source=retry_plan.source,
+        )
+        state = plan_node(state)
+        state = approval_node(state)
+        if state.status is WorkflowStatus.READY:
+            state = self._run_with_retries(state)
+        self._checkpointer.save(run_id=run_id, state=state)
+        return state
+
+    def resume(self, *, run_id: str, approved: bool) -> WorkflowState:
+        """위험 작업의 명시적 사람 결정을 기록한 뒤에만 시도를 시작한다."""
+        state = self._checkpointer.load(run_id=run_id)
+        state = resolve_approval_node(state, approved=approved)
+        if state.status is WorkflowStatus.READY:
+            state = self._run_with_retries(state)
+        self._checkpointer.save(run_id=run_id, state=state)
+        return state
+
+    def checkpoint(self, *, run_id: str) -> WorkflowState:
+        """검증 또는 표시를 위해 최신 Checkpoint를 읽는다."""
+        return self._checkpointer.load(run_id=run_id)
+
+    @staticmethod
+    def _run_with_retries(state: WorkflowState) -> WorkflowState:
+        """Error Node가 READY를 반환하는 동안에만 재시도를 반복한다."""
+        while state.status is WorkflowStatus.READY:
+            state = retry_execute_node(state)
+            if state.status is WorkflowStatus.ERROR:
+                state = error_node(state)
         return state
