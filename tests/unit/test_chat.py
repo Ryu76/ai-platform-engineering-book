@@ -12,7 +12,13 @@ from ai_platform.llm import (
     LlmTimeoutError,
     TokenUsage,
 )
-from ai_platform.llm.chat import ConversationHistory, is_exit_command, run_chat_loop
+from ai_platform.llm.chat import (
+    HELP_MESSAGE,
+    ConversationHistory,
+    is_exit_command,
+    is_help_command,
+    run_chat_loop,
+)
 
 
 class ScriptedClient:
@@ -118,6 +124,22 @@ def test_chat_loop_skips_empty_input_and_handles_input_end() -> None:
     assert client.requests == []
 
 
+def test_chat_loop_handles_help_locally_without_a_provider_request() -> None:
+    """도움말은 안전한 전송 경계를 설명하지만 모델 메시지가 되어서는 안 된다."""
+    client = ScriptedClient([])
+    input_iterator = inputs([" /HELP ", "/exit"])
+    output: list[str] = []
+
+    run_chat_loop(client, read_input=lambda _: next(input_iterator), write_output=output.append)
+
+    assert output == [
+        "AI 업무 처리 플랫폼 챗봇입니다. 종료하려면 /exit 또는 /quit을 입력하세요.",
+        HELP_MESSAGE,
+        "대화를 마칩니다.",
+    ]
+    assert client.requests == []
+
+
 def test_chat_loop_handles_network_error_without_leaking_exception_text() -> None:
     client = ScriptedClient([LlmNetworkError("secret network detail")])
     input_iterator = inputs(["상태", "/exit"])
@@ -132,3 +154,8 @@ def test_chat_loop_handles_network_error_without_leaking_exception_text() -> Non
 @pytest.mark.parametrize("command", ["/exit", " /QUIT "])
 def test_is_exit_command_accepts_case_and_surrounding_space(command: str) -> None:
     assert is_exit_command(command)
+
+
+@pytest.mark.parametrize("command", ["/help", " /HELP "])
+def test_is_help_command_accepts_case_and_surrounding_space(command: str) -> None:
+    assert is_help_command(command)

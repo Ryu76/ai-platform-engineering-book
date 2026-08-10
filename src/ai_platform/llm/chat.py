@@ -16,6 +16,11 @@ from ai_platform.llm.client import (
 
 DEFAULT_SYSTEM_PROMPT = "당신은 AI 업무 처리 플랫폼 학습을 돕는 한국어 조력자입니다."
 EXIT_COMMANDS = frozenset({"/exit", "/quit"})
+HELP_COMMAND = "/help"
+HELP_MESSAGE = (
+    "도움말: 질문을 입력하면 선택한 LLM에 전송될 수 있습니다. "
+    "종료하려면 /exit 또는 /quit을 입력하세요."
+)
 
 
 class ChatCompleter(Protocol):
@@ -83,6 +88,9 @@ def run_chat_loop(
         if user_content.casefold() in EXIT_COMMANDS:
             write_output("대화를 마칩니다.")
             return
+        if is_help_command(user_content):
+            write_output(HELP_MESSAGE)
+            continue
         if not user_content:
             write_output("빈 메시지는 전송하지 않았습니다. 질문을 입력하거나 /exit을 사용하세요.")
             continue
@@ -118,6 +126,11 @@ def run_chat_loop(
 def is_exit_command(text: str) -> bool:
     """공백을 제외한 종료 명령인지 판별한다."""
     return text.strip().casefold() in EXIT_COMMANDS
+
+
+def is_help_command(text: str) -> bool:
+    """공백을 제외한 로컬 도움말 명령인지 판별한다."""
+    return text.strip().casefold() == HELP_COMMAND
 
 
 
