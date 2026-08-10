@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 06: 위임 입력·Worker 응답 경계 강화
+
+- `src/ai_platform/agents/delegation.py`에서 objective를 비어 있지 않은 문자열로 제한해 잘못된 입력이 Coordinator 호출 전에 종료되도록 했다.
+- Coordinator 결과는 immutable tuple task를 가진 `DelegationPlan`인지, 각 task의 ID·지시문·담당자가 문자열 계약을 충족하는지 검증한다. Worker 결과도 `WorkerResponse`, 비어 있지 않은 content, boolean succeeded 계약을 만족해야 audit trail에 기록된다.
+- `tests/volume07/test_approval_gated_delegation.py`는 잘못된 objective가 모든 Agent 호출 전에 멈추고, 잘못된 Coordinator/Worker 출력이 다음 Worker 실행 없이 `AgentProtocolError`로 fail-closed하는지 고정한다.
+- `docs/volume07-multi-agent/02-approved-bounded-delegation.md`에 새 입력·응답 경계를 기록했다.
+
 ## 2026-08-11 — Slice 05: 검토 워크플로 입력·응답 경계 강화
 
 - `src/ai_platform/agents/workflow.py`에서 task가 비어 있지 않은 문자열인지 확인하고, Planner·Researcher·Developer·Reviewer·QA의 모든 출력이 `AgentResponse` 및 비어 있지 않은 `content` 계약을 만족하는지 다음 역할 호출 전에 검사하도록 했다.

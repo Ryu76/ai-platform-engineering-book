@@ -176,8 +176,8 @@ class ApprovalGatedDelegationWorkflow:
         human_approval: DelegationApproval = DelegationApproval.PENDING,
     ) -> DelegationResult:
         """Produce an approved finite plan and execute only its bounded worker attempts."""
-        if not objective.strip():
-            raise WorkflowConfigurationError("objective must not be empty")
+        if not isinstance(objective, str) or not objective.strip():
+            raise WorkflowConfigurationError("objective must be a non-empty string")
         if not isinstance(human_approval, DelegationApproval):
             raise WorkflowConfigurationError(
                 "human_approval must be a DelegationApproval value"
@@ -202,6 +202,7 @@ class ApprovalGatedDelegationWorkflow:
                 response = worker.act(
                     DelegationContext(objective, tuple(messages), task, attempt)
                 )
+                self._validate_worker_response(response)
                 messages.append(
                     DelegationMessage(task.assignee, response.content, task.task_id, attempt)
                 )
@@ -227,8 +228,10 @@ class ApprovalGatedDelegationWorkflow:
     def _validate_plan(self, plan: DelegationPlan) -> None:
         if not isinstance(plan, DelegationPlan):
             raise AgentProtocolError("coordinator response must be a DelegationPlan")
-        if not plan.summary.strip():
+        if not isinstance(plan.summary, str) or not plan.summary.strip():
             raise AgentProtocolError("delegation plan summary must not be empty")
+        if not isinstance(plan.tasks, tuple):
+            raise AgentProtocolError("delegation plan tasks must be an immutable tuple")
         if not plan.tasks or len(plan.tasks) > self._max_tasks:
             raise AgentProtocolError("delegation plan task count is outside the configured bound")
 
@@ -236,13 +239,27 @@ class ApprovalGatedDelegationWorkflow:
         for task in plan.tasks:
             if not isinstance(task, DelegationTask):
                 raise AgentProtocolError("delegation plan contains an invalid task")
+            if not isinstance(task.task_id, str) or not isinstance(task.instruction, str):
+                raise AgentProtocolError("delegation task id and instruction must be strings")
             if not task.task_id.strip() or not task.instruction.strip():
                 raise AgentProtocolError("delegation task id and instruction must not be empty")
+            if not isinstance(task.assignee, str):
+                raise AgentProtocolError("delegation task assignee must be a string")
             if task.task_id in task_ids:
                 raise AgentProtocolError("delegation plan task ids must be unique")
             if task.assignee not in self._allowed_assignees:
                 raise AgentProtocolError("delegation task assignee is not allowed")
             task_ids.add(task.task_id)
+
+    @staticmethod
+    def _validate_worker_response(response: object) -> None:
+        """Reject malformed worker output before it is added to the audit trail."""
+        if not isinstance(response, WorkerResponse):
+            raise AgentProtocolError("worker response must be a WorkerResponse")
+        if not isinstance(response.content, str) or not response.content.strip():
+            raise AgentProtocolError("worker response content must be a non-empty string")
+        if not isinstance(response.succeeded, bool):
+            raise AgentProtocolError("worker response succeeded must be a boolean")
 
     @staticmethod
     def _render_plan(plan: DelegationPlan) -> str:

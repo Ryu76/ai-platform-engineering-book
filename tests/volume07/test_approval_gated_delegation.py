@@ -166,6 +166,36 @@ def test_unsafe_manifest_and_configuration_fail_closed_before_worker_execution()
         )
 
 
+def test_malformed_objective_and_agent_outputs_fail_closed() -> None:
+    flow, coordinator, writer, checker = workflow(
+        coordinator_plan=plan(task("draft", "writer"))
+    )
+
+    with pytest.raises(WorkflowConfigurationError, match="non-empty string"):
+        flow.run(objective=object())  # type: ignore[arg-type]
+    assert coordinator.calls == []
+    assert writer.calls == []
+    assert checker.calls == []
+
+    malformed_plan_flow, _, malformed_plan_writer, _ = workflow(
+        coordinator_plan=object()  # type: ignore[arg-type]
+    )
+    with pytest.raises(AgentProtocolError, match="must be a DelegationPlan"):
+        malformed_plan_flow.run(objective="Prepare a local tutorial.")
+    assert malformed_plan_writer.calls == []
+
+    malformed_response_flow, _, malformed_response_writer, malformed_response_checker = workflow(
+        coordinator_plan=plan(task("draft", "writer")),
+        writer_responses=(object(),),  # type: ignore[arg-type]
+    )
+    with pytest.raises(AgentProtocolError, match="must be a WorkerResponse"):
+        malformed_response_flow.run(
+            objective="Prepare a local tutorial.", human_approval=DelegationApproval.APPROVED
+        )
+    assert len(malformed_response_writer.calls) == 1
+    assert malformed_response_checker.calls == []
+
+
 def test_worker_script_exhaustion_has_no_fallback_attempt() -> None:
     flow, _, writer, _ = workflow(
         coordinator_plan=plan(task("draft", "writer")),

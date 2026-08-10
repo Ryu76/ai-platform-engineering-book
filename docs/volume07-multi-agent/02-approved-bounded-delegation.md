@@ -7,7 +7,9 @@ Coordinator가 제안하는 위임 계획과 실제 Worker 실행을 분리합�
 ## 안전 경계
 
 - `DeterministicMockCoordinator`와 `DeterministicMockWorker`는 고정된 로컬 script만 소비합니다. 네트워크, 라이브 API, 환경 변수 또는 도구 실행이 없습니다.
-- `DelegationPlan`은 비어 있지 않아야 하며 `max_tasks`를 넘을 수 없습니다. task ID 중복, 빈 지시문, allow-list 밖의 담당자는 Worker 호출 전에 거절됩니다.
+- `objective`는 비어 있지 않은 문자열이어야 합니다. 다른 타입 또는 빈 입력은 Coordinator 호출 전에 거절됩니다.
+- Coordinator 출력은 immutable tuple task를 가진 `DelegationPlan`이어야 하며 `max_tasks`를 넘을 수 없습니다. task ID 중복, 문자열이 아닌 ID·지시문·담당자, 빈 지시문, allow-list 밖의 담당자는 Worker 호출 전에 거절됩니다.
+- Worker 출력은 비어 있지 않은 문자열 `content`와 boolean `succeeded`를 가진 `WorkerResponse`여야 합니다. 이 계약을 벗어난 출력은 audit trail에 기록하거나 다음 Worker를 호출하지 않고 fail-closed합니다.
 - 기본 `DelegationApproval.PENDING` 실행은 Coordinator의 계획 메시지만 남기고 `awaiting_human_approval`에서 멈춥니다.
 - Worker 호출은 `DelegationApproval.APPROVED` 뒤에만 가능합니다. `REJECTED`는 Coordinator와 모든 Worker 호출 전에 `human_rejected`로 종료합니다.
 - 각 task는 `max_worker_attempts` 양의 정수만큼만 시도합니다. 모두 실패하면 `worker_retry_limit_reached`로 fail-closed하며 뒤 task를 dispatch하지 않습니다.
@@ -41,12 +43,12 @@ uv run python examples/volume07/offline_approved_delegation.py --approve
 uv run pytest tests/volume07/test_approval_gated_delegation.py -q
 ```
 
-테스트는 승인 대기 중 Worker 미호출, 명시 승인 후 manifest 순서 실행, 유한 재시도, 재시도 실패 뒤 task 미실행, 사람 거절, 안전하지 않은 manifest, script 소진을 네트워크 없이 검증합니다.
+테스트는 승인 대기 중 Worker 미호출, 명시 승인 후 manifest 순서 실행, 유한 재시도, 재시도 실패 뒤 task 미실행, 사람 거절, 잘못된 objective·Coordinator/Worker 출력·manifest, script 소진을 네트워크 없이 검증합니다.
 
 ## 코드 읽기 순서
 
 1. `DelegationTask`와 `DelegationPlan`으로 Coordinator가 제안할 수 있는 작업 표면을 확인합니다.
-2. `ApprovalGatedDelegationWorkflow._validate_plan()`에서 task 수, 고유 ID, 담당자 allow-list를 실행 전에 검사하는 점을 확인합니다.
+2. `ApprovalGatedDelegationWorkflow._validate_plan()`과 `_validate_worker_response()`가 task 수, immutable manifest, 고유 ID, 담당자 allow-list와 Worker 출력 계약을 실행 전에 검사하는 점을 확인합니다.
 3. `run()`의 승인 대기 return이 Worker loop보다 앞에 있다는 점을 확인합니다.
 4. 중첩된 Worker retry loop가 `max_worker_attempts`까지만 실행되고 실패 시 다음 manifest task를 실행하지 않는 점을 확인합니다.
 5. `DelegationMessage`와 Worker `DelegationContext.messages`로 이전 계획과 시도 결과가 immutable audit trail로 전달되는 점을 확인합니다.
