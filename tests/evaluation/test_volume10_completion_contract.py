@@ -129,3 +129,27 @@ def test_volume10_fifth_chapter_connects_router_and_agent_to_verified_artifacts(
     assert "LLM API · Agent 도구 · Vector DB · 네트워크 · 시계 · 난수 ── 사용하지 않음" in chapter
     assert all(artifact.is_file() for artifact in expected_artifacts)
     assert "](05-router-agent-task-success.md)" in readme
+
+
+def test_volume10_sixth_chapter_connects_usage_metrics_to_verified_artifacts() -> None:
+    """사용량 장은 고정 latency·token·cost 기준선과 로컬 실행 경로를 제공해야 한다."""
+    chapter = (VOLUME / "06-latency-token-cost.md").read_text(encoding="utf-8")
+    readme = (VOLUME / "README.md").read_text(encoding="utf-8")
+    expected_artifacts = (
+        ROOT / "src" / "ai_platform" / "evaluation" / "usage_metrics.py",
+        ROOT / "src" / "ai_platform" / "evaluation" / "datasets.py",
+        ROOT / "examples" / "volume10" / "usage_quality.py",
+        ROOT / "tests" / "evaluation" / "test_usage_metrics.py",
+    )
+
+    assert all(section in chapter for section in REQUIRED_SECTIONS)
+    assert "uv run python examples/volume10/usage_quality.py" in chapter
+    assert "uv run pytest tests/evaluation/test_usage_metrics.py -q" in chapter
+    assert "P95 latency (ms): 340" in chapter
+    assert "Total cost (USD): 0.005240" in chapter
+    assert (
+        "LLM API · Agent 도구 · Vector DB · 네트워크 · 라이브 시계 · 난수 "
+        "── 사용하지 않음" in chapter
+    )
+    assert all(artifact.is_file() for artifact in expected_artifacts)
+    assert "](06-latency-token-cost.md)" in readme

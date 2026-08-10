@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from ai_platform.evaluation.answer_metrics import AnswerCase, RecordedAnswer
 from ai_platform.evaluation.golden_dataset import GoldenCase, GoldenDataset
 from ai_platform.evaluation.retrieval_metrics import RetrievalCase
+from ai_platform.evaluation.usage_metrics import RecordedUsage, TokenPricing, UsageCase
 from ai_platform.evaluation.workflow_metrics import RecordedWorkflow, WorkflowCase
 
 FIXED_GOLDEN_DATASET = GoldenDataset(
@@ -215,3 +216,26 @@ FIXED_RECORDED_WORKFLOWS: Mapping[str, RecordedWorkflow] = {
     ),
 }
 """교육용 고정 실행 기록; 미완료 작업과 no-answer 라우팅·행동 실패를 포함한다."""
+
+
+FIXED_USAGE_CASES: tuple[UsageCase, ...] = tuple(
+    UsageCase(case.case_id) for case in FIXED_GOLDEN_DATASET.cases
+)
+"""골든 데이터셋과 동일한 ID를 쓰는 고정 사용량 평가 사례다."""
+
+
+FIXED_TOKEN_PRICING = TokenPricing(
+    input_micro_usd_per_token=2,
+    output_micro_usd_per_token=8,
+)
+"""교육용 고정 단가; 입력·출력 토큰당 각각 2·8 마이크로 USD다."""
+
+
+FIXED_RECORDED_USAGE: Mapping[str, RecordedUsage] = {
+    "access-reset": RecordedUsage("access-reset", 120, 140, 90),
+    "expense-receipt": RecordedUsage("expense-receipt", 210, 180, 110),
+    "incident-response": RecordedUsage("incident-response", 180, 220, 130),
+    "benefits-enrollment": RecordedUsage("benefits-enrollment", 340, 160, 100),
+    "office-parking": RecordedUsage("office-parking", 70, 80, 30),
+}
+"""라이브 시계·모델 SDK 없이 검토하는 고정 latency(ms)·입출력 토큰 기록이다."""
