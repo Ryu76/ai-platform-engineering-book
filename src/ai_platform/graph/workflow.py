@@ -231,6 +231,78 @@ class PlannerDeveloperReviewerWorkflow:
         return state
 
 
+class PlannerDeveloperReviewerSubgraph:
+    """계획·개발·검토만 담당하는 재사용 가능한 오프라인 Subgraph다.
+
+    Subgraph는 부모 Workflow의 실행 권한을 가지지 않는다. Reviewer 판정은 산출물
+    검토만 끝내며, 부모가 위험 ActionKind에 대한 Approval Node를 별도로 적용한다.
+    """
+
+    def invoke(
+        self, *, state: WorkflowState, review_decision: ReviewDecision
+    ) -> WorkflowState:
+        """PENDING 입력을 고정 역할 순서의 검토 완료 또는 거절 상태로 전이한다."""
+        state = plan_node(state)
+        state = developer_node(state)
+        return reviewer_node(state, decision=review_decision)
+
+
+class SubgraphWorkflow:
+    """재사용 Subgraph 뒤에도 부모 승인 경계를 유지하는 오프라인 Workflow다.
+
+    ``PlannerDeveloperReviewerSubgraph``는 산출물 검토까지만 수행한다. 부모는
+    Subgraph가 ``PLANNED`` 상태를 반환한 경우에만 Approval Node를 실행하고, 위험
+    작업은 명시적 사람 승인 전까지 execute Node에 도달하지 못하게 한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        subgraph: PlannerDeveloperReviewerSubgraph | None = None,
+        checkpointer: Checkpointer | None = None,
+    ) -> None:
+        """주입 가능한 Subgraph와 Checkpointer를 부모 Workflow에 연결한다."""
+        self._subgraph = subgraph or PlannerDeveloperReviewerSubgraph()
+        self._checkpointer = checkpointer or MemoryCheckpointer()
+
+    def invoke(
+        self,
+        *,
+        run_id: str,
+        task: str,
+        action: ActionKind,
+        review_decision: ReviewDecision,
+    ) -> WorkflowState:
+        """START에서 Subgraph를 호출하고 부모 승인 interrupt 또는 END까지 진행한다."""
+        state = WorkflowState.start(task=task, action=action)
+        state = self._subgraph.invoke(state=state, review_decision=review_decision)
+        if state.status is WorkflowStatus.PLANNED:
+            state = self._continue_after_subgraph(state)
+        self._checkpointer.save(run_id=run_id, state=state)
+        return state
+
+    def resume(self, *, run_id: str, approved: bool) -> WorkflowState:
+        """Subgraph 완료 뒤 중단된 위험 작업의 사람 승인만 재개한다."""
+        state = self._checkpointer.load(run_id=run_id)
+        state = resolve_approval_node(state, approved=approved)
+        if state.status is WorkflowStatus.READY:
+            state = execute_node(state)
+        self._checkpointer.save(run_id=run_id, state=state)
+        return state
+
+    def checkpoint(self, *, run_id: str) -> WorkflowState:
+        """검증 또는 표시를 위해 부모 Workflow의 최신 Checkpoint를 읽는다."""
+        return self._checkpointer.load(run_id=run_id)
+
+    @staticmethod
+    def _continue_after_subgraph(state: WorkflowState) -> WorkflowState:
+        """검토 통과 뒤 부모의 위험 작업 승인 정책을 적용한다."""
+        state = approval_node(state)
+        if state.status is WorkflowStatus.READY:
+            state = execute_node(state)
+        return state
+
+
 class RetryWorkflow:
     """제한된 재시도와 Error Node를 갖는 오프라인 참조 Workflow다.
 

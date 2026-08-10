@@ -15,16 +15,17 @@
 4. [제한된 재시도와 Error Node](04-bounded-retry-error-node.md)
 5. [영속 Checkpoint와 안전한 작업 재개](05-persistent-checkpoint-workflow.md)
 6. [상태 업데이트 Streaming과 승인 경계](06-streaming-state-updates.md)
+7. [부모 Workflow와 Subgraph의 승인 경계](07-parent-subgraph-approval-boundary.md)
 
 ## 예정 장
 
-이 슬라이스에서는 완료된 Node 전이를 고정 순서로 내보내고 먼저 Checkpoint에 저장하는 오프라인 상태 Streaming을 출고했습니다. 이후 장은 Subgraph, FastAPI 연동을 다룹니다.
+이 슬라이스에서는 부모 Workflow가 재사용 가능한 역할 Subgraph를 호출한 뒤에도 위험 ActionKind의 사람 승인 경계를 유지하도록 출고했습니다. 이후 장은 FastAPI 연동을 다룹니다.
 
 ## 이번 기반 결과물
 
 - `src/ai_platform/graph/state.py`: 불변 State와 감사 이벤트, 결정론적 재시도 입력, Node별 상태 Streaming 업데이트
 - `src/ai_platform/graph/nodes.py`: Plan, Router, 전문 역할, 경로 검토, Approval, Execute, Error Node
-- `src/ai_platform/graph/workflow.py`: 승인 흐름, `StreamingWorkflow`의 Checkpoint 우선 상태 출력, `RoutedWorkflow`의 Conditional Edge 참조 흐름, `PlannerDeveloperReviewerWorkflow`의 고정 역할 순서, `RetryWorkflow`의 제한된 재시도, 주입 가능한 Checkpointer 경계
+- `src/ai_platform/graph/workflow.py`: 승인 흐름, `StreamingWorkflow`의 Checkpoint 우선 상태 출력, `RoutedWorkflow`의 Conditional Edge 참조 흐름, `PlannerDeveloperReviewerWorkflow`의 고정 역할 순서, `SubgraphWorkflow`의 부모 승인 경계, `RetryWorkflow`의 제한된 재시도, 주입 가능한 Checkpointer 경계
 - `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer
 
 - `examples/volume09/single_node_workflow.py`: 승인 중단 및 재개 데모
@@ -33,7 +34,8 @@
 - `examples/volume09/retry_error_workflow.py`: 제한된 재시도와 Error Node 데모
 - `examples/volume09/persistent_checkpoint_workflow.py`: 새 Workflow 인스턴스에서의 안전한 로컬 Checkpoint 복원 데모
 - `examples/volume09/streaming_workflow.py`: 승인 전·후 Node 상태 업데이트의 고정 순서 데모
-- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·재시도 상한·영속 Checkpoint·상태 Streaming 계약 테스트
+- `examples/volume09/subgraph_workflow.py`: Subgraph 검토 통과 뒤에도 부모 실행 승인에서 멈추는 데모
+- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming 계약 테스트
 
 
 현재 프로젝트 의존성에는 `langgraph` 패키지가 선언되어 있지 않습니다. 이 Volume의 현재 슬라이스들은 LangGraph API 호출을 가장하지 않고, 해당 API가 모델링하는 상태·Node·Edge·interrupt 경계를 직접 구현한 결정론적 참조 모델입니다. 패키지 추가는 이 작업 범위 밖의 프로젝트 설정 변경이므로, 승인된 별도 변경 후 실제 LangGraph 어댑터 장에서 수행합니다.

@@ -17,6 +17,7 @@ from ai_platform.graph import (
     RouteKind,
     RouterDecision,
     StreamingWorkflow,
+    SubgraphWorkflow,
     WorkflowState,
     WorkflowStatus,
 )
@@ -259,6 +260,57 @@ def test_review_decision_rejects_blank_audit_fields() -> None:
 
     with pytest.raises(ValueError, match="review source"):
         ReviewDecision(approved=True, feedback="통과", source=" ")
+
+
+def test_subgraph_workflow_keeps_risky_action_at_parent_approval_boundary() -> None:
+    """Subgraph의 검토 통과 뒤에도 부모 Workflow만 실행 승인 interrupt를 만든다."""
+    workflow = SubgraphWorkflow()
+
+    waiting = workflow.invoke(
+        run_id="subgraph-risky-001",
+        task="학습용 배포 초안을 검토한다",
+        action=ActionKind.DEPLOY,
+        review_decision=ReviewDecision(approved=True, feedback="검토 기준을 충족합니다."),
+    )
+
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert waiting.review_approved is True
+    assert waiting.approval_granted is None
+    assert [event.node for event in waiting.events] == [
+        "plan",
+        "developer",
+        "reviewer",
+        "approval",
+    ]
+    assert "execute" not in [event.node for event in waiting.events]
+    assert workflow.checkpoint(run_id="subgraph-risky-001") == waiting
+
+    completed = workflow.resume(run_id="subgraph-risky-001", approved=True)
+
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert [event.node for event in completed.events] == [
+        "plan",
+        "developer",
+        "reviewer",
+        "approval",
+        "approval",
+        "execute",
+    ]
+
+
+def test_subgraph_workflow_stops_at_reviewer_rejection_before_parent_approval() -> None:
+    """Subgraph 거절은 부모 Approval Node와 execute Node를 모두 건너뛴다."""
+    rejected = SubgraphWorkflow().invoke(
+        run_id="subgraph-rejected-001",
+        task="학습용 배포 초안을 검토한다",
+        action=ActionKind.DEPLOY,
+        review_decision=ReviewDecision(approved=False, feedback="영향 범위가 빠졌습니다."),
+    )
+
+    assert rejected.status is WorkflowStatus.REVIEW_REJECTED
+    assert [event.node for event in rejected.events] == ["plan", "developer", "reviewer"]
+    assert "approval" not in [event.node for event in rejected.events]
+    assert "execute" not in [event.node for event in rejected.events]
 
 
 def test_retry_workflow_recovers_within_its_fixed_retry_limit() -> None:

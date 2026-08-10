@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 완료된 Node 전이를 `StreamUpdate`로 내보내는 `StreamingWorkflow`를 추가했습니다. 업데이트는 구독자에게 전달되기 전에 Checkpoint에 저장되고, 순번·Node·상태를 함께 전달합니다. 위험 ActionKind의 초기 스트림은 `WAITING_FOR_APPROVAL`에서 끝나며 명시적 사람 승인 뒤 재개 스트림에서만 `execute` 업데이트가 생성됩니다. 모든 실행은 오프라인·결정론적 시뮬레이션입니다.
-- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(Subgraph, FastAPI 연동)과 Volume Definition of Done의 나머지 항목이 남아 있습니다.
+- 이번 슬라이스: 부모 `SubgraphWorkflow`가 Planner-Developer-Reviewer 역할 Subgraph를 호출하게 했습니다. Subgraph는 계획·개발·검토까지만 수행하고, 위험 ActionKind는 검토 통과 뒤에도 부모의 `WAITING_FOR_APPROVAL` interrupt에서 멈춥니다. 명시적인 사람 승인 뒤에만 부모가 `execute` 시뮬레이션을 수행합니다. 모든 실행은 오프라인·결정론적입니다.
+- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(FastAPI 연동)과 Volume Definition of Done의 나머지 항목이 남아 있습니다.
 
 ## 이번에 완료한 파일
 
@@ -66,6 +66,16 @@
   - `DEPLOY`의 초기 상태 스트림이 승인 대기에서 멈추고, 명시적 승인 뒤에만 `execute`를 출력하는 데모를 추가했습니다.
 - `tests/unit/test_volume09_graph.py`
   - 안전 작업의 고정 상태 순서, 위험 작업 승인 전 `execute` 부재, 승인·거절 재개 계약을 추가했습니다.
+- `docs/volume09-langgraph/07-parent-subgraph-approval-boundary.md`
+  - 부모와 Subgraph의 책임 분리, Reviewer 판정과 실행 승인 분리, Subgraph 완료 뒤에도 유지되는 위험 작업 interrupt를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 일곱 번째 장 링크와 부모 Subgraph 승인 경계 출고 범위를 반영했습니다.
+- `src/ai_platform/graph/workflow.py`, `src/ai_platform/graph/__init__.py`
+  - 재사용 가능한 `PlannerDeveloperReviewerSubgraph`와 이를 호출하는 `SubgraphWorkflow`를 추가했습니다. Subgraph는 실행 권한이 없고, 부모만 Approval·Execute Node를 적용합니다.
+- `examples/volume09/subgraph_workflow.py`
+  - `DEPLOY`의 Subgraph 검토 통과 뒤에도 부모 승인 대기에서 멈추고, 명시적 승인 뒤에만 오프라인 완료하는 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 위험 작업의 Subgraph 통과 뒤 부모 Approval interrupt 유지, 승인 전 `execute` 부재, Reviewer 거절 시 부모 Approval·Execute 생략 계약을 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다.
 
@@ -205,6 +215,39 @@ $ uv run python scripts/check_secrets.py
 
 $ git diff --check
 (exit 0)
+
+$ uv run python examples/volume09/subgraph_workflow.py
+Subgraph 검토 통과 후: status=waiting_for_approval
+events=plan | developer | reviewer | approval
+부모 Workflow의 사람 실행 승인 후: status=completed
+events=plan | developer | reviewer | approval | approval | execute
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+25 passed in 0.25s
+
+$ uv run pytest -q
+86 passed in 0.81s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 5 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
 ```
 
 > [!NOTE]
@@ -217,4 +260,4 @@ $ git diff --check
 
 ## 다음 작업
 
-- 다음 장에서 외부 API 없이 Planner-Developer-Reviewer 역할을 합성하는 고정 순서 Subgraph를 추가하고, 부모 Workflow의 위험 ActionKind 승인 경계가 Subgraph 완료 뒤에도 유지되는 계약을 테스트합니다.
+- 다음 장에서 외부 API 없이 FastAPI 연동을 위한 요청·응답 어댑터 경계를 추가하고, 위험 ActionKind가 HTTP 요청을 통해서도 명시적 승인 전에는 `execute`에 도달하지 않는 계약을 테스트합니다.
