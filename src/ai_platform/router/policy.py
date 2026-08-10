@@ -1,4 +1,5 @@
 """Capability·cost·latency 제약으로 대상을 결정론적으로 선택하는 정책 Router."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -35,6 +36,11 @@ class PolicyRouter:
     def name(self) -> str:
         """결정 로그에 사용할 사람이 읽을 수 있는 정책 이름을 반환한다."""
         return self._name
+
+    @property
+    def targets(self) -> tuple[RouteTarget, ...]:
+        """상위 Router가 stage 계약을 검증할 수 있게 불변 대상 목록을 반환한다."""
+        return self._targets
 
     def route(self, request: RoutingRequest) -> RouteDecision:
         """요청 조건을 모두 통과한 가장 경제적인 정상 대상을 선택한다."""

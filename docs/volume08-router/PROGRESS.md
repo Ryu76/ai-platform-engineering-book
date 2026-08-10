@@ -258,3 +258,49 @@ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.p
 다음 슬라이스:
 
 - 고정 escalation fixture와 명시적 escalation budget을 갖는 다단계 Agent·Tool·Model Router를 추가하고, 모든 단계가 policy 제약을 재검증하는 안전 실패를 검증합니다.
+
+## 2026-08-11 — Tick 7: 고정 escalation fixture 기반 Agent·Tool·Model 다단계 Router
+
+완료한 범위:
+
+- 요청 ID별 stage 순서만 보관하는 `EscalationFixture`와 stage의 대상 유형·허용 대상을 검증하는 `RoutingStage`를 추가했습니다. 이 slice는 Agent·Tool·Model·API·네트워크를 호출하지 않습니다.
+- `MultiStageEscalationRouter`가 Agent → Tool → Model의 fixture 순서를 따르고, 첫 stage 뒤 최대 시도 수를 명시적 정수 `escalation_budget`으로 제한하게 했습니다.
+- 각 stage에서 원래 capability·허용 대상·비용·지연 시간 제약을 보존한 뒤 stage 대상 집합과 교집합을 만들고 `PolicyRouter`에 재검증하게 했습니다. 따라서 escalation은 permission·cost·latency·health 제약을 우회하지 못합니다.
+- fixture 누락은 `NoEscalationFixtureError`, budget 안의 모든 stage 실패는 실제 시도 stage만 보관하는 `EscalationRouteExhaustedError`로 fail closed 하게 했습니다.
+- stage의 policy 소속, Agent·Tool·Model 유형 일치, stage/fixture의 중복 없는 계약을 생성 시 검증했습니다. 성공·실패 감사 로그는 사용자 원문 없이 JSON 직렬화 가능합니다.
+- 고정 fixture 예제, 계약 테스트, `07-multi-stage-escalation.md` 학습 장을 추가했습니다.
+
+검증 결과:
+
+```text
+uv run pytest tests/unit/test_volume08_policy_router.py tests/unit/test_volume08_keyword_router.py tests/unit/test_volume08_router_evaluation.py tests/unit/test_volume08_policy_fallback_router.py tests/unit/test_volume08_semantic_router.py tests/unit/test_volume08_llm_router.py tests/unit/test_volume08_multi_stage_escalation_router.py -q
+61 passed in 0.30s
+
+uv run ruff format --check src/ai_platform/router/escalation.py src/ai_platform/router/policy.py src/ai_platform/router/__init__.py examples/volume08/multi_stage_escalation_router.py tests/unit/test_volume08_multi_stage_escalation_router.py
+5 files already formatted
+
+uv run ruff check src/ai_platform/router/escalation.py src/ai_platform/router/policy.py src/ai_platform/router/__init__.py examples/volume08/multi_stage_escalation_router.py tests/unit/test_volume08_multi_stage_escalation_router.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 9 source files
+
+uv run python examples/volume08/multi_stage_escalation_router.py
+{"attempted_stage_names": ["agent-stage", "tool-stage", "model-stage"], "confidence": "1", "escalation_count": 2, "estimated_cost": "0.004", "estimated_latency_ms": "90", "multi_stage_router_name": "offline-support-escalation-router", "policy_name": "offline-model-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-escalation-001", "stage_name": "model-stage", "stage_target_kind": "model", "target_kind": "model", "target_name": "offline-summary-model"}
+
+uv run pytest -q
+122 passed in 0.88s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+```
+
+남은 Volume 08 범위:
+
+- Router API 구현 및 API 학습 장
+
+다음 슬라이스:
+
+- 고정 policy/router fixture를 HTTP 요청·응답 계약으로만 변환하는 로컬 Router API를 추가하고, API 입력 검증·안전 실패·원문 없는 결정 로그를 검증합니다.

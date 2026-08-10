@@ -12,8 +12,8 @@
 4. [Policy fallback: retry budget 안에서 fail closed 하기](04-policy-fallback.md)
 5. [Semantic Router: 고정 score fixture와 정책 경계](05-semantic-routing.md)
 6. [LLM Router: 고정 classifier response와 정책 경계](06-llm-routing.md)
-7. 비용·지연 시간·capability 정책, 다단계 라우팅, 장애 전환 (작성 예정)
-8. Router 결정 로그, API 및 나머지 학습 장 (작성 예정)
+7. [Multi-stage Router: 고정 escalation fixture로 Agent·Tool·Model을 안전하게 전환하기](07-multi-stage-escalation.md)
+8. Router API 및 나머지 학습 장 (작성 예정)
 
 ## 현재 실행 가능한 실습
 
@@ -31,9 +31,11 @@ uv run python examples/volume08/semantic_router.py
 uv run pytest tests/unit/test_volume08_semantic_router.py -q
 uv run python examples/volume08/llm_router.py
 uv run pytest tests/unit/test_volume08_llm_router.py -q
+uv run python examples/volume08/multi_stage_escalation_router.py
+uv run pytest tests/unit/test_volume08_multi_stage_escalation_router.py -q
 ```
 
-열두 개 명령은 외부 서비스, API 키, 네트워크 호출 없이 고정된 정책·keyword·semantic·LLM Router 결정, 평가 accuracy gate, 제한된 policy fallback을 검증합니다.
+열네 개 명령은 외부 서비스, API 키, 네트워크 호출 없이 고정된 정책·keyword·semantic·LLM Router 결정, 평가 accuracy gate, 제한된 policy fallback, Agent·Tool·Model 다단계 escalation을 검증합니다.
 
 ## 진행 기록
 

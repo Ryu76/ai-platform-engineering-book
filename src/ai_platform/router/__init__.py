@@ -9,6 +9,14 @@ from ai_platform.router.base import (
     RoutingRequest,
     RoutingRequirements,
 )
+from ai_platform.router.escalation import (
+    EscalationFixture,
+    EscalationRouteExhaustedError,
+    MultiStageEscalationRouter,
+    MultiStageRouteDecision,
+    NoEscalationFixtureError,
+    RoutingStage,
+)
 from ai_platform.router.evaluation import (
     KeywordRoutingEvaluationCase,
     KeywordRoutingEvaluationReport,
@@ -50,10 +58,13 @@ from ai_platform.router.semantic import (
 __all__ = [
     "NoEligibleRouteError",
     "NoConfidentKeywordRouteError",
+    "NoEscalationFixtureError",
     "NoConfidentLLMRouteError",
     "NoConfidentSemanticRouteError",
     "NoLLMClassifierResponseFixtureError",
     "NoSemanticScoreFixtureError",
+    "EscalationFixture",
+    "EscalationRouteExhaustedError",
     "FallbackRouteDecision",
     "FallbackRouteExhaustedError",
     "KeywordRoute",
@@ -67,6 +78,8 @@ __all__ = [
     "LLMRoute",
     "LLMRouteDecision",
     "LLMRouter",
+    "MultiStageEscalationRouter",
+    "MultiStageRouteDecision",
     "PolicyFallbackRouter",
     "PolicyRouter",
     "RouteDecision",
@@ -76,6 +89,7 @@ __all__ = [
     "RoutingQualityGateError",
     "RoutingRequest",
     "RoutingRequirements",
+    "RoutingStage",
     "SemanticIntentScore",
     "SemanticRoute",
     "SemanticRouteDecision",
