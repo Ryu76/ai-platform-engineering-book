@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
+from ai_platform.tools.execution import ToolExecutionPolicy, execute_with_policy
 from ai_platform.tools.registry import ToolRegistry, ToolRegistryError, ToolResult
 
 
@@ -120,6 +121,28 @@ def execute_authorized(
     approval: ApprovalGrant | None = None,
 ) -> ToolResult:
     """Schema·allowlist 검증 후 승인된 위험 Tool만 기존 registry 경계로 실행한다."""
+    authorize_request(
+        registry,
+        request_id=request_id,
+        tool_name=tool_name,
+        arguments=arguments,
+        policy=policy,
+        approval=approval,
+    )
+    # 기존 실행 경계로 다시 진입하므로 승인 기록이 handler를 직접 호출할 수 없다.
+    return registry.execute(tool_name=tool_name, arguments=arguments)
+
+
+def authorize_request(
+    registry: ToolRegistry,
+    *,
+    request_id: str,
+    tool_name: str,
+    arguments: Mapping[str, object],
+    policy: ToolAuthorizationPolicy,
+    approval: ApprovalGrant | None = None,
+) -> None:
+    """실행 없이 allowlist·Schema·위험도·승인 전체를 확인하는 재사용 가능한 경계다."""
     if not request_id.strip():
         raise ToolAuthorizationError("request_id must not be empty")
 
@@ -135,8 +158,32 @@ def execute_authorized(
         ):
             raise ToolApprovalMismatchError("approval grant does not match the tool request")
 
-    # 기존 실행 경계로 다시 진입하므로 승인 기록이 handler를 직접 호출할 수 없다.
-    return registry.execute(tool_name=tool_name, arguments=arguments)
+
+def execute_authorized_with_policy(
+    registry: ToolRegistry,
+    *,
+    request_id: str,
+    tool_name: str,
+    arguments: Mapping[str, object],
+    authorization_policy: ToolAuthorizationPolicy,
+    execution_policy: ToolExecutionPolicy,
+    approval: ApprovalGrant | None = None,
+) -> ToolResult:
+    """승인을 통과한 요청을 매 시도 registry 검증을 거치는 제한된 실행 정책으로 보낸다."""
+    authorize_request(
+        registry,
+        request_id=request_id,
+        tool_name=tool_name,
+        arguments=arguments,
+        policy=authorization_policy,
+        approval=approval,
+    )
+    return execute_with_policy(
+        registry,
+        tool_name=tool_name,
+        arguments=arguments,
+        policy=execution_policy,
+    )
 
 
 def _validate_identifiers(*, approval_id: str, request_id: str, tool_name: str) -> None:

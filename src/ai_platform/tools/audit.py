@@ -10,6 +10,12 @@ from ai_platform.tools.authorization import (
     ToolAuthorizationPolicy,
     ToolRisk,
     execute_authorized,
+    execute_authorized_with_policy,
+)
+from ai_platform.tools.execution import (
+    ToolExecutionPolicy,
+    ToolExecutionTimeoutError,
+    ToolRetryExhaustedError,
 )
 from ai_platform.tools.registry import ToolRegistry, ToolRegistryError, ToolResult
 
@@ -96,6 +102,73 @@ def execute_audited(
             request_id=request_id,
             tool_name=tool_name,
             policy=policy,
+            approval=approval,
+            outcome=ToolAuditOutcome.SUCCEEDED,
+        )
+    )
+    return result
+
+
+def execute_audited_with_policy(
+    registry: ToolRegistry,
+    *,
+    request_id: str,
+    tool_name: str,
+    arguments: Mapping[str, object],
+    authorization_policy: ToolAuthorizationPolicy,
+    execution_policy: ToolExecutionPolicy,
+    audit_sink: InMemoryToolAuditSink,
+    approval: ApprovalGrant | None = None,
+) -> ToolResult:
+    """승인 뒤 제한된 timeout/retry 실행을 하고 원문 없이 최종 결과를 감사한다."""
+    try:
+        result = execute_authorized_with_policy(
+            registry,
+            request_id=request_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            authorization_policy=authorization_policy,
+            execution_policy=execution_policy,
+            approval=approval,
+        )
+    except (ToolExecutionTimeoutError, ToolRetryExhaustedError):
+        audit_sink.record(
+            _event_for_request(
+                request_id=request_id,
+                tool_name=tool_name,
+                policy=authorization_policy,
+                approval=approval,
+                outcome=ToolAuditOutcome.FAILED,
+            )
+        )
+        raise
+    except ToolRegistryError:
+        audit_sink.record(
+            _event_for_request(
+                request_id=request_id,
+                tool_name=tool_name,
+                policy=authorization_policy,
+                approval=approval,
+                outcome=ToolAuditOutcome.DENIED,
+            )
+        )
+        raise
+    except Exception:
+        audit_sink.record(
+            _event_for_request(
+                request_id=request_id,
+                tool_name=tool_name,
+                policy=authorization_policy,
+                approval=approval,
+                outcome=ToolAuditOutcome.FAILED,
+            )
+        )
+        raise
+    audit_sink.record(
+        _event_for_request(
+            request_id=request_id,
+            tool_name=tool_name,
+            policy=authorization_policy,
             approval=approval,
             outcome=ToolAuditOutcome.SUCCEEDED,
         )
