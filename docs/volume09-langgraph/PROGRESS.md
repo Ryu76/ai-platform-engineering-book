@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 제한된 재시도와 Error Node를 추가했습니다. 결정론적 실패 계획이 상한 안에서는 실행 시뮬레이션으로 한 번씩만 되돌아가고, 상한 소진 시 별도 `FAILED` END로 종료됩니다. 위험 작업은 재시도 계획이 있어도 사람 실행 승인 전 시도 0회로 중단됩니다.
-- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(영속 Checkpoint, Streaming, Subgraph, FastAPI 연동)과 Volume Definition of Done의 나머지 항목이 남아 있습니다.
+- 이번 슬라이스: 프로세스 재생성 뒤에도 재개되는 `JsonFileCheckpointer`를 추가했습니다. 명시한 기존 로컬 디렉터리의 단일 JSON 파일만 사용하며, run ID별 State를 엄격한 스키마로 검증하고 임시 파일의 원자적 교체로 기록합니다. 위험 ActionKind는 복원 뒤에도 사람 실행 승인 전 `WAITING_FOR_APPROVAL`에 유지됩니다. 자격 증명 표식이 있는 State·run ID와 손상 JSON은 실행 전에 거부합니다.
+- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(Streaming, Subgraph, FastAPI 연동)과 Volume Definition of Done의 나머지 항목이 남아 있습니다.
 
 ## 이번에 완료한 파일
 
@@ -46,6 +46,16 @@
   - 첫 번째 오프라인 실패 뒤 한 번 재시도하여 완료하는 이벤트 순서를 출력합니다.
 - `tests/unit/test_volume09_graph.py`
   - 회복 성공, 상한 소진 최종 실패, 위험 작업의 승인 전 시도 금지, 잘못된 재시도 입력 거부 계약을 추가했습니다.
+- `docs/volume09-langgraph/05-persistent-checkpoint-workflow.md`
+  - 영속 Checkpoint의 저장 범위, run ID, JSON 스키마, 원자적 교체, 손상 파일 거부, 민감정보 제외와 재시작 뒤 승인 경계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 다섯 번째 장 링크와 영속 Checkpoint 출고 범위를 반영했습니다.
+- `src/ai_platform/graph/checkpointer.py`, `src/ai_platform/graph/workflow.py`, `src/ai_platform/graph/__init__.py`
+  - 주입 가능한 `Checkpointer` 계약과 `JsonFileCheckpointer`를 추가했습니다. 파일 저장은 로컬·결정론적이며, 공개 State만 저장하고 읽을 때도 스키마와 이벤트 순서를 검증합니다.
+- `examples/volume09/persistent_checkpoint_workflow.py`
+  - 임시 디렉터리에서 새 Workflow 인스턴스가 `DEPLOY` 승인 대기 상태를 복원한 뒤 명시적 승인으로만 오프라인 완료하는 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 새 인스턴스 복원, 승인 경계 유지, 민감정보 표식 거부, 손상 JSON 거부 계약을 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다.
 
@@ -118,6 +128,37 @@ $ uv run python scripts/check_secrets.py
 
 $ git diff --check
 (exit 0)
+
+$ uv run python examples/volume09/persistent_checkpoint_workflow.py
+before_restart=waiting_for_approval
+events=plan | approval
+after_restart=waiting_for_approval
+after_approval=completed
+events=plan | approval | approval | execute
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+20 passed in 0.13s
+
+$ uv run pytest -q
+81 passed in 0.80s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 5 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
 ```
 
 > [!NOTE]
@@ -130,4 +171,4 @@ $ git diff --check
 
 ## 다음 작업
 
-- 다음 장에서 프로세스 종료 뒤에도 재개 가능한 영속 Checkpoint를 추가하고, 저장 범위·run ID·민감정보 제외·위험 ActionKind의 별도 사람 승인 경계를 오프라인 테스트로 고정합니다.
+- 다음 장에서 외부 API 없이 순서가 고정된 Streaming 상태 출력을 추가하고, 위험 ActionKind의 승인 대기 중에는 실행 이벤트가 스트리밍되지 않는 계약을 테스트합니다.

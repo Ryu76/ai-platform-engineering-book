@@ -1,11 +1,14 @@
 """Volume 09 오프라인 상태형 Workflow의 안전 계약을 검사한다."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from ai_platform.graph import (
     ActionKind,
     DeterministicWorkflow,
+    JsonFileCheckpointer,
     PlannerDeveloperReviewerWorkflow,
     RetryPlan,
     RetryWorkflow,
@@ -332,3 +335,57 @@ def test_retry_plan_rejects_negative_limits_and_blank_source() -> None:
 
     with pytest.raises(ValueError, match="retry source"):
         RetryPlan(failures_before_success=0, max_retries=0, source=" ")
+
+
+def test_json_file_checkpoint_survives_a_new_workflow_instance_and_keeps_approval_gate(
+    tmp_path: Path,
+) -> None:
+    """로컬 JSON Checkpoint는 새 인스턴스에서도 위험 작업의 승인 대기를 보존한다."""
+    checkpoint_path = tmp_path / "volume09-checkpoints.json"
+    waiting = DeterministicWorkflow(
+        checkpointer=JsonFileCheckpointer(path=checkpoint_path)
+    ).invoke(
+        run_id="persistent-deploy-001",
+        task="학습용 배포를 준비한다",
+        action=ActionKind.DEPLOY,
+    )
+
+    restored_workflow = DeterministicWorkflow(
+        checkpointer=JsonFileCheckpointer(path=checkpoint_path)
+    )
+    restored = restored_workflow.checkpoint(run_id="persistent-deploy-001")
+
+    assert restored == waiting
+    assert restored.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert "execute" not in [event.node for event in restored.events]
+
+    completed = restored_workflow.resume(run_id="persistent-deploy-001", approved=True)
+
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert [event.node for event in completed.events] == [
+        "plan", "approval", "approval", "execute"
+    ]
+
+
+def test_json_file_checkpoint_rejects_suspected_sensitive_state_text(tmp_path: Path) -> None:
+    """영속 Checkpointer는 자격 증명처럼 보이는 텍스트를 파일에 쓰지 않는다."""
+    checkpoint_path = tmp_path / "volume09-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    state = WorkflowState.start(
+        task="sk-" + "offline-value",
+        action=ActionKind.READ,
+    )
+
+    with pytest.raises(ValueError, match="suspected sensitive data"):
+        checkpointer.save(run_id="persistent-safe-001", state=state)
+
+    assert not checkpoint_path.exists()
+
+
+def test_json_file_checkpoint_rejects_a_corrupt_payload(tmp_path: Path) -> None:
+    """부분 기록되었거나 변조된 JSON은 재개 전에 명시적으로 실패한다."""
+    checkpoint_path = tmp_path / "volume09-checkpoints.json"
+    checkpoint_path.write_text("{", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not valid JSON"):
+        JsonFileCheckpointer(path=checkpoint_path).load(run_id="persistent-safe-001")

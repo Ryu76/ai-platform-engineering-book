@@ -1,7 +1,7 @@
 """START에서 END까지 전이하는 오프라인 Workflow 참조 모델."""
 from __future__ import annotations
 
-from ai_platform.graph.checkpointer import MemoryCheckpointer
+from ai_platform.graph.checkpointer import Checkpointer, MemoryCheckpointer
 from ai_platform.graph.nodes import (
     approval_node,
     developer_node,
@@ -33,7 +33,7 @@ class DeterministicWorkflow:
     학습하기 위한 참조 모델이다. 어떤 ActionKind도 실제 시스템 작업을 실행하지 않는다.
     """
 
-    def __init__(self, *, checkpointer: MemoryCheckpointer | None = None) -> None:
+    def __init__(self, *, checkpointer: Checkpointer | None = None) -> None:
         """선택한 Checkpointer와 Workflow를 연결한다."""
         self._checkpointer = checkpointer or MemoryCheckpointer()
 
@@ -73,7 +73,7 @@ class RoutedWorkflow:
         self,
         *,
         confidence_threshold: float = 0.80,
-        checkpointer: MemoryCheckpointer | None = None,
+        checkpointer: Checkpointer | None = None,
     ) -> None:
         """임계값과 선택적 Checkpointer를 검증해 Workflow에 연결한다."""
         if not 0.0 <= confidence_threshold <= 1.0:
@@ -140,7 +140,7 @@ class PlannerDeveloperReviewerWorkflow:
     위험 ActionKind는 검토를 통과한 뒤에도 별도의 사람 승인 interrupt를 거친다.
     """
 
-    def __init__(self, *, checkpointer: MemoryCheckpointer | None = None) -> None:
+    def __init__(self, *, checkpointer: Checkpointer | None = None) -> None:
         """선택한 Checkpointer와 고정 역할 순서의 Workflow를 연결한다."""
         self._checkpointer = checkpointer or MemoryCheckpointer()
 
@@ -192,7 +192,7 @@ class RetryWorkflow:
     통과해야 하며, 승인 거절 시 시도 자체가 시작되지 않는다.
     """
 
-    def __init__(self, *, checkpointer: MemoryCheckpointer | None = None) -> None:
+    def __init__(self, *, checkpointer: Checkpointer | None = None) -> None:
         """선택한 Checkpointer와 재시도 Workflow를 연결한다."""
         self._checkpointer = checkpointer or MemoryCheckpointer()
 
