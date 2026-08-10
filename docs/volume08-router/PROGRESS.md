@@ -304,3 +304,48 @@ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.p
 다음 슬라이스:
 
 - 고정 policy/router fixture를 HTTP 요청·응답 계약으로만 변환하는 로컬 Router API를 추가하고, API 입력 검증·안전 실패·원문 없는 결정 로그를 검증합니다.
+
+## 2026-08-11 — Tick 8: 고정 PolicyRouter 기반 로컬 Router API 계약
+
+완료한 범위:
+
+- strict Pydantic JSON schema를 사용하는 `RouterAPI`/`RouterAPIResponse`를 추가했습니다. 이 adapter는 실제 HTTP 서버·API·네트워크를 실행하지 않고 `POST /routes`의 body·status code·JSON body 계약만 표현합니다.
+- `maximum_cost`는 JSON number가 아닌 문자열만 받아 `Decimal`로 변환하고, 알 수 없는 필드·비 JSON 타입·기존 `RoutingRequest` 정책 제한 위반을 `400 INVALID_ROUTING_REQUEST`로 fail closed 하게 했습니다.
+- 유효 요청은 기존 `PolicyRouter`에 한 번만 위임합니다. 따라서 API 계층도 capability·허용 대상·비용·지연 시간·health 제약을 재구현하거나 완화하지 않습니다.
+- policy상 대상이 없으면 임의 fallback 없이 `422 NO_ELIGIBLE_ROUTE`를 반환합니다. 성공과 두 실패 body 모두 원문·validation detail·알 수 없는 입력 값을 포함하지 않습니다.
+- 고정 policy fixture 예제, 입력 검증·안전 실패·privacy·JSON 직렬화 계약 테스트, `08-router-api.md` 학습 장을 추가했습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router/api.py src/ai_platform/router/__init__.py examples/volume08/router_api.py tests/unit/test_volume08_router_api.py
+4 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_policy_router.py tests/unit/test_volume08_keyword_router.py tests/unit/test_volume08_router_evaluation.py tests/unit/test_volume08_policy_fallback_router.py tests/unit/test_volume08_semantic_router.py tests/unit/test_volume08_llm_router.py tests/unit/test_volume08_multi_stage_escalation_router.py tests/unit/test_volume08_router_api.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 10 source files
+
+uv run pytest tests/unit/test_volume08_router_api.py -q
+5 passed in 0.27s
+
+uv run python examples/volume08/router_api.py
+{"body": {"decision": {"confidence": "1", "estimated_cost": "0.003", "estimated_latency_ms": "70", "policy_name": "offline-router-api-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-api-001", "target_kind": "agent", "target_name": "offline-order-agent"}, "outcome": "routed"}, "status_code": 200}
+
+uv run pytest -q
+127 passed in 1.14s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+```
+
+PRD DoD 상태:
+
+- `VOLUME08_COMPLETE=true`는 추가하지 않았습니다. Volume별 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 정리, Glossary 항목이 아직 PRD Volume DoD를 충족하지 않습니다. 이 tick의 허용 범위에는 공유 `docs/glossary.md` 수정도 포함되지 않습니다.
+
+다음 슬라이스:
+
+- 고정 policy·keyword·semantic·LLM·fallback·escalation fixture를 한 요청 집합에 조합하는 Volume 08 미니 프로젝트와 Volume 범위 학습자 체크리스트를 추가하고, 전체 로컬 회귀를 검증합니다.

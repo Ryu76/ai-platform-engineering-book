@@ -1,5 +1,6 @@
 """Volume 08의 결정론적 Router 실습 모듈."""
 
+from ai_platform.router.api import RouterAPI, RouterAPIResponse
 from ai_platform.router.base import (
     NoEligibleRouteError,
     RouteDecision,
@@ -85,6 +86,8 @@ __all__ = [
     "RouteDecision",
     "RouteTarget",
     "RouteTargetKind",
+    "RouterAPI",
+    "RouterAPIResponse",
     "RoutingConfigurationError",
     "RoutingQualityGateError",
     "RoutingRequest",

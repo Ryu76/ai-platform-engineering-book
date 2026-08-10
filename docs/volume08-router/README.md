@@ -13,7 +13,7 @@
 5. [Semantic Router: 고정 score fixture와 정책 경계](05-semantic-routing.md)
 6. [LLM Router: 고정 classifier response와 정책 경계](06-llm-routing.md)
 7. [Multi-stage Router: 고정 escalation fixture로 Agent·Tool·Model을 안전하게 전환하기](07-multi-stage-escalation.md)
-8. Router API 및 나머지 학습 장 (작성 예정)
+8. [Router API: 고정 PolicyRouter를 안전한 HTTP 계약으로 노출하기](08-router-api.md)
 
 ## 현재 실행 가능한 실습
 
@@ -33,9 +33,11 @@ uv run python examples/volume08/llm_router.py
 uv run pytest tests/unit/test_volume08_llm_router.py -q
 uv run python examples/volume08/multi_stage_escalation_router.py
 uv run pytest tests/unit/test_volume08_multi_stage_escalation_router.py -q
+uv run python examples/volume08/router_api.py
+uv run pytest tests/unit/test_volume08_router_api.py -q
 ```
 
-열네 개 명령은 외부 서비스, API 키, 네트워크 호출 없이 고정된 정책·keyword·semantic·LLM Router 결정, 평가 accuracy gate, 제한된 policy fallback, Agent·Tool·Model 다단계 escalation을 검증합니다.
+열여섯 개 명령은 외부 서비스, API 키, 네트워크 호출 없이 고정된 정책·keyword·semantic·LLM Router 결정, 평가 accuracy gate, 제한된 policy fallback, Agent·Tool·Model 다단계 escalation, 원문 없는 Router API HTTP 계약을 검증합니다.
 
 ## 진행 기록
 
