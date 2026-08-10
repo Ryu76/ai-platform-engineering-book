@@ -69,6 +69,10 @@ class ToolRegistry:
         """모델에 제공할 수 있는 안정된 도구 이름 목록을 반환한다."""
         return tuple(self._tools)
 
+    def allowed_tools(self) -> tuple[ToolSpec, ...]:
+        """Function Calling 정의로 내보낼 수 있는 등록 Tool만 순서대로 반환한다."""
+        return tuple(self._tools.values())
+
     def execute(self, *, tool_name: str, arguments: Mapping[str, object]) -> ToolResult:
         """allowlist와 입력 Schema를 통과한 로컬 함수만 실행한다."""
         tool = self._tools.get(tool_name)
@@ -152,4 +156,31 @@ SAFE_CALCULATOR = ToolSpec(
         "additionalProperties": False,
     },
     handler=safe_calculator,
+)
+
+
+def safe_text_case(arguments: Mapping[str, object]) -> Mapping[str, object]:
+    """문자열의 대소문자만 변환하는 순수 함수; 외부 시스템에는 접근하지 않는다."""
+    text = cast(str, arguments["text"])
+    operation = cast(str, arguments["operation"])
+    transformations: Mapping[str, Callable[[str], str]] = {
+        "upper": str.upper,
+        "lower": str.lower,
+    }
+    return {"text": transformations[operation](text)}
+
+
+SAFE_TEXT_CASE = ToolSpec(
+    name="safe_text_case",
+    description="문자열을 대문자 또는 소문자로만 변환합니다. 외부 시스템을 변경하지 않습니다.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "text": {"type": "string"},
+            "operation": {"type": "string", "enum": ["upper", "lower"]},
+        },
+        "required": ["text", "operation"],
+        "additionalProperties": False,
+    },
+    handler=safe_text_case,
 )
