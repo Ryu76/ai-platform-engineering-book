@@ -63,15 +63,23 @@ class GenerationParameters:
     def __post_init__(self) -> None:
         """제공자에 요청하기 전에 안전한 공통 범위를 검증한다."""
         if self.temperature is not None and (
-            isinstance(self.temperature, bool) or not 0.0 <= self.temperature <= 2.0
+            isinstance(self.temperature, bool)
+            or not isinstance(self.temperature, (int, float))
+            or not isfinite(self.temperature)
+            or not 0.0 <= self.temperature <= 2.0
         ):
             raise LlmConfigurationError("temperature must be between 0 and 2")
         if self.top_p is not None and (
-            isinstance(self.top_p, bool) or not 0.0 < self.top_p <= 1.0
+            isinstance(self.top_p, bool)
+            or not isinstance(self.top_p, (int, float))
+            or not isfinite(self.top_p)
+            or not 0.0 < self.top_p <= 1.0
         ):
             raise LlmConfigurationError("top_p must be greater than 0 and at most 1")
         if self.max_output_tokens is not None and (
-            isinstance(self.max_output_tokens, bool) or self.max_output_tokens <= 0
+            isinstance(self.max_output_tokens, bool)
+            or not isinstance(self.max_output_tokens, int)
+            or self.max_output_tokens <= 0
         ):
             raise LlmConfigurationError("max_output_tokens must be a positive integer")
         if len(self.stop_sequences) > 4:

@@ -354,13 +354,19 @@ def test_generation_parameters_accept_boundary_values(parameters: GenerationPara
     [
         ("temperature", -0.1, "temperature"),
         ("temperature", 2.1, "temperature"),
+        ("temperature", float("nan"), "temperature"),
+        ("temperature", "0.2", "temperature"),
         ("top_p", 0.0, "top_p"),
         ("top_p", 1.1, "top_p"),
+        ("top_p", float("inf"), "top_p"),
+        ("top_p", "0.9", "top_p"),
         ("max_output_tokens", 0, "max_output_tokens"),
+        ("max_output_tokens", 12.5, "max_output_tokens"),
+        ("max_output_tokens", "120", "max_output_tokens"),
     ],
 )
 def test_generation_parameters_reject_invalid_numeric_values(
-    keyword: str, value: float | int, expected_message: str
+    keyword: str, value: object, expected_message: str
 ) -> None:
     with pytest.raises(LlmConfigurationError, match=expected_message):
         GenerationParameters(**{keyword: value})

@@ -46,7 +46,7 @@ GenerationParameters ─────────────┘          │
 
 - `src/ai_platform/llm/client.py`: `GenerationParameters`와 요청 직렬화를 제공합니다.
 - `examples/volume01/system_prompt_parameters.py`: 실제 호출을 명시적으로 선택하는 예제입니다.
-- `tests/unit/test_llm_client.py`: Mock 전송 계층으로 파라미터 전달과 경계값을 검사합니다.
+- `tests/unit/test_llm_client.py`: `RecordingTransport` Mock 전송 계층으로 파라미터 전달과 경계값을 검사합니다.
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
@@ -163,4 +163,4 @@ Stop Sequence는 안전 제어가 아니라 출력 형식 보조 수단입니다
 
 ## 14. 핵심 정리
 
-System Prompt는 지속 규칙, User Message는 현재 요청, 생성 파라미터는 출력의 확률적 특성과 상한을 담당합니다. `GenerationParameters`로 값을 명시하고 Mock 테스트로 요청 형식을 검증하면, 다음 Streaming 장에서도 재현 가능한 호출 경계를 유지할 수 있습니다.
+System Prompt는 지속 규칙, User Message는 현재 요청, 생성 파라미터는 출력의 확률적 특성과 상한을 담당합니다. `GenerationParameters`로 값을 명시하고 Mock 테스트로 요청 형식을 검증하면, [다음 Streaming 장](07-streaming.md)에서도 재현 가능한 호출 경계를 유지할 수 있습니다.
