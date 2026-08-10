@@ -215,6 +215,21 @@ git diff --check
 
 `uv`는 이 호스트의 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고만 있었고 프로젝트 환경으로 검증했습니다. 학습 자료 테스트는 01–06장의 14개 섹션, README 링크, 실제 Qdrant 미검증 상태를 확인했습니다.
 
+## 2026-08-10 — Verification Tick 07 완료
+
+### 재검증 결과
+
+- `tests/unit/test_volume04_embedding_service.py`, `test_volume04_vector_store.py`, `test_volume04_retrieval_evaluation.py`, `test_volume04_reindex_lifecycle.py`, `test_volume04_learning_materials.py`를 함께 실행해 **34 passed in 0.25s**를 확인했습니다.
+- `ruff check`는 `src/ai_platform/embeddings`, `examples/volume04`, Volume 04 테스트에서 통과했고, `mypy src/ai_platform/embeddings`도 5개 source file에서 오류 없이 통과했습니다.
+- 네 개의 Volume 04 예제를 모두 실행했습니다. embedding 검색의 최상위 score는 `0.548`, payload-filter 검색의 결과는 `retry-guide`, 품질 예제는 `precision_at_1=1.0`/`answerable=True`, lifecycle 예제는 `reindexed_version=2`/`top_1_recovered=True`였습니다.
+- `git diff --check`와 작업 트리를 확인해 공백 오류와 미커밋 변경이 없음을 확인했습니다.
+
+### 완료 상태
+
+- 실제 Qdrant service DoD(고정 버전 local-only Compose, schema 조회, payload filter·upsert·delete·reindex parity, cleanup/idempotency)는 아직 미검증입니다.
+- 이 cron의 허용 범위는 `docs/volume04-embedding-vector-db/`, `examples/volume04/`, Volume 04 tests, `src/ai_platform/embeddings/`로 한정되어 있으므로 root Compose·script나 실제 service를 만들거나 실행하지 않았습니다.
+- 따라서 `VOLUME04_COMPLETE=true`는 계속 설정하지 않았고 cron도 pause하지 않았습니다.
+
 ## 다음 slice
 
 실제 vector database DoD는 현재 cron 범위 밖입니다. 별도 허가된 local integration에서 pinned Qdrant의 schema, payload filter, ID upsert/delete, versioned reindex parity를 실행·기록합니다. 그 전에는 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않습니다.
