@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 11 — Volume 10 Evaluation**
-- 이번 슬라이스: **고정 답변 기록의 정확도·보류·환각·인용 평가와 사례별 근거 실패 분석**
-- 완료 선언: 아직 하지 않음. Router·Agent 평가, Latency·Token·Cost, 회귀 리포트, 미니 프로젝트, 전체 체크리스트가 남아 있습니다.
+- 이번 슬라이스: **고정 Router 선택과 Agent Task Success의 결정론적 평가 및 사례별 누락·예상 밖 작업 분석**
+- 완료 선언: 아직 하지 않음. Latency·Token·Cost, 회귀 리포트, 미니 프로젝트, 전체 체크리스트가 남아 있습니다.
 
 ## 이번 슬라이스 (2026-08-10)
 
@@ -176,12 +176,52 @@ $ uv run python scripts/validate_code_blocks.py && uv run python scripts/validat
 링크 검증 통과
 ```
 
+### Router·Agent Task Success 슬라이스 (2026-08-11)
+
+- `docs/volume10-evaluation/05-router-agent-task-success.md`
+  - PRD 장 구조의 14개 섹션으로 Router Accuracy와 Agent Task Success를 분리하는 이유, no-answer 라우트·부수 작업 차단, 사례별 누락·예상 밖 작업 분석을 작성했습니다.
+  - 실제 Router·Agent·도구·LLM API·네트워크·시계·난수를 쓰지 않고 고정 기록만 읽는 실행 경계를 명시했습니다.
+- `src/ai_platform/evaluation/workflow_metrics.py`
+  - `WorkflowCase`, `RecordedWorkflow`, 사례별·평균 지표와 완전한 사례 집합, 중복 작업 ID, 보류 계약, 키/객체 ID 불일치 입력 계약을 구현했습니다.
+  - Router Accuracy 0.800000, Agent Task Success Rate 0.600000의 결정론적 기준선을 계산합니다.
+- `src/ai_platform/evaluation/datasets.py`, `src/ai_platform/evaluation/__init__.py`
+  - `volume10-support-policy@1.0.0`의 다섯 골든 사례 ID와 일치하는 고정 라우트·필수 작업 라벨 및 의도적인 누락·no-answer 실패 기록을 공개 인터페이스로 연결했습니다.
+- `examples/volume10/workflow_quality.py`
+  - 고정 워크플로의 Router 정확도와 Agent 작업 성공률을 외부 호출 없이 출력합니다.
+- `tests/evaluation/test_workflow_metrics.py`, `tests/evaluation/test_volume10_completion_contract.py`
+  - 기준 수치, 사례 ID 일치, 누락/예상 밖 작업, 불완전 결과, 모순된 no-answer 계약, 다섯 번째 장의 14개 필수 섹션과 실제 산출물 연결을 검증합니다.
+- `docs/volume10-evaluation/README.md`
+  - 다섯 번째 장 링크와 Router·Agent 오프라인 실행 경로를 추가했습니다.
+
+#### 검증 기록
+
+```text
+$ uv run python examples/volume10/workflow_quality.py
+Evaluation cases: 5
+Router accuracy: 0.800000
+Agent task success rate: 0.600000
+
+$ uv run pytest tests/evaluation -q
+39 passed
+
+$ uv run ruff check src/ai_platform/evaluation tests/evaluation examples/volume10
+All checks passed!
+
+$ uv run mypy src/ai_platform/evaluation
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_code_blocks.py && uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py
+코드 블록 검증 통과
+문서 검증 통과: Volume 11개
+링크 검증 통과
+```
+
 ## 알려진 차단 사항
 
-- Volume 10은 네 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석, 답변·보류·환각·인용 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
+- Volume 10은 다섯 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석, 답변·보류·환각·인용 기준선, Router·Agent 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
 - 고정 사실 ID 비교는 자연어 주장 의미, 인용 문서의 정확한 구간, 필수 인용의 완전성을 판정하지 않습니다. 사람 검토와 LLM-as-a-Judge는 후속 운영 평가 설계에서 라벨 지침·익명화·판정 변동 통제와 함께 보완해야 합니다.
 - 고정 Top-3 순위와 기록 답변은 평가 계산을 설명하기 위한 입력입니다. 실제 Retriever·LLM·Router·Agent에 연결하는 통합 평가와 데이터셋 변경 승인 정책은 후속 장에서 구현합니다.
 
 ## 다음 작업
 
-- 고정 골든 데이터셋을 기준으로 Router 선택 정확도와 Agent Task Success를 위한 결정론적 계약을 작성합니다.
+- 고정 기록을 기준으로 Latency·Token·Cost를 위한 결정론적 측정 계약을 작성합니다.

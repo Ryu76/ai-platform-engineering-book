@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from ai_platform.evaluation.answer_metrics import AnswerCase, RecordedAnswer
 from ai_platform.evaluation.golden_dataset import GoldenCase, GoldenDataset
 from ai_platform.evaluation.retrieval_metrics import RetrievalCase
+from ai_platform.evaluation.workflow_metrics import RecordedWorkflow, WorkflowCase
 
 FIXED_GOLDEN_DATASET = GoldenDataset(
     dataset_id="volume10-support-policy",
@@ -144,3 +145,73 @@ FIXED_RECORDED_ANSWERS: Mapping[str, RecordedAnswer] = {
     ),
 }
 """교육용으로 기록한 고정 답변; 보류 실패와 부정확한 인용을 의도적으로 포함한다."""
+
+
+FIXED_WORKFLOW_CASES: tuple[WorkflowCase, ...] = (
+    WorkflowCase(
+        case_id="access-reset",
+        expected_route="identity",
+        expected_response="answer",
+        required_task_ids=("verify-identity-and-reset-access",),
+    ),
+    WorkflowCase(
+        case_id="expense-receipt",
+        expected_route="finance",
+        expected_response="answer",
+        required_task_ids=("provide-itemized-receipt-submission-rule",),
+    ),
+    WorkflowCase(
+        case_id="incident-response",
+        expected_route="security",
+        expected_response="answer",
+        required_task_ids=("report-suspicious-login", "start-initial-response-runbook"),
+    ),
+    WorkflowCase(
+        case_id="benefits-enrollment",
+        expected_route="people",
+        expected_response="answer",
+        required_task_ids=("provide-enrollment-window-and-application-flow",),
+    ),
+    WorkflowCase(
+        case_id="office-parking",
+        expected_route="abstain",
+        expected_response="abstain",
+        required_task_ids=(),
+    ),
+)
+"""골든 사례와 같은 ID를 쓰는 고정 Router 선택·Agent 필수 작업 계약이다."""
+
+
+FIXED_RECORDED_WORKFLOWS: Mapping[str, RecordedWorkflow] = {
+    "access-reset": RecordedWorkflow(
+        case_id="access-reset",
+        selected_route="identity",
+        response_mode="answer",
+        completed_task_ids=("verify-identity-and-reset-access",),
+    ),
+    "expense-receipt": RecordedWorkflow(
+        case_id="expense-receipt",
+        selected_route="finance",
+        response_mode="answer",
+        completed_task_ids=("provide-itemized-receipt-submission-rule",),
+    ),
+    "incident-response": RecordedWorkflow(
+        case_id="incident-response",
+        selected_route="security",
+        response_mode="answer",
+        completed_task_ids=("report-suspicious-login", "start-initial-response-runbook"),
+    ),
+    "benefits-enrollment": RecordedWorkflow(
+        case_id="benefits-enrollment",
+        selected_route="people",
+        response_mode="answer",
+        completed_task_ids=(),
+    ),
+    "office-parking": RecordedWorkflow(
+        case_id="office-parking",
+        selected_route="facilities",
+        response_mode="answer",
+        completed_task_ids=("issue-parking-pass",),
+    ),
+}
+"""교육용 고정 실행 기록; 미완료 작업과 no-answer 라우팅·행동 실패를 포함한다."""

@@ -13,8 +13,10 @@ from ai_platform.evaluation.datasets import (
     FIXED_ANSWER_CASES,
     FIXED_GOLDEN_DATASET,
     FIXED_RECORDED_ANSWERS,
+    FIXED_RECORDED_WORKFLOWS,
     FIXED_RETRIEVAL_CASES,
     FIXED_RETRIEVAL_RESULTS_AT_3,
+    FIXED_WORKFLOW_CASES,
 )
 from ai_platform.evaluation.golden_dataset import (
     GoldenCase,
@@ -31,6 +33,15 @@ from ai_platform.evaluation.retrieval_metrics import (
     evaluate_retrieval,
     evaluate_retrieval_cases,
 )
+from ai_platform.evaluation.workflow_metrics import (
+    RecordedWorkflow,
+    WorkflowCase,
+    WorkflowCaseMetrics,
+    WorkflowEvaluationError,
+    WorkflowMetrics,
+    evaluate_workflow_cases,
+    evaluate_workflows,
+)
 
 __all__ = [
     "AnswerCase",
@@ -40,20 +51,29 @@ __all__ = [
     "FIXED_ANSWER_CASES",
     "FIXED_GOLDEN_DATASET",
     "FIXED_RECORDED_ANSWERS",
+    "FIXED_RECORDED_WORKFLOWS",
     "FIXED_RETRIEVAL_CASES",
     "FIXED_RETRIEVAL_RESULTS_AT_3",
+    "FIXED_WORKFLOW_CASES",
     "GoldenCase",
     "GoldenDataset",
     "GoldenDatasetError",
     "GoldenDatasetSummary",
     "RecordedAnswer",
+    "RecordedWorkflow",
     "RetrievalCase",
     "RetrievalCaseMetrics",
     "RetrievalEvaluationError",
     "RetrievalMetrics",
+    "WorkflowCase",
+    "WorkflowCaseMetrics",
+    "WorkflowEvaluationError",
+    "WorkflowMetrics",
     "evaluate_answer_cases",
     "evaluate_answers",
     "evaluate_retrieval",
     "evaluate_retrieval_cases",
+    "evaluate_workflow_cases",
+    "evaluate_workflows",
     "summarize_golden_dataset",
 ]
