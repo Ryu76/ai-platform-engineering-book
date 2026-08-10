@@ -62,6 +62,7 @@ class RecordingStreamTransport(RecordingTransport):
     def __init__(self, responses: list[HttpResponse]) -> None:
         super().__init__(HttpResponse(status_code=200, payload={}))
         self.responses = responses
+        self.stream_call_count = 0
 
     def post_stream(
         self,
@@ -71,6 +72,7 @@ class RecordingStreamTransport(RecordingTransport):
         payload: Mapping[str, object],
         timeout_seconds: float,
     ) -> Iterator[HttpResponse]:
+        self.stream_call_count += 1
         self.url = url
         self.headers = headers
         self.payload = payload
@@ -445,16 +447,38 @@ def test_client_stream_surfaces_provider_error() -> None:
         list(client.stream([ChatMessage(role="user", content="상태를 알려 주세요.")]))
 
 
+def test_client_never_retries_a_stream_after_a_provider_error() -> None:
+    """부분 출력의 중복을 막기 위해 스트림은 명시적 재시도 정책도 사용하지 않는다."""
+    transport = RecordingStreamTransport(
+        [HttpResponse(status_code=503, payload={"error": {"message": "temporarily unavailable"}})]
+    )
+    delays: list[float] = []
+    client = LlmClient(
+        model="offline-test-model",
+        api_key="unit-test-token",
+        transport=transport,
+        retry_policy=RetryPolicy(max_attempts=3, base_delay_seconds=0.25),
+        sleeper=delays.append,
+    )
+
+    with pytest.raises(LlmRemoteError, match=r"\(503\): temporarily unavailable"):
+        list(client.stream([ChatMessage(role="user", content="스트림 상태를 알려 주세요.")]))
+
+    assert transport.stream_call_count == 1
+    assert delays == []
+
+
 @pytest.mark.parametrize(
     ("raw_line", "expected"),
     [
-        (b"event: message\n", None),
-        (b"data: {\"choices\": []}\n", '{"choices": []}'),
-        (b"data: [DONE]\r\n", "[DONE]"),
+        (b"event: message\x0a", None),
+        (b'data: {"choices": []}\x0a', '{"choices": []}'),
+        (b"data: [DONE]\x0d\x0a", "[DONE]"),
     ],
 )
 def test_sse_data_extracts_only_data_rows(raw_line: bytes, expected: str | None) -> None:
     assert _sse_data(raw_line) == expected
+
 
 
 def test_sse_data_rejects_invalid_utf8() -> None:
