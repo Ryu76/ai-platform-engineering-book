@@ -20,10 +20,10 @@
 | 07a. Prompt 테스트 데이터 | `07-prompt-test-data.md`, `src/ai_platform/prompts/prompt_test_data.py`, `examples/volume02/prompt_test_data_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 고정 fixture의 ID·기대값·목적·태그와 중복 실패 닫힘, 기존 버전 비교용 순서 보존 변환을 오프라인으로 검증함 |
 | 08. 오프라인 Prompt 회귀 검토 미니 프로젝트 | `08-mini-project-offline-prompt-regression.md`, `src/ai_platform/prompts/prompt_mini_project.py`, `examples/volume02/prompt_mini_project_demo.py`, `tests/unit/test_prompts.py` | 2026-08-11 같은 검토 fixture에 대한 버전별 고정 기록 비교, 원문 없는 실패 ID 보고, 전 케이스 통과 시에만 사람 검토 후보 표시를 오프라인으로 구현함 |
 | 09. 권 단위 과제: 오프라인 Prompt 계약 검토 | `09-exercises.md`, `tests/integration/test_volume02_exercises.py` | 2026-08-11 기본·응용·심화 과제를 실제 오프라인 예제·단위 테스트·입력 경계·회귀 검토에 연결하는 문서 계약을 추가함 |
+| 10a. 학습자·제작 검수 체크리스트와 Volume 03 인계 | `checklist.md`, `README.md`, `tests/integration/test_volume02_exercises.py` | 2026-08-11 오프라인 재실행, Prompt 안전 경계, Tool Calling allowlist 인계를 학습자·제작자 구분 체크리스트로 추가함 |
 
 ## 남은 PRD 요구사항
 
-- 학습자 체크리스트
 - Volume 02 주요 용어집 (공유 `docs/glossary.md`는 작업 범위 밖이므로 이 Volume 경로에 별도 작성)
 - 전체 Volume 재실행, 문서·링크·비밀값 검증, 다음 Volume 인계 목록
 
@@ -54,3 +54,5 @@
 | 2026-08-11 | `bash scripts/run_all_tests.sh` | Ruff 통과, mypy(16개 소스) 통과, 문서·링크·코드 블록·비밀값 검사 통과, pytest 116 passed |
 | 2026-08-11 | `uv run ruff check src/ai_platform/prompts examples/volume02 tests/unit/test_prompts.py tests/integration/test_volume02_exercises.py` / `uv run mypy src/ai_platform/prompts` / `uv run pytest tests/unit/test_prompts.py tests/integration/test_volume02_exercises.py -q` | Ruff 통과, mypy(9개 소스) 통과, Volume 02 단위·과제 계약 테스트 56 passed |
 | 2026-08-11 | `uv run python scripts/validate_docs.py` / `validate_links.py` / `validate_code_blocks.py` / `check_secrets.py` | 11개 Volume 문서 목록, 로컬 링크, 코드 블록 언어, 비밀값 패턴 검사 통과 |
+| 2026-08-11 | `uv run ruff check src/ai_platform/prompts examples/volume02 tests/unit/test_prompts.py tests/integration/test_volume02_exercises.py` / `uv run mypy src/ai_platform/prompts` / `uv run pytest tests/unit/test_prompts.py tests/integration/test_volume02_exercises.py -q` / `bash scripts/run_all_tests.sh` | Ruff 통과, mypy(9개 Prompt 소스) 통과, Volume 02 단위·문서 계약 테스트 57 passed, 전체 검사에서 Ruff·mypy(16개 소스)·문서/링크/코드 블록/비밀값 검사 통과 및 pytest 118 passed |
+| 2026-08-11 | `prompt_template_demo.py` / `structured_output_demo.py` / `injection_defense_demo.py` / `prompt_mini_project_demo.py` | 네 데모를 API 키·네트워크·라이브 LLM·Tool 실행 없이 재실행했고, 고위험 입력 보류와 v1/v2 고정 회귀 집계를 확인함 |

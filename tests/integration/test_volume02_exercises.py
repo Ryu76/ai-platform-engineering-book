@@ -1,4 +1,4 @@
-"""Volume 02 권 단위 과제가 실제 오프라인 검토 경계를 참조하는지 검사한다."""
+"""Volume 02 권 단위 문서가 실제 오프라인 검토 경계를 참조하는지 검사한다."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 VOLUME = ROOT / "docs" / "volume02-prompt-engineering"
 EXERCISES = VOLUME / "09-exercises.md"
+CHECKLIST = VOLUME / "checklist.md"
+README = VOLUME / "README.md"
 
 
 def test_volume02_exercises_preserve_all_assignment_levels_and_offline_boundaries() -> None:
@@ -30,4 +32,30 @@ def test_volume02_exercises_preserve_all_assignment_levels_and_offline_boundarie
     assert "uv run python examples/volume02/prompt_mini_project_demo.py" in content
     assert "uv run pytest tests/unit/test_prompts.py -q" in content
     assert "실제 API·키·네트워크·Tool 실행 없이" in content
+    assert "자동 배포 승인이 아님" in content
+
+
+def test_volume02_checklist_preserves_offline_replay_and_tool_calling_handoff() -> None:
+    """학습자 검수와 다음 권 인계가 Prompt 안전 경계를 유지하는지 검사한다."""
+    content = CHECKLIST.read_text(encoding="utf-8")
+
+    expected_paths = (
+        CHECKLIST,
+        ROOT / "examples" / "volume02" / "prompt_template_demo.py",
+        ROOT / "examples" / "volume02" / "structured_output_demo.py",
+        ROOT / "examples" / "volume02" / "injection_defense_demo.py",
+        ROOT / "examples" / "volume02" / "prompt_mini_project_demo.py",
+        ROOT / "docs" / "volume03-tool-calling-mcp" / "README.md",
+    )
+
+    assert all(path.is_file() for path in expected_paths)
+    assert "[학습자·제작 검수 체크리스트](checklist.md)" in README.read_text(encoding="utf-8")
+    assert "Instruction, Context, Input Data, Output Format, Constraint" in content
+    assert "Chain of Thought" in content
+    assert "Prompt Injection 위험 신호 평가는 보조 신호" in content
+    assert "uv run python examples/volume02/prompt_mini_project_demo.py" in content
+    assert "bash scripts/run_all_tests.sh" in content
+    assert "API 키, 네트워크, 라이브 LLM, Tool 실행 없이" in content
+    assert "[Volume 03. Tool Calling & MCP](../volume03-tool-calling-mcp/README.md)" in content
+    assert "별도의 스키마 검증과 allowlist" in content
     assert "자동 배포 승인이 아님" in content

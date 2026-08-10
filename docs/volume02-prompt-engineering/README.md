@@ -16,7 +16,7 @@ Instruction, Context, Input Data, Output Format, Constraint를 분리해 재사�
 8. [미니 프로젝트: 오프라인 Prompt 회귀 검토](08-mini-project-offline-prompt-regression.md) — 같은 fixture로 버전의 JSON·기대값 계약을 비교합니다.
 9. [권 단위 과제: 오프라인 Prompt 계약 검토](09-exercises.md) — 구성·입력 경계·구조화 출력·회귀 검토를 한 흐름으로 점검합니다.
 
-학습자 체크리스트와 다음 Volume 인계 목록은 후속 슬라이스에서 완성합니다. 작성된 장과 검증 이력은 [PROGRESS.md](PROGRESS.md)에서 확인합니다.
+학습 완료 여부와 Volume 03 인계 경계는 [학습자·제작 검수 체크리스트](checklist.md)에서 확인합니다. 작성된 장과 검증 이력은 [PROGRESS.md](PROGRESS.md)에서 확인합니다.
 
 ## 이 권의 결과물 경로
 
