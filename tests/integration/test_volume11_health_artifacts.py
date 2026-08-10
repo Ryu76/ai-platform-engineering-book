@@ -95,6 +95,28 @@ def test_compose_dependency_topology_uses_only_placeholders_and_an_internal_netw
     assert "SECRET" not in compose
 
 
+def test_ingress_uses_example_http_boundary_and_the_clusterip_service_port() -> None:
+    """The ingress is a render-only HTTP routing example with no TLS secret or address."""
+    ingress = (ROOT / "k8s/volume11/ingress.yaml").read_text(encoding="utf-8")
+    service = (ROOT / "k8s/volume11/service.yaml").read_text(encoding="utf-8")
+    kustomization = (ROOT / "k8s/volume11/kustomization.yaml").read_text(encoding="utf-8")
+
+    assert "apiVersion: networking.k8s.io/v1" in ingress
+    assert "kind: Ingress" in ingress
+    assert "ingressClassName: example-ingress-class" in ingress
+    assert "host: api.volume11.example.invalid" in ingress
+    assert "path: /" in ingress
+    assert "pathType: Prefix" in ingress
+    assert "name: ai-platform-api" in ingress
+    assert "name: http" in ingress
+    assert "type: ClusterIP" in service
+    assert "- ingress.yaml" in kustomization
+    assert "tls:" not in ingress
+    assert "secretName:" not in ingress
+    assert "TOKEN" not in ingress
+    assert "PASSWORD" not in ingress
+
+
 def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification() -> None:
     """The chapters document exact local files, commands, and deployment boundaries."""
     health_chapter = (VOLUME / "01-health-probes.md").read_text(encoding="utf-8")
@@ -104,11 +126,16 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     compose_chapter = (VOLUME / "03-compose-dependency-topology.md").read_text(
         encoding="utf-8"
     )
+    ingress_chapter = (VOLUME / "04-ingress-http-boundary.md").read_text(
+        encoding="utf-8"
+    )
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
     assert "](02-configmap-dependency-readiness.md)" in readme
     assert "](03-compose-dependency-topology.md)" in readme
+    assert "](04-ingress-http-boundary.md)" in readme
+    combined_chapters = health_chapter + dependency_chapter + compose_chapter + ingress_chapter
     for relative_path in (
         "src/ai_platform/api/health.py",
         "src/ai_platform/api/dependencies.py",
@@ -117,9 +144,10 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         "docker/volume11/Dockerfile",
         "docker/volume11/compose.dependencies.yaml",
         "k8s/volume11/deployment.yaml",
+        "k8s/volume11/ingress.yaml",
         "k8s/volume11/secret.example.yaml",
     ):
-        assert relative_path in health_chapter + dependency_chapter + compose_chapter
+        assert relative_path in combined_chapters
     expected_command = (
         "uv run pytest tests/unit/test_volume11_health.py "
         "tests/unit/test_volume11_dependencies.py "
@@ -131,4 +159,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         "config --no-interpolate"
     )
     assert expected_compose_command in compose_chapter
-    assert "클러스터에 적용하거나 배포하지 않습니다" in health_chapter + dependency_chapter
+    assert "kubectl kustomize k8s/volume11" in ingress_chapter
+    assert "클러스터에 적용하거나 배포하지 않습니다" in (
+        health_chapter + dependency_chapter + ingress_chapter
+    )

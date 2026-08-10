@@ -2,6 +2,41 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-10 — Slice 04: Ingress HTTP 경계와 Service backend의 오프라인 검증
+
+### 완료한 범위
+
+- `k8s/volume11/ingress.yaml`에 `networking.k8s.io/v1` 학습용 Ingress를 추가하고 기본 Kustomize 집합에 포함했습니다.
+  - 호스트는 비실행용 `api.volume11.example.invalid`, IngressClass는 `example-ingress-class` 자리표시자만 사용합니다.
+  - `/` `Prefix` 규칙은 `ai-platform-api` ClusterIP Service의 명명된 `http` 포트만 참조합니다.
+  - TLS, `secretName`, 인증 값, 실제 DNS·IP·Controller annotation은 포함하지 않았습니다.
+- [Ingress HTTP 경계: Service로 안전하게 연결하기](04-ingress-http-boundary.md) 장을 작성했습니다.
+  - Ingress, Service, Controller, DNS/TLS의 책임 경계를 구분하고 `kubectl kustomize` 로컬 렌더링만 안내합니다.
+  - `apply`, Controller 설치, DNS·인증서 구성과 실제 클러스터 연결은 명시적으로 범위에서 제외했습니다.
+- Volume README와 통합 테스트를 갱신해 새 장 링크, 예제 IngressClass·호스트, Prefix backend, Service 포트 연결, TLS Secret·인증 값 부재를 검사합니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `kubectl kustomize k8s/volume11` + Ingress/예제 호스트/`http` 포트/Secret 부재 경계 검사 | 통과 — Namespace, ConfigMap, Service, Deployment, Ingress만 로컬 렌더링; 클러스터 연결·리소스 생성 없음 |
+| `uv run ruff check src/ai_platform/api examples/volume11 tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py` | 통과 |
+| `uv run mypy src/ai_platform/api` | 통과 — 4 source files, no issues |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 17 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 |
+| 전체 품질 게이트: `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — 78 passed |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- Job/CronJob, PVC, HPA와 업데이트·롤백 예제 작성하기
+- 로그·메트릭·추적, 장애 대응과 비용 관리 장 작성하기
+- Volume 미니 프로젝트, 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 이미지와 비밀 없는 Manifest만 사용해 완료 보장·재시도 경계를 설명하는 Job/CronJob을 로컬 렌더링·오프라인 테스트로 추가합니다. 실제 클러스터에는 적용하지 않습니다.
+
 ## 2026-08-10 — Slice 03: Compose 의존 서비스 토폴로지의 실행 전 검증
 
 ### 완료한 범위

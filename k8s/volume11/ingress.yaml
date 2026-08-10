@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-platform-api
+  namespace: ai-platform-example
+  labels:
+    app.kubernetes.io/name: ai-platform-api
+    app.kubernetes.io/part-of: ai-platform-example
+spec:
+  # This is a documentation-only placeholder. A cluster administrator selects
+  # an approved IngressClass outside this learning manifest.
+  ingressClassName: example-ingress-class
+  rules:
+    - host: api.volume11.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-platform-api
+                port:
+                  name: http
