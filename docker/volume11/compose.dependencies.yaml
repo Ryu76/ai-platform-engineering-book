@@ -1,0 +1,51 @@
+# Volume 11 topology-only Compose example. `docker compose config` is safe; do not run `up`.
+# All images are deliberately non-routable placeholders. Replace them only in an approved environment.
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: docker/volume11/Dockerfile
+    image: example.invalid/ai-platform-api:0.1.0
+    environment:
+      AI_PLATFORM_READY: "true"
+      AI_PLATFORM_REQUIRED_DEPENDENCIES: "qdrant,redis,postgresql"
+      AI_PLATFORM_READY_DEPENDENCIES: "qdrant,redis,postgresql"
+    depends_on:
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+      postgresql:
+        condition: service_started
+    networks:
+      - ai-platform-internal
+
+  qdrant:
+    # Documentation-only placeholder; no host port or credentials are configured.
+    image: example.invalid/qdrant:1.0.0
+    expose:
+      - "6333"
+    networks:
+      - ai-platform-internal
+
+  redis:
+    # Documentation-only placeholder; no host port or credentials are configured.
+    image: example.invalid/redis:7.0.0
+    expose:
+      - "6379"
+    networks:
+      - ai-platform-internal
+
+  postgresql:
+    # Documentation-only placeholder; no host port, database initialization, or credentials are configured.
+    image: example.invalid/postgresql:16.0.0
+    expose:
+      - "5432"
+    networks:
+      - ai-platform-internal
+
+networks:
+  ai-platform-internal:
+    internal: true
+    labels:
+      com.ai-platform.example.scope: "volume11-topology-only"

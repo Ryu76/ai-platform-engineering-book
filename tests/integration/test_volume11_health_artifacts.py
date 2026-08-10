@@ -73,30 +73,62 @@ def test_secret_example_has_a_placeholder_and_is_not_part_of_the_apply_set() -> 
     assert "secret.example.yaml" not in kustomization
 
 
+def test_compose_dependency_topology_uses_only_placeholders_and_an_internal_network() -> None:
+    """Compose teaches service boundaries without usable images, host ports, or credentials."""
+    compose = (ROOT / "docker/volume11/compose.dependencies.yaml").read_text(encoding="utf-8")
+
+    for service in ("api", "qdrant", "redis", "postgresql"):
+        assert f"  {service}:" in compose
+    for image in (
+        "example.invalid/ai-platform-api:0.1.0",
+        "example.invalid/qdrant:1.0.0",
+        "example.invalid/redis:7.0.0",
+        "example.invalid/postgresql:16.0.0",
+    ):
+        assert image in compose
+    assert "ai-platform-internal:" in compose
+    assert "internal: true" in compose
+    assert "condition: service_started" in compose
+    assert "    ports:" not in compose
+    assert "PASSWORD" not in compose
+    assert "TOKEN" not in compose
+    assert "SECRET" not in compose
+
+
 def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification() -> None:
     """The chapters document exact local files, commands, and deployment boundaries."""
     health_chapter = (VOLUME / "01-health-probes.md").read_text(encoding="utf-8")
     dependency_chapter = (VOLUME / "02-configmap-dependency-readiness.md").read_text(
         encoding="utf-8"
     )
+    compose_chapter = (VOLUME / "03-compose-dependency-topology.md").read_text(
+        encoding="utf-8"
+    )
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
     assert "](02-configmap-dependency-readiness.md)" in readme
+    assert "](03-compose-dependency-topology.md)" in readme
     for relative_path in (
         "src/ai_platform/api/health.py",
         "src/ai_platform/api/dependencies.py",
         "examples/volume11/health_probe_demo.py",
         "examples/volume11/dependency_readiness_demo.py",
         "docker/volume11/Dockerfile",
+        "docker/volume11/compose.dependencies.yaml",
         "k8s/volume11/deployment.yaml",
         "k8s/volume11/secret.example.yaml",
     ):
-        assert relative_path in health_chapter + dependency_chapter
+        assert relative_path in health_chapter + dependency_chapter + compose_chapter
     expected_command = (
         "uv run pytest tests/unit/test_volume11_health.py "
         "tests/unit/test_volume11_dependencies.py "
         "tests/integration/test_volume11_health_artifacts.py -q"
     )
     assert expected_command in dependency_chapter
+    expected_compose_command = (
+        "docker compose -f docker/volume11/compose.dependencies.yaml "
+        "config --no-interpolate"
+    )
+    assert expected_compose_command in compose_chapter
     assert "클러스터에 적용하거나 배포하지 않습니다" in health_chapter + dependency_chapter

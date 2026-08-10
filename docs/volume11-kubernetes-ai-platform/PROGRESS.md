@@ -2,6 +2,43 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-10 — Slice 03: Compose 의존 서비스 토폴로지의 실행 전 검증
+
+### 완료한 범위
+
+- `docker/volume11/compose.dependencies.yaml`에 API, Qdrant, Redis, PostgreSQL의 학습용 Compose 토폴로지를 추가했습니다.
+  - 모든 이미지는 실행 불가능한 `example.invalid` 자리표시자입니다.
+  - 의존 서비스 포트는 Compose 내부 `expose`로만 설명하고, 호스트 `ports`·인증 환경 변수·초기화 값은 포함하지 않았습니다.
+  - 서비스는 `internal: true`인 `ai-platform-internal` 네트워크에만 선언했습니다.
+  - API의 `depends_on: service_started`는 시작 순서일 뿐 readiness 보장이 아님을 명시했습니다.
+- [Docker Compose 의존 서비스 토폴로지: 실행 전 경계 확인](03-compose-dependency-topology.md) 장을 작성했습니다.
+  - `docker compose ... config --no-interpolate`만 실행하도록 하며 `up`, `pull`, `build`는 명시적으로 제외합니다.
+  - Compose 토폴로지와 ConfigMap 기반의 오프라인 readiness 정책을 연결해 설명했습니다.
+- Volume README와 통합 테스트를 갱신해 새 장의 링크, 자리표시자 이미지, 내부 네트워크, 호스트 포트·인증 값 부재를 검사합니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `docker compose -f docker/volume11/compose.dependencies.yaml config --no-interpolate` | 통과 — API, Qdrant, Redis, PostgreSQL 및 내부 네트워크만 로컬 렌더링; 컨테이너·이미지·네트워크·볼륨 미생성 |
+| `uv run python examples/volume11/dependency_readiness_demo.py` | 통과 — 모든 필수 라벨 준비 시 `True`, Redis 미준비 시 `False` |
+| `uv run ruff check src/ai_platform/api examples/volume11 tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py` | 통과 |
+| `uv run mypy src/ai_platform/api` | 통과 — 4 source files, no issues |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 16 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 |
+| 전체 품질 게이트: `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — 77 passed |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- Ingress, Job/CronJob, PVC, HPA와 업데이트·롤백 예제 작성하기
+- 로그·메트릭·추적, 장애 대응과 비용 관리 장 작성하기
+- Volume 미니 프로젝트, 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 이미지와 비밀 없는 Manifest만 사용해 Ingress의 HTTP 경계와 기본 Service 연결을 로컬 렌더링·오프라인 테스트로 추가합니다. 실제 클러스터에는 적용하지 않습니다.
+
 ## 2026-08-10 — Slice 02: ConfigMap 정책과 의존성 readiness 경계
 
 ### 완료한 범위
