@@ -6,10 +6,14 @@ from ai_platform.mcp.requests import (
     McpToolCallRequest,
     parse_mcp_tool_call_request,
 )
+from ai_platform.mcp.resources import McpResourceCatalog, McpResourceError, McpStaticResource
 
 __all__ = [
     "McpCallRequestError",
     "McpCatalogError",
+    "McpResourceCatalog",
+    "McpResourceError",
+    "McpStaticResource",
     "McpServerCatalog",
     "McpToolCallRequest",
     "McpToolDefinition",
