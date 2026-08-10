@@ -14,10 +14,10 @@
 | 01. Prompt 구성 요소와 첫 템플릿 | `01-prompt-components.md`, `src/ai_platform/prompts/prompt_templates.py`, `examples/volume02/prompt_template_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 전체 검사 및 70개 테스트 통과 |
 | 02. Zero-shot·One-shot·Few-shot | `02-zero-one-few-shot.md`, `src/ai_platform/prompts/shot_prompts.py`, `examples/volume02/shot_prompt_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 전체 검사와 오프라인 데모 통과 |
 | 03. 역할 Prompt와 구조화된 JSON 출력 | `03-role-structured-output.md`, `src/ai_platform/prompts/structured_output.py`, `examples/volume02/structured_output_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 오프라인 데모, 단위·전체 검사 통과 |
+| 04. ReAct와 내부 추론 비노출 공개 결과 | `04-react-without-cot-exposure.md`, `src/ai_platform/prompts/structured_reasoning.py`, `examples/volume02/structured_reasoning_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 오프라인 데모, 단위·전체 검사 통과 |
 
 ## 남은 PRD 요구사항
 
-- ReAct 개념 및 Chain of Thought를 직접 노출하지 않는 구조적 추론 설계
 - Prompt Injection 방어와 입력 검증
 - Prompt Versioning, Template, 버전별 결과 비교
 - Prompt 테스트 데이터, 미니 프로젝트, 과제, 권 단위 학습자 체크리스트
@@ -34,3 +34,5 @@
 | 2026-08-10 | `uv run pytest tests/unit/test_prompts.py -q` | 17 passed |
 | 2026-08-10 | `uv run python examples/volume02/shot_prompt_demo.py` | zero-shot·one-shot·few-shot Prompt를 외부 호출 없이 렌더링함 |
 | 2026-08-10 | `bash scripts/run_all_tests.sh` | Ruff 통과, mypy(10개 소스) 통과, 문서·링크·코드 블록·비밀값 검사 통과, pytest 78 passed |
+| 2026-08-10 | `uv run python examples/volume02/structured_reasoning_demo.py` | ReAct 작업 절차·공개 JSON 계약과 고정 검증 샘플을 네트워크·API 키·Tool 실행 없이 출력함 |
+| 2026-08-10 | `bash scripts/run_all_tests.sh` | Ruff 통과, mypy(12개 소스) 통과, 문서·링크·코드 블록·비밀값 검사 통과, pytest 92 passed |

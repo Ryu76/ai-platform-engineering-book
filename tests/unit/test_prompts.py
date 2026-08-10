@@ -6,11 +6,14 @@ from ai_platform.prompts import (
     PromptConfigurationError,
     PromptExample,
     PromptSections,
+    ReActPrompt,
     RolePrompt,
     ShotMode,
     ShotPrompt,
     StructuredOutputError,
+    StructuredReasoningError,
     validate_classification_json,
+    validate_reasoning_json,
 )
 
 
@@ -181,3 +184,66 @@ def test_validate_classification_json_returns_a_schema_checked_object() -> None:
 def test_validate_classification_json_rejects_invalid_or_unexpected_data(raw_response: str) -> None:
     with pytest.raises(StructuredOutputError, match="SupportClassification"):
         validate_classification_json(raw_response)
+
+
+def test_react_prompt_places_service_workflow_and_public_contract_before_input() -> None:
+    rendered = ReActPrompt(
+        "배송 상태 문의에 관찰 가능한 사실만으로 답변하기",
+        template(),
+    ).render("제 주문은 언제 도착하나요?")
+
+    assert "[REACT WORKFLOW]" in rendered
+    assert "[APPROVED ACTIONS]" in rendered
+    assert "외부 Tool 실행을 승인하지 않습니다." in rendered
+    assert "[PUBLIC OUTPUT CONTRACT]" in rendered
+    assert "Chain of Thought를 출력하지 마세요." in rendered
+    assert rendered.index("[PUBLIC OUTPUT CONTRACT]") < rendered.index("[UNTRUSTED USER INPUT]")
+    assert "<user_input>\n제 주문은 언제 도착하나요?\n</user_input>" in rendered
+
+
+def test_react_prompt_rejects_invalid_service_configuration() -> None:
+    with pytest.raises(PromptConfigurationError, match="objective"):
+        ReActPrompt(" ", template())
+    with pytest.raises(PromptConfigurationError, match="sections"):
+        ReActPrompt("목표", "not a template")  # type: ignore[arg-type]
+    with pytest.raises(PromptConfigurationError, match="approved_actions"):
+        ReActPrompt("목표", template(), ["lookup"])  # type: ignore[arg-type]
+    with pytest.raises(PromptConfigurationError, match="approved_action"):
+        ReActPrompt("목표", template(), (" ",))
+
+
+def test_validate_reasoning_json_returns_only_public_schema_fields() -> None:
+    result = validate_reasoning_json(
+        """{
+        "status": "complete",
+        "answer": "배송 조회가 아직 필요합니다.",
+        "evidence_summary": ["제공된 정보에는 조회 결과가 없습니다."]
+        }"""
+    )
+
+    assert result.status == "complete"
+    assert result.answer == "배송 조회가 아직 필요합니다."
+    assert result.model_dump() == {
+        "status": "complete",
+        "answer": "배송 조회가 아직 필요합니다.",
+        "evidence_summary": ("제공된 정보에는 조회 결과가 없습니다.",),
+    }
+
+
+@pytest.mark.parametrize(
+    "raw_response",
+    [
+        "최종 답변입니다.",
+        '{"status": "complete", "answer": "답변", "evidence_summary": []}',
+        '{"status": "done", "answer": "답변", "evidence_summary": ["관찰"]}',
+        (
+            '{"status": "complete", "answer": "답변", '
+            '"evidence_summary": ["관찰"], "chain_of_thought": "비공개 추론"}'
+        ),
+    ],
+)
+def test_validate_reasoning_json_rejects_invalid_or_private_reasoning_fields(
+    raw_response: str,
+) -> None:
+    with pytest.raises(StructuredReasoningError, match="ReasoningResult"):
+        validate_reasoning_json(raw_response)
