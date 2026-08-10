@@ -84,3 +84,27 @@ def test_volume10_third_chapter_connects_failure_analysis_to_verified_artifacts(
     assert "네트워크, 시계, 난수, 라이브 모델 상태에 의존하지 않습니다" in chapter
     assert all(artifact.is_file() for artifact in expected_artifacts)
     assert "](03-retrieval-quality.md)" in readme
+
+
+def test_volume10_fourth_chapter_connects_answer_quality_to_verified_artifacts() -> None:
+    """답변 품질 장은 보류·환각·인용의 고정 평가와 로컬 실행 경로를 제공해야 한다."""
+    chapter = (VOLUME / "04-answer-quality.md").read_text(encoding="utf-8")
+    readme = (VOLUME / "README.md").read_text(encoding="utf-8")
+    expected_artifacts = (
+        ROOT / "src" / "ai_platform" / "evaluation" / "answer_metrics.py",
+        ROOT / "src" / "ai_platform" / "evaluation" / "datasets.py",
+        ROOT / "examples" / "volume10" / "answer_quality.py",
+        ROOT / "tests" / "evaluation" / "test_answer_metrics.py",
+    )
+
+    assert all(section in chapter for section in REQUIRED_SECTIONS)
+    assert "uv run python examples/volume10/answer_quality.py" in chapter
+    assert "uv run pytest tests/evaluation/test_answer_metrics.py -q" in chapter
+    assert "office-parking" in chapter
+    assert "Hallucination rate: 0.166667" in chapter
+    assert (
+        "LLM API · LLM-as-a-Judge · Vector DB · 네트워크 · 시계 · 난수 ── 사용하지 않음"
+        in chapter
+    )
+    assert all(artifact.is_file() for artifact in expected_artifacts)
+    assert "](04-answer-quality.md)" in readme

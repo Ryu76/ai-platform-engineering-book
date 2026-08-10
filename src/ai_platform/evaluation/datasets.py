@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
+from ai_platform.evaluation.answer_metrics import AnswerCase, RecordedAnswer
 from ai_platform.evaluation.golden_dataset import GoldenCase, GoldenDataset
 from ai_platform.evaluation.retrieval_metrics import RetrievalCase
 
@@ -73,3 +74,73 @@ FIXED_RETRIEVAL_RESULTS_AT_3: Mapping[str, Sequence[str]] = {
     "benefits-enrollment": ("finance-expense", "service-overview", "identity-access"),
 }
 """동일한 구현에서 기록한 고정 Top-3 결과; 지표 설명과 회귀 테스트에 사용한다."""
+
+
+FIXED_ANSWER_CASES: tuple[AnswerCase, ...] = (
+    AnswerCase(
+        case_id="access-reset",
+        expected_response="answer",
+        supported_fact_ids=("reset-identity-verification",),
+        allowed_citation_document_ids=("identity-access",),
+    ),
+    AnswerCase(
+        case_id="expense-receipt",
+        expected_response="answer",
+        supported_fact_ids=("submit-itemized-receipt",),
+        allowed_citation_document_ids=("finance-expense",),
+    ),
+    AnswerCase(
+        case_id="incident-response",
+        expected_response="answer",
+        supported_fact_ids=("report-suspicious-login", "follow-initial-response-runbook"),
+        allowed_citation_document_ids=("security-incident", "operations-runbook"),
+    ),
+    AnswerCase(
+        case_id="benefits-enrollment",
+        expected_response="answer",
+        supported_fact_ids=("follow-benefits-enrollment-window",),
+        allowed_citation_document_ids=("people-benefits",),
+    ),
+    AnswerCase(
+        case_id="office-parking",
+        expected_response="abstain",
+        supported_fact_ids=(),
+        allowed_citation_document_ids=(),
+    ),
+)
+"""고정 골든 사례에서 유도한 답변 행동·사실·인용의 공개 라벨 계약이다."""
+
+
+FIXED_RECORDED_ANSWERS: Mapping[str, RecordedAnswer] = {
+    "access-reset": RecordedAnswer(
+        case_id="access-reset",
+        response_mode="answer",
+        asserted_fact_ids=("reset-identity-verification",),
+        cited_document_ids=("identity-access",),
+    ),
+    "expense-receipt": RecordedAnswer(
+        case_id="expense-receipt",
+        response_mode="answer",
+        asserted_fact_ids=("submit-itemized-receipt",),
+        cited_document_ids=("finance-expense",),
+    ),
+    "incident-response": RecordedAnswer(
+        case_id="incident-response",
+        response_mode="answer",
+        asserted_fact_ids=("report-suspicious-login", "follow-initial-response-runbook"),
+        cited_document_ids=("security-incident", "operations-runbook"),
+    ),
+    "benefits-enrollment": RecordedAnswer(
+        case_id="benefits-enrollment",
+        response_mode="answer",
+        asserted_fact_ids=("follow-benefits-enrollment-window",),
+        cited_document_ids=("identity-access",),
+    ),
+    "office-parking": RecordedAnswer(
+        case_id="office-parking",
+        response_mode="answer",
+        asserted_fact_ids=("parking-pass-application-is-available",),
+        cited_document_ids=("service-overview",),
+    ),
+}
+"""교육용으로 기록한 고정 답변; 보류 실패와 부정확한 인용을 의도적으로 포함한다."""

@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 11 — Volume 10 Evaluation**
-- 이번 슬라이스: **고정 검색 결과의 사례별 품질·실패 분석과 Recall·Precision·Hit Rate·MRR·NDCG 해석**
-- 완료 선언: 아직 하지 않음. Volume 10의 답변·인용·환각 평가, Router·Agent 평가, Latency·Token·Cost, 회귀 리포트, 미니 프로젝트, 전체 체크리스트가 남아 있습니다.
+- 이번 슬라이스: **고정 답변 기록의 정확도·보류·환각·인용 평가와 사례별 근거 실패 분석**
+- 완료 선언: 아직 하지 않음. Router·Agent 평가, Latency·Token·Cost, 회귀 리포트, 미니 프로젝트, 전체 체크리스트가 남아 있습니다.
 
 ## 이번 슬라이스 (2026-08-10)
 
@@ -134,12 +134,54 @@ $ uv run python scripts/validate_code_blocks.py && uv run python scripts/validat
 문서 검증 통과: Volume 11개
 ```
 
+### 답변 정확도·환각·인용 평가 슬라이스 (2026-08-10)
+
+- `docs/volume10-evaluation/04-answer-quality.md`
+  - PRD 장 구조의 14개 섹션으로 답변 정확도, 보류 정확도, 환각률, 인용 정확도의 분자·분모, 한계, 사람·LLM-as-a-Judge 보완 경로를 작성했습니다.
+  - `office-parking`의 no-answer 위반과 `benefits-enrollment`의 부정확한 인용을 고정 사례로 해석하며, 라이브 API·네트워크·시계·난수를 사용하지 않는 범위를 명시했습니다.
+- `src/ai_platform/evaluation/answer_metrics.py`
+  - `AnswerCase`, `RecordedAnswer`, 사례별·평균 지표와 완전한 사례 집합, 보류 라벨, 중복 ID, 키/객체 ID 불일치 입력 계약을 구현했습니다.
+  - 답변 정확도 0.800000, 보류 정확도 0.000000, 환각률 0.166667, 인용 정확도 0.666667의 결정론적 기준선을 계산합니다.
+- `src/ai_platform/evaluation/datasets.py`, `src/ai_platform/evaluation/__init__.py`
+  - 기존 `volume10-support-policy@1.0.0`의 다섯 공개 사례에서 유도한 고정 사실·인용 라벨과 의도적인 보류·인용 실패 기록을 공개 인터페이스로 연결했습니다.
+- `examples/volume10/answer_quality.py`
+  - 고정 기록 답변의 네 지표를 외부 호출 없이 사람이 읽을 수 있는 형식으로 출력합니다.
+- `tests/evaluation/test_answer_metrics.py`, `tests/evaluation/test_volume10_completion_contract.py`
+  - 기준 수치, 사례별 지원되지 않은 주장·인용, 불완전 결과와 모순 라벨, 네 번째 장의 14개 섹션과 실제 산출물 연결을 검증합니다.
+- `docs/volume10-evaluation/README.md`
+  - 네 번째 장 링크와 전체 오프라인 실행 경로를 추가했습니다.
+
+#### 검증 기록
+
+```text
+$ uv run python examples/volume10/answer_quality.py
+Evaluation cases: 5
+Answer accuracy: 0.800000
+Abstention accuracy: 0.000000
+Hallucination rate: 0.166667
+Citation accuracy: 0.666667
+
+$ uv run pytest tests/evaluation -q
+28 passed
+
+$ uv run ruff check src/ai_platform/evaluation tests/evaluation examples/volume10
+All checks passed!
+
+$ uv run mypy src/ai_platform/evaluation
+Success: no issues found in 5 source files
+
+$ uv run python scripts/validate_code_blocks.py && uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py
+코드 블록 검증 통과
+문서 검증 통과: Volume 11개
+링크 검증 통과
+```
+
 ## 알려진 차단 사항
 
-- Volume 10은 세 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
-- `abstain` no-answer 사례는 고정·검증됐지만, 답변 보류 정확도·환각·인용 평가는 후속 장에서 별도 결정론적 지표로 구현해야 합니다.
-- 고정 Top-3 순위는 평가 계산을 설명하기 위한 기록된 입력입니다. 실제 Retriever에 연결하는 통합 평가와 데이터셋 변경 승인 정책은 후속 장에서 구현합니다.
+- Volume 10은 네 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석, 답변·보류·환각·인용 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
+- 고정 사실 ID 비교는 자연어 주장 의미, 인용 문서의 정확한 구간, 필수 인용의 완전성을 판정하지 않습니다. 사람 검토와 LLM-as-a-Judge는 후속 운영 평가 설계에서 라벨 지침·익명화·판정 변동 통제와 함께 보완해야 합니다.
+- 고정 Top-3 순위와 기록 답변은 평가 계산을 설명하기 위한 입력입니다. 실제 Retriever·LLM·Router·Agent에 연결하는 통합 평가와 데이터셋 변경 승인 정책은 후속 장에서 구현합니다.
 
 ## 다음 작업
 
-- 고정 골든 데이터셋과 no-answer 사례를 기준으로 답변 정확도·환각·인용 평가를 위한 결정론적 계약을 작성합니다.
+- 고정 골든 데이터셋을 기준으로 Router 선택 정확도와 Agent Task Success를 위한 결정론적 계약을 작성합니다.
