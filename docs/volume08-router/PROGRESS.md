@@ -80,3 +80,48 @@ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.p
 다음 슬라이스:
 
 - 고정 평가 dataset으로 keyword Router의 routing accuracy와 threshold별 안전 실패를 측정하고, 외부 호출 없이 회귀 지표를 검증합니다.
+
+## 2026-08-10 — Tick 3: 고정 Keyword Router 평가 dataset과 accuracy gate
+
+완료한 범위:
+
+- 정상 route와 `NO_CONFIDENT_KEYWORD_ROUTE`·`NO_ELIGIBLE_POLICY_ROUTE` 안전 실패를 명시하는 고정 `KeywordRoutingEvaluationCase`/`KeywordRoutingExpectation` 계약을 추가했습니다.
+- route는 intent와 target을 함께 비교하고, 안전 실패는 실패 유형까지 비교하는 결정론적 `evaluate_keyword_router()`를 추가했습니다.
+- 빈·중복 dataset과 모호한 기대값을 거부하고, 원문 없이 case ID·집계만 남기는 JSON 직렬화 가능 평가 보고서를 구현했습니다.
+- 명시적 `Decimal` threshold를 검사하는 `RoutingQualityGateError` 기반 accuracy gate를 추가했습니다.
+- 외부 호출 없는 fixture 예제, 계약 테스트, `03-keyword-router-evaluation.md` 학습 장을 추가했습니다.
+
+검증 결과:
+
+```text
+uv run pytest tests/unit/test_volume08_policy_router.py tests/unit/test_volume08_keyword_router.py tests/unit/test_volume08_router_evaluation.py -q
+29 passed in 0.11s
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_policy_router.py tests/unit/test_volume08_keyword_router.py tests/unit/test_volume08_router_evaluation.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 5 source files
+
+uv run python examples/volume08/keyword_router_evaluation.py
+{"accuracy": "1", "correct_cases": 4, "correct_safe_failures": 2, "mismatched_case_ids": [], "total_cases": 4}
+
+uv run pytest -q
+90 passed in 0.96s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+```
+
+남은 Volume 08 범위:
+
+- Semantic/LLM Router와 Intent 분류
+- fallback, retry, escalation
+- Agent·Tool·Model 다단계 라우팅과 장애 전환
+- API 및 나머지 학습 장
+
+다음 슬라이스:
+
+- policy 제약을 우회하지 않는 명시적 fallback chain과 retry budget을 고정 fixture·안전 실패 계약으로 추가합니다.

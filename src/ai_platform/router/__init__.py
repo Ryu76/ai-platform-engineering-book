@@ -9,6 +9,14 @@ from ai_platform.router.base import (
     RoutingRequest,
     RoutingRequirements,
 )
+from ai_platform.router.evaluation import (
+    KeywordRoutingEvaluationCase,
+    KeywordRoutingEvaluationReport,
+    KeywordRoutingExpectation,
+    KeywordRoutingOutcome,
+    RoutingQualityGateError,
+    evaluate_keyword_router,
+)
 from ai_platform.router.keyword import (
     KeywordRoute,
     KeywordRouteDecision,
@@ -23,11 +31,17 @@ __all__ = [
     "KeywordRoute",
     "KeywordRouteDecision",
     "KeywordRouter",
+    "KeywordRoutingEvaluationCase",
+    "KeywordRoutingEvaluationReport",
+    "KeywordRoutingExpectation",
+    "KeywordRoutingOutcome",
     "PolicyRouter",
     "RouteDecision",
     "RouteTarget",
     "RouteTargetKind",
     "RoutingConfigurationError",
+    "RoutingQualityGateError",
     "RoutingRequest",
     "RoutingRequirements",
+    "evaluate_keyword_router",
 ]
