@@ -1,5 +1,11 @@
 """Volume 03의 허용 목록 기반 도구 호출 경계."""
 
+from ai_platform.tools.audit import (
+    InMemoryToolAuditSink,
+    ToolAuditEvent,
+    ToolAuditOutcome,
+    execute_audited,
+)
 from ai_platform.tools.authorization import (
     ApprovalGrant,
     ToolApprovalMismatchError,
@@ -28,12 +34,15 @@ from ai_platform.tools.registry import (
 
 __all__ = [
     "ApprovalGrant",
+    "InMemoryToolAuditSink",
     "SAFE_CALCULATOR",
     "SAFE_TEXT_CASE",
     "RetryableToolError",
     "ToolApprovalMismatchError",
     "ToolApprovalRequiredError",
     "ToolArgumentsError",
+    "ToolAuditEvent",
+    "ToolAuditOutcome",
     "ToolAuthorizationError",
     "ToolAuthorizationPolicy",
     "ToolExecutionPolicy",
@@ -44,6 +53,7 @@ __all__ = [
     "ToolRetryExhaustedError",
     "ToolRisk",
     "ToolSpec",
+    "execute_audited",
     "execute_authorized",
     "execute_with_policy",
 ]
