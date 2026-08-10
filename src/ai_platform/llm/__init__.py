@@ -14,9 +14,20 @@ from ai_platform.llm.client import (
     StreamChunk,
     TokenUsage,
 )
+from ai_platform.llm.usage import (
+    CostBudget,
+    CostBudgetExceeded,
+    CostEstimate,
+    ModelPricing,
+    UsageConfigurationError,
+    estimate_cost,
+)
 
 __all__ = [
     "ChatMessage",
+    "CostBudget",
+    "CostBudgetExceeded",
+    "CostEstimate",
     "GenerationParameters",
     "LlmClient",
     "LlmConfigurationError",
@@ -25,7 +36,10 @@ __all__ = [
     "LlmResponse",
     "LlmResponseError",
     "LlmTimeoutError",
+    "ModelPricing",
     "RetryPolicy",
     "StreamChunk",
     "TokenUsage",
+    "UsageConfigurationError",
+    "estimate_cost",
 ]
