@@ -1,7 +1,13 @@
 """외부 부작용 없이 상태만 전이하는 Volume 09 학습용 Node."""
 from __future__ import annotations
 
-from ai_platform.graph.state import RouteKind, RouterDecision, WorkflowState, WorkflowStatus
+from ai_platform.graph.state import (
+    ReviewDecision,
+    RouteKind,
+    RouterDecision,
+    WorkflowState,
+    WorkflowStatus,
+)
 
 
 def plan_node(state: WorkflowState) -> WorkflowState:
@@ -74,6 +80,34 @@ def specialist_node(state: WorkflowState) -> WorkflowState:
     return state.record(
         node=state.selected_route.value,
         detail=detail_by_route[state.selected_route],
+    )
+
+
+def developer_node(state: WorkflowState) -> WorkflowState:
+    """Planner의 계획을 소비해 외부 변경 없는 개발 산출물을 준비한다."""
+    if state.status is not WorkflowStatus.PLANNED:
+        raise ValueError("developer_node requires a planned state")
+    return state.record(
+        node="developer",
+        detail="Developer가 외부 파일을 변경하지 않는 오프라인 구현 초안을 만들었습니다.",
+    )
+
+
+def reviewer_node(state: WorkflowState, *, decision: ReviewDecision) -> WorkflowState:
+    """Reviewer 판정으로 다음 승인 경로 또는 검토 거절 END를 선택한다."""
+    if state.status is not WorkflowStatus.PLANNED:
+        raise ValueError("reviewer_node requires a planned state")
+    if decision.approved:
+        return state.record(
+            node="reviewer",
+            detail=f"{decision.source}의 검토 통과: {decision.feedback.strip()}",
+            review_approved=True,
+        )
+    return state.record(
+        node="reviewer",
+        detail=f"{decision.source}의 검토 거절: {decision.feedback.strip()}",
+        status=WorkflowStatus.REVIEW_REJECTED,
+        review_approved=False,
     )
 
 

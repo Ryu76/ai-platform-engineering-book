@@ -6,6 +6,8 @@ import pytest
 from ai_platform.graph import (
     ActionKind,
     DeterministicWorkflow,
+    PlannerDeveloperReviewerWorkflow,
+    ReviewDecision,
     RoutedWorkflow,
     RouteKind,
     RouterDecision,
@@ -166,3 +168,88 @@ def test_router_decision_rejects_invalid_confidence() -> None:
     """Router 입력은 Node 실행 전에 유효한 신뢰도 범위를 강제한다."""
     with pytest.raises(ValueError, match="router confidence"):
         RouterDecision(route=RouteKind.RESEARCH, confidence=1.01)
+
+
+def test_planner_developer_reviewer_safe_workflow_completes_in_role_order() -> None:
+    """검토를 통과한 안전 작업은 고정된 역할 순서로 오프라인 완료한다."""
+    workflow = PlannerDeveloperReviewerWorkflow()
+
+    completed = workflow.invoke(
+        run_id="pdr-safe-001",
+        task="로컬 문자열을 정규화하는 초안을 검토한다",
+        action=ActionKind.TRANSFORM,
+        review_decision=ReviewDecision(approved=True, feedback="테스트 가능한 초안입니다."),
+    )
+
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert completed.review_approved is True
+    assert completed.approval_granted is None
+    assert [event.node for event in completed.events] == [
+        "plan",
+        "developer",
+        "reviewer",
+        "approval",
+        "execute",
+    ]
+
+
+def test_reviewer_rejection_ends_before_approval_and_execution() -> None:
+    """Reviewer 거절은 실행 권한이나 execute Node 없이 별도 END로 끝난다."""
+    workflow = PlannerDeveloperReviewerWorkflow()
+
+    rejected = workflow.invoke(
+        run_id="pdr-review-rejected-001",
+        task="학습용 변경 초안을 검토한다",
+        action=ActionKind.DEPLOY,
+        review_decision=ReviewDecision(approved=False, feedback="영향 범위가 빠졌습니다."),
+    )
+
+    assert rejected.status is WorkflowStatus.REVIEW_REJECTED
+    assert rejected.review_approved is False
+    assert rejected.approval_granted is None
+    assert rejected.result is None
+    assert [event.node for event in rejected.events] == ["plan", "developer", "reviewer"]
+
+
+def test_risky_reviewed_workflow_requires_separate_human_approval() -> None:
+    """Reviewer 통과는 위험 작업의 사람 실행 승인을 대체하지 않는다."""
+    workflow = PlannerDeveloperReviewerWorkflow()
+    waiting = workflow.invoke(
+        run_id="pdr-risky-001",
+        task="학습용 배포 초안을 검토한다",
+        action=ActionKind.DEPLOY,
+        review_decision=ReviewDecision(approved=True, feedback="롤백 절차가 명확합니다."),
+    )
+
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert waiting.review_approved is True
+    assert waiting.approval_granted is None
+    assert [event.node for event in waiting.events] == [
+        "plan",
+        "developer",
+        "reviewer",
+        "approval",
+    ]
+    assert "execute" not in [event.node for event in waiting.events]
+
+    completed = workflow.resume(run_id="pdr-risky-001", approved=True)
+
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert completed.approval_granted is True
+    assert [event.node for event in completed.events] == [
+        "plan",
+        "developer",
+        "reviewer",
+        "approval",
+        "approval",
+        "execute",
+    ]
+
+
+def test_review_decision_rejects_blank_audit_fields() -> None:
+    """Reviewer 판정은 재현 가능한 감사 근거와 출처를 요구한다."""
+    with pytest.raises(ValueError, match="review feedback"):
+        ReviewDecision(approved=True, feedback=" ")
+
+    with pytest.raises(ValueError, match="review source"):
+        ReviewDecision(approved=True, feedback="통과", source=" ")

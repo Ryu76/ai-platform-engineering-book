@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: Conditional Edge와 Router 입력을 받는 다중 Node Workflow를 추가했습니다. Router 결과가 없거나 신뢰도가 낮으면 사람 경로 검토에서 interrupt하고, 위험 작업은 경로 검토 뒤에도 별도의 실행 승인을 요구합니다.
-- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(Conditional Edge, Router 연동, Planner-Developer-Reviewer, 제한된 재시도와 Error Node, 영속 Checkpoint, Streaming, Subgraph, FastAPI 연동)을 포함한 나머지 장과 Volume Definition of Done이 남아 있습니다.
+- 이번 슬라이스: Planner → Developer → Reviewer 고정 역할 Workflow를 추가했습니다. Reviewer의 오프라인 품질 판정이 거절되면 승인·실행 전에 별도 END로 끝나며, 위험 작업은 검토 통과 뒤에도 사람의 별도 실행 승인이 필요합니다.
+- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(제한된 재시도와 Error Node, 영속 Checkpoint, Streaming, Subgraph, FastAPI 연동)과 Volume Definition of Done의 나머지 항목이 남아 있습니다.
 
 ## 이번에 완료한 파일
 
@@ -30,6 +30,14 @@
   - `RouterDecision`, `RouteKind`, `RoutedWorkflow`와 `plan → router → specialist → approval → execute` 오프라인 경로를 구현했습니다.
 - `examples/volume09/router_conditional_workflow.py`
   - 낮은 신뢰도의 `SEND` 요청이 경로 검토, 별도 실행 승인, 거절 종료를 순서대로 거치는 데모를 추가했습니다.
+- `docs/volume09-langgraph/03-planner-developer-reviewer-workflow.md`
+  - Planner-Developer-Reviewer의 역할 경계, 검토 거절 END, 위험 작업의 별도 사람 실행 승인을 14개 장 템플릿으로 문서화했습니다.
+- `src/ai_platform/graph/state.py`, `src/ai_platform/graph/nodes.py`, `src/ai_platform/graph/workflow.py`, `src/ai_platform/graph/__init__.py`
+  - `ReviewDecision`, `REVIEW_REJECTED`, Developer·Reviewer Node와 `PlannerDeveloperReviewerWorkflow`를 추가했습니다. Reviewer 통과는 실행 권한을 부여하지 않습니다.
+- `examples/volume09/planner_developer_reviewer_workflow.py`
+  - 검토 통과 뒤 `DEPLOY`가 실행 승인 대기에서 멈추고, 명시적 승인 뒤에만 오프라인 시뮬레이션을 완료하는 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 고정 역할 순서, Reviewer 거절의 조기 종료, 위험 작업의 별도 승인, 검토 입력 감사 필드 검증 계약을 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다.
 
@@ -38,19 +46,17 @@
 실행 위치: `E:\python\ai-platform-engineering-book-volume-09`
 
 ```text
-$ uv run python examples/volume09/single_node_workflow.py
-승인 전: status=waiting_for_approval
-result=None
-events=plan | approval
-승인 후: status=completed
-result=오프라인 시뮬레이션 완료: deploy / 학습용 배포 계획을 검토한다
-events=plan | approval | approval | execute
+$ uv run python examples/volume09/planner_developer_reviewer_workflow.py
+검토 통과 후: status=waiting_for_approval
+events=plan | developer | reviewer | approval
+사람 실행 승인 후: status=completed
+events=plan | developer | reviewer | approval | approval | execute
 
 $ uv run pytest tests/unit/test_volume09_graph.py -q
-9 passed in 0.05s
+13 passed in 0.06s
 
 $ uv run pytest -q
-70 passed in 0.72s
+74 passed in 0.71s
 
 $ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
 All checks passed!
@@ -84,4 +90,4 @@ $ git diff --check
 
 ## 다음 작업
 
-- 세 번째 장에서 Planner-Developer-Reviewer Workflow를 추가하고, 각 역할의 순서·검토 거절 경로·위험 ActionKind의 별도 사람 승인 경계를 오프라인 테스트로 고정합니다.
+- 네 번째 장에서 제한된 재시도와 Error Node를 추가하고, 재시도 상한·최종 실패 경로·위험 ActionKind의 별도 사람 승인 경계를 오프라인 테스트로 고정합니다.

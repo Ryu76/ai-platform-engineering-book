@@ -4,15 +4,18 @@ from __future__ import annotations
 from ai_platform.graph.checkpointer import MemoryCheckpointer
 from ai_platform.graph.nodes import (
     approval_node,
+    developer_node,
     execute_node,
     plan_node,
     resolve_approval_node,
     resolve_route_review_node,
+    reviewer_node,
     route_node,
     specialist_node,
 )
 from ai_platform.graph.state import (
     ActionKind,
+    ReviewDecision,
     RouteKind,
     RouterDecision,
     WorkflowState,
@@ -121,6 +124,57 @@ class RoutedWorkflow:
     def _continue_after_route(state: WorkflowState) -> WorkflowState:
         """선택된 전문 Node와 승인 조건 Edge를 순서대로 적용한다."""
         state = specialist_node(state)
+        state = approval_node(state)
+        if state.status is WorkflowStatus.READY:
+            state = execute_node(state)
+        return state
+
+
+class PlannerDeveloperReviewerWorkflow:
+    """Planner, Developer, Reviewer 역할과 승인 경계를 보이는 오프라인 Workflow다.
+
+    Reviewer의 통과 판정은 코드·계획 초안의 품질 판단일 뿐 실행 권한이 아니다.
+    위험 ActionKind는 검토를 통과한 뒤에도 별도의 사람 승인 interrupt를 거친다.
+    """
+
+    def __init__(self, *, checkpointer: MemoryCheckpointer | None = None) -> None:
+        """선택한 Checkpointer와 고정 역할 순서의 Workflow를 연결한다."""
+        self._checkpointer = checkpointer or MemoryCheckpointer()
+
+    def invoke(
+        self,
+        *,
+        run_id: str,
+        task: str,
+        action: ActionKind,
+        review_decision: ReviewDecision,
+    ) -> WorkflowState:
+        """계획, 개발, 검토를 순서대로 실행하고 안전 경계에서 멈추거나 끝낸다."""
+        state = WorkflowState.start(task=task, action=action)
+        state = plan_node(state)
+        state = developer_node(state)
+        state = reviewer_node(state, decision=review_decision)
+        if state.status is WorkflowStatus.PLANNED:
+            state = self._continue_after_review(state)
+        self._checkpointer.save(run_id=run_id, state=state)
+        return state
+
+    def resume(self, *, run_id: str, approved: bool) -> WorkflowState:
+        """검토를 통과한 위험 작업의 명시적 실행 승인을 처리한다."""
+        state = self._checkpointer.load(run_id=run_id)
+        state = resolve_approval_node(state, approved=approved)
+        if state.status is WorkflowStatus.READY:
+            state = execute_node(state)
+        self._checkpointer.save(run_id=run_id, state=state)
+        return state
+
+    def checkpoint(self, *, run_id: str) -> WorkflowState:
+        """검증 또는 표시를 위해 최신 Checkpoint를 읽는다."""
+        return self._checkpointer.load(run_id=run_id)
+
+    @staticmethod
+    def _continue_after_review(state: WorkflowState) -> WorkflowState:
+        """검토 통과 뒤에도 기존 위험 ActionKind 승인 정책을 적용한다."""
         state = approval_node(state)
         if state.status is WorkflowStatus.READY:
             state = execute_node(state)

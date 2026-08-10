@@ -37,6 +37,7 @@ class WorkflowStatus(StrEnum):
     READY = "ready"
     COMPLETED = "completed"
     REJECTED = "rejected"
+    REVIEW_REJECTED = "review_rejected"
 
 
 RISKY_ACTIONS = frozenset({ActionKind.DELETE, ActionKind.DEPLOY, ActionKind.SEND})
@@ -68,6 +69,26 @@ class RouterDecision:
 
 
 @dataclass(frozen=True)
+class ReviewDecision:
+    """외부 모델 호출 없이 전달받는 결정론적 Reviewer 판정이다.
+
+    ``approved``는 산출물의 검토 통과만 뜻한다. 위험 ActionKind의 실행 권한은
+    별도의 Approval Node에서만 부여할 수 있다.
+    """
+
+    approved: bool
+    feedback: str
+    source: str = "offline-reviewer"
+
+    def __post_init__(self) -> None:
+        """감사에 필요한 비어 있지 않은 판정 근거와 출처를 강제한다."""
+        if not self.feedback.strip():
+            raise ValueError("review feedback must not be empty")
+        if not self.source.strip():
+            raise ValueError("review source must not be empty")
+
+
+@dataclass(frozen=True)
 class WorkflowState:
     """Node 사이에서 전달되는 불변 상태다."""
 
@@ -76,6 +97,7 @@ class WorkflowState:
     status: WorkflowStatus
     approval_required: bool
     approval_granted: bool | None
+    review_approved: bool | None
     selected_route: RouteKind | None
     result: str | None
     events: tuple[WorkflowEvent, ...]
@@ -92,6 +114,7 @@ class WorkflowState:
             status=WorkflowStatus.PENDING,
             approval_required=action in RISKY_ACTIONS,
             approval_granted=None,
+            review_approved=None,
             selected_route=None,
             result=None,
             events=(),
@@ -104,6 +127,7 @@ class WorkflowState:
         detail: str,
         status: WorkflowStatus | None = None,
         approval_granted: bool | None = None,
+        review_approved: bool | None = None,
         selected_route: RouteKind | None = None,
         result: str | None = None,
     ) -> WorkflowState:
@@ -114,6 +138,9 @@ class WorkflowState:
             status=self.status if status is None else status,
             approval_granted=(
                 self.approval_granted if approval_granted is None else approval_granted
+            ),
+            review_approved=(
+                self.review_approved if review_approved is None else review_approved
             ),
             selected_route=self.selected_route if selected_route is None else selected_route,
             result=self.result if result is None else result,
