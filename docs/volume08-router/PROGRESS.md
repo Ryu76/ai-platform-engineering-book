@@ -125,3 +125,47 @@ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.p
 다음 슬라이스:
 
 - policy 제약을 우회하지 않는 명시적 fallback chain과 retry budget을 고정 fixture·안전 실패 계약으로 추가합니다.
+
+## 2026-08-10 — Tick 4: 정책 경계를 보존하는 제한된 fallback retry
+
+완료한 범위:
+
+- 동일한 `RoutingRequest`를 primary와 fallback `PolicyRouter`에 전달하는 `PolicyFallbackRouter`를 추가했습니다. 따라서 fallback도 capability·허용 대상·비용·지연 시간·상태 제약을 우회하지 못합니다.
+- primary 우선 및 선언 순서의 결정론적 fallback을 구현하고, primary 뒤에 시도할 fallback 수를 명시적 정수 `retry_budget`으로 제한했습니다.
+- 모든 허용 시도가 실패하면 실제 시도 policy 이름만 담은 `FallbackRouteExhaustedError`로 fail closed 하게 했습니다.
+- 성공과 안전 실패 모두 사용자 원문 없이 JSON 직렬화 가능한 감사 로그를 제공했습니다.
+- 고정 primary/fallback fixture 예제, retry budget·정책 제약·privacy 계약 테스트, `04-policy-fallback.md` 학습 장을 추가했습니다.
+
+검증 결과:
+
+```text
+uv run pytest tests/unit/test_volume08_policy_fallback_router.py -q
+7 passed in 0.09s
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_policy_router.py tests/unit/test_volume08_keyword_router.py tests/unit/test_volume08_router_evaluation.py tests/unit/test_volume08_policy_fallback_router.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 6 source files
+
+uv run python examples/volume08/policy_fallback_router.py
+{"attempted_policy_names": ["offline-primary-policy", "offline-fallback-policy"], "confidence": "1", "estimated_cost": "0.002", "estimated_latency_ms": "60", "fallback_count": 1, "fallback_router_name": "offline-support-fallback-router", "policy_name": "offline-fallback-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-fallback-001", "target_kind": "agent", "target_name": "offline-fallback-agent"}
+
+uv run pytest -q
+97 passed in 0.80s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+```
+
+남은 Volume 08 범위:
+
+- Semantic/LLM Router와 Intent 분류
+- escalation 및 Agent·Tool·Model 다단계 라우팅
+- Router API 및 나머지 학습 장
+
+다음 슬라이스:
+
+- 외부 호출 없는 고정 semantic score fixture와 명시적 threshold를 갖는 Semantic Router를 추가하고, policy 경계를 통과하는 경로와 안전 실패를 검증합니다.

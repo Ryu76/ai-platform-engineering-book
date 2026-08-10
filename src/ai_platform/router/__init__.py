@@ -17,6 +17,11 @@ from ai_platform.router.evaluation import (
     RoutingQualityGateError,
     evaluate_keyword_router,
 )
+from ai_platform.router.fallback import (
+    FallbackRouteDecision,
+    FallbackRouteExhaustedError,
+    PolicyFallbackRouter,
+)
 from ai_platform.router.keyword import (
     KeywordRoute,
     KeywordRouteDecision,
@@ -28,6 +33,8 @@ from ai_platform.router.policy import PolicyRouter
 __all__ = [
     "NoEligibleRouteError",
     "NoConfidentKeywordRouteError",
+    "FallbackRouteDecision",
+    "FallbackRouteExhaustedError",
     "KeywordRoute",
     "KeywordRouteDecision",
     "KeywordRouter",
@@ -35,6 +42,7 @@ __all__ = [
     "KeywordRoutingEvaluationReport",
     "KeywordRoutingExpectation",
     "KeywordRoutingOutcome",
+    "PolicyFallbackRouter",
     "PolicyRouter",
     "RouteDecision",
     "RouteTarget",
