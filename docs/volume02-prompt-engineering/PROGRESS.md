@@ -13,11 +13,10 @@
 |---|---|---|
 | 01. Prompt 구성 요소와 첫 템플릿 | `01-prompt-components.md`, `src/ai_platform/prompts/prompt_templates.py`, `examples/volume02/prompt_template_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 전체 검사 및 70개 테스트 통과 |
 | 02. Zero-shot·One-shot·Few-shot | `02-zero-one-few-shot.md`, `src/ai_platform/prompts/shot_prompts.py`, `examples/volume02/shot_prompt_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 전체 검사와 오프라인 데모 통과 |
+| 03. 역할 Prompt와 구조화된 JSON 출력 | `03-role-structured-output.md`, `src/ai_platform/prompts/structured_output.py`, `examples/volume02/structured_output_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 오프라인 데모, 단위·전체 검사 통과 |
 
 ## 남은 PRD 요구사항
 
-- 역할 Prompt 학습·예제
-- Structured Output, JSON 출력과 검증
 - ReAct 개념 및 Chain of Thought를 직접 노출하지 않는 구조적 추론 설계
 - Prompt Injection 방어와 입력 검증
 - Prompt Versioning, Template, 버전별 결과 비교

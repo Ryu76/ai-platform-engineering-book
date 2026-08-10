@@ -8,13 +8,13 @@ Instruction, Context, Input Data, Output Format, Constraint를 분리해 재사�
 
 1. [Prompt 구성 요소와 첫 템플릿](01-prompt-components.md) — Instruction·Context·입력·형식·제약을 분리합니다.
 2. [Zero-shot·One-shot·Few-shot](02-zero-one-few-shot.md) — 예시 수를 계약으로 관리하고 검토된 시연 데이터를 분리합니다.
-3. 역할 Prompt와 구조화된 JSON 출력
+3. [역할 Prompt와 구조화된 JSON 출력](03-role-structured-output.md) — 역할 설정과 JSON 스키마 검증을 분리합니다.
 4. ReAct 개념과 내부 추론 비노출 설계
 5. Prompt Injection 방어와 입력 검증
 6. Prompt Versioning·Template·결과 비교
 7. Prompt 테스트 데이터와 미니 프로젝트·과제
 
-3~7장은 아직 작성 중입니다. 작성된 장과 검증 이력은 [PROGRESS.md](PROGRESS.md)에서 확인합니다.
+4~7장은 아직 작성 중입니다. 작성된 장과 검증 이력은 [PROGRESS.md](PROGRESS.md)에서 확인합니다.
 
 ## 이 권의 결과물 경로
 

@@ -2,11 +2,21 @@
 
 from ai_platform.prompts.prompt_templates import PromptConfigurationError, PromptSections
 from ai_platform.prompts.shot_prompts import PromptExample, ShotMode, ShotPrompt
+from ai_platform.prompts.structured_output import (
+    RolePrompt,
+    StructuredOutputError,
+    SupportClassification,
+    validate_classification_json,
+)
 
 __all__ = [
     "PromptConfigurationError",
     "PromptExample",
     "PromptSections",
+    "RolePrompt",
     "ShotMode",
     "ShotPrompt",
+    "StructuredOutputError",
+    "SupportClassification",
+    "validate_classification_json",
 ]

@@ -6,8 +6,11 @@ from ai_platform.prompts import (
     PromptConfigurationError,
     PromptExample,
     PromptSections,
+    RolePrompt,
     ShotMode,
     ShotPrompt,
+    StructuredOutputError,
+    validate_classification_json,
 )
 
 
@@ -139,3 +142,42 @@ def test_example_rejects_blank_input_or_expected_output(
 ) -> None:
     with pytest.raises(PromptConfigurationError, match="example"):
         PromptExample(input_data, expected_output)
+
+
+def test_role_prompt_places_service_role_before_template_and_untrusted_input() -> None:
+    rendered = RolePrompt("고객 지원 분류 담당자", template()).render("결제가 두 번 되었어요.")
+
+    assert rendered.startswith("[ROLE]\n고객 지원 분류 담당자\n\n[INSTRUCTION]")
+    assert rendered.index("[ROLE]") < rendered.index("[INSTRUCTION]")
+    assert rendered.index("[INSTRUCTION]") < rendered.index("[UNTRUSTED USER INPUT]")
+    assert "<user_input>\n결제가 두 번 되었어요.\n</user_input>" in rendered
+
+
+def test_role_prompt_rejects_blank_role_and_wrong_template_type() -> None:
+    with pytest.raises(PromptConfigurationError, match="role"):
+        RolePrompt(" ", template())
+    with pytest.raises(PromptConfigurationError, match="sections"):
+        RolePrompt("분류 담당자", "not a template")  # type: ignore[arg-type]
+
+
+def test_validate_classification_json_returns_a_schema_checked_object() -> None:
+    result = validate_classification_json(
+        '{"category": "billing", "reason": " 영수증 재발급 요청입니다. "}'
+    )
+
+    assert result.category == "billing"
+    assert result.reason == "영수증 재발급 요청입니다."
+
+
+@pytest.mark.parametrize(
+    "raw_response",
+    [
+        "분류는 billing입니다.",
+        '{"category": "account", "reason": "허용되지 않은 분류입니다."}',
+        '{"category": "billing", "reason": ""}',
+        '{"category": "billing", "reason": "정상", "admin": true}',
+    ],
+)
+def test_validate_classification_json_rejects_invalid_or_unexpected_data(raw_response: str) -> None:
+    with pytest.raises(StructuredOutputError, match="SupportClassification"):
+        validate_classification_json(raw_response)
