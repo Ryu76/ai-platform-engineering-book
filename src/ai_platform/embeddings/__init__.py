@@ -9,6 +9,14 @@ from ai_platform.embeddings.embedding_service import (
     dot_product,
     euclidean_distance,
 )
+from ai_platform.embeddings.retrieval_evaluation import (
+    RetrievalEvaluationError,
+    RetrievalMetrics,
+    RetrievalSummary,
+    evaluate_ranking,
+    mean_retrieval_metrics,
+    meets_score_threshold,
+)
 from ai_platform.embeddings.vector_store import (
     CollectionNotFoundError,
     InMemoryVectorStore,
@@ -25,6 +33,9 @@ __all__ = [
     "EmbeddingModel",
     "InMemoryVectorStore",
     "PayloadValue",
+    "RetrievalEvaluationError",
+    "RetrievalMetrics",
+    "RetrievalSummary",
     "SearchResult",
     "VectorDimensionError",
     "VectorPoint",
@@ -32,4 +43,7 @@ __all__ = [
     "cosine_similarity",
     "dot_product",
     "euclidean_distance",
+    "evaluate_ranking",
+    "mean_retrieval_metrics",
+    "meets_score_threshold",
 ]
