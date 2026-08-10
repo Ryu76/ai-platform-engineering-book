@@ -131,8 +131,8 @@ class BoundedConflictResolutionWorkflow:
         by the workflow: the run stops at its round bound. An exact consensus is an auditable
         recommendation only until the caller supplies ``ConflictApproval.APPROVED``.
         """
-        if not objective.strip():
-            raise WorkflowConfigurationError("objective must not be empty")
+        if not isinstance(objective, str) or not objective.strip():
+            raise WorkflowConfigurationError("objective must be a non-empty string")
         if not isinstance(human_approval, ConflictApproval):
             raise WorkflowConfigurationError(
                 "human_approval must be a ConflictApproval value"
@@ -192,8 +192,10 @@ class BoundedConflictResolutionWorkflow:
             raise WorkflowConfigurationError(f"{name} must be a positive integer")
 
     @staticmethod
-    def _validate_proposal(proposal: ConflictProposal) -> None:
+    def _validate_proposal(proposal: object) -> None:
         if not isinstance(proposal, ConflictProposal):
             raise AgentProtocolError("agent response must be a ConflictProposal")
+        if not isinstance(proposal.option, str) or not isinstance(proposal.rationale, str):
+            raise AgentProtocolError("conflict proposal option and rationale must be strings")
         if not proposal.option.strip() or not proposal.rationale.strip():
             raise AgentProtocolError("conflict proposal option and rationale must not be empty")

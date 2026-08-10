@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 07: 충돌 해결 입력·제안 경계 강화
+
+- `src/ai_platform/agents/conflict.py`에서 objective를 비어 있지 않은 문자열로 제한해 잘못된 요청이 첫 Conflict Agent 호출 전에 종료되도록 했다.
+- Agent proposal은 `ConflictProposal`이고 option·rationale 모두 비어 있지 않은 문자열인지 다음 Agent 호출 전에 검증한다. 객체 형식 또는 필드 형식이 잘못된 proposal은 `AgentProtocolError`로 fail-closed한다.
+- `tests/volume07/test_bounded_conflict_resolution.py`는 잘못된 objective가 모든 Agent 호출 전에 중단되고, 잘못된 proposal 또는 필드 형식이 다음 Agent 실행 없이 중단하는지 고정한다.
+- `docs/volume07-multi-agent/03-bounded-conflict-resolution.md`에 입력·제안 검증 규칙을 기록했다.
+
 ## 2026-08-11 — Slice 06: 위임 입력·Worker 응답 경계 강화
 
 - `src/ai_platform/agents/delegation.py`에서 objective를 비어 있지 않은 문자열로 제한해 잘못된 입력이 Coordinator 호출 전에 종료되도록 했다.

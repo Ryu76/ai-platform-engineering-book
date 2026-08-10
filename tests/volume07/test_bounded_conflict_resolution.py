@@ -156,6 +156,37 @@ def test_unsafe_configuration_and_invalid_proposal_fail_before_later_calls() -> 
     assert reviewer.calls == []
 
 
+def test_malformed_objective_and_proposal_types_fail_closed_before_later_calls() -> None:
+    flow, planner, reviewer = workflow(
+        planner_proposals=(proposal("offline tutorial"),),
+        reviewer_proposals=(proposal("offline tutorial"),),
+    )
+
+    with pytest.raises(WorkflowConfigurationError, match="non-empty string"):
+        flow.run(objective=object())  # type: ignore[arg-type]
+    assert planner.calls == []
+    assert reviewer.calls == []
+
+    malformed_flow, malformed_planner, malformed_reviewer = workflow(
+        planner_proposals=(object(),),  # type: ignore[arg-type]
+        reviewer_proposals=(proposal("offline tutorial"),),
+    )
+    with pytest.raises(AgentProtocolError, match="must be a ConflictProposal"):
+        malformed_flow.run(objective="Choose a tutorial plan.")
+    assert len(malformed_planner.calls) == 1
+    assert malformed_reviewer.calls == []
+
+    malformed_field_flow, _, malformed_field_reviewer = workflow(
+        planner_proposals=(
+            ConflictProposal(object(), "A rationale."),  # type: ignore[arg-type]
+        ),
+        reviewer_proposals=(proposal("offline tutorial"),),
+    )
+    with pytest.raises(AgentProtocolError, match="option and rationale must be strings"):
+        malformed_field_flow.run(objective="Choose a tutorial plan.")
+    assert malformed_field_reviewer.calls == []
+
+
 def test_mock_script_exhaustion_has_no_fallback_round() -> None:
     flow, planner, reviewer = workflow(
         planner_proposals=(proposal("option-a"),),

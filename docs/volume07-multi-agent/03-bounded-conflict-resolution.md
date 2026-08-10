@@ -12,7 +12,8 @@
 - 기본 `ConflictApproval.PENDING`은 `awaiting_human_approval`에서 멈춥니다. consensus는 사람이 검토할 제안이며 자동 실행 권한이 아닙니다.
 - `ConflictApproval.APPROVED`가 있을 때만 exact consensus가 `completed`가 됩니다. `REJECTED`는 모든 Agent 호출 전에 `human_rejected`로 종료합니다.
 - 합의하지 못하면 `conflict_limit_reached`로 fail-closed합니다. 그 결과에는 선택된 option이 없으며, 상한 뒤의 Agent 호출도 없습니다.
-- 빈 option·근거 또는 script 소진은 `AgentProtocolError`로 중단합니다. 다음 Agent, 다음 round, 외부 fallback으로 진행하지 않습니다.
+- `objective`는 비어 있지 않은 문자열이어야 하며, 잘못된 입력은 어떤 Agent도 호출하지 않고 `WorkflowConfigurationError`로 중단합니다.
+- 모든 Agent 출력은 `ConflictProposal`이어야 하고 option·근거는 비어 있지 않은 문자열이어야 합니다. 잘못된 출력, 빈 option·근거 또는 script 소진은 `AgentProtocolError`로 중단합니다. 다음 Agent, 다음 round, 외부 fallback으로 진행하지 않습니다.
 
 ## 오프라인 실행
 
@@ -42,7 +43,7 @@ uv run python examples/volume07/offline_conflict_resolution.py --approve
 uv run pytest tests/volume07/test_bounded_conflict_resolution.py -q
 ```
 
-테스트는 승인 대기, 명시 승인, 서로 다른 선택지에서의 round 상한, 사람 거절, 안전하지 않은 proposal, script 소진을 네트워크 없이 검증합니다.
+테스트는 승인 대기, 명시 승인, 서로 다른 선택지에서의 round 상한, 사람 거절, 잘못된 objective·proposal 경계, script 소진을 네트워크 없이 검증합니다.
 
 ## 코드 읽기 순서
 
