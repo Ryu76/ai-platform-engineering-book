@@ -10,6 +10,8 @@ from ai_platform.prompts import (
     PromptConfigurationError,
     PromptExample,
     PromptSections,
+    PromptTestCase,
+    PromptTestDataset,
     PromptVersionError,
     ReActPrompt,
     RecordedClassification,
@@ -379,3 +381,67 @@ def test_recorded_comparison_rejects_missing_duplicate_or_unknown_case_mappings(
 ) -> None:
     with pytest.raises(PromptVersionError, match="recorded_outputs"):
         compare_recorded_classifications(versioned_prompt(), comparison_cases(), recorded_outputs)
+
+
+def prompt_test_dataset() -> PromptTestDataset:
+    """Build fixed, reviewed fixtures without any model invocation."""
+    return PromptTestDataset(
+        "customer-support-v1",
+        (
+            PromptTestCase(
+                "billing-receipt",
+                "영수증을 다시 받고 싶어요.",
+                "billing",
+                "명확한 청구 문의를 분류한다.",
+                ("happy-path", "billing"),
+            ),
+            PromptTestCase(
+                "unknown-ambiguous",
+                "무엇을 해야 할지 모르겠어요.",
+                "unknown",
+                "근거 없는 추측 대신 unknown을 선택한다.",
+                ("edge-case", "unknown"),
+            ),
+        ),
+    )
+
+
+def test_prompt_test_dataset_preserves_reviewed_case_order_and_expected_values() -> None:
+    dataset = prompt_test_dataset()
+
+    assert dataset.name == "customer-support-v1"
+    assert dataset.comparison_cases() == (
+        PromptComparisonCase("billing-receipt", "영수증을 다시 받고 싶어요.", "billing"),
+        PromptComparisonCase("unknown-ambiguous", "무엇을 해야 할지 모르겠어요.", "unknown"),
+    )
+    assert tuple(case.case_id for case in dataset.cases_with_tag("unknown")) == (
+        "unknown-ambiguous",
+    )
+
+
+@pytest.mark.parametrize(
+    ("case_id", "tags", "message"),
+    [
+        ("Billing Receipt", ("billing",), "case_id"),
+        ("billing-receipt", (), "tags"),
+        ("billing-receipt", (" ",), "tags"),
+    ],
+)
+def test_prompt_test_case_rejects_unsafe_identifiers_or_tags(
+    case_id: str, tags: tuple[str, ...], message: str
+) -> None:
+    with pytest.raises(PromptVersionError, match=message):
+        PromptTestCase(case_id, "입력", "billing", "검토 목적", tags)
+
+
+def test_prompt_test_dataset_rejects_duplicate_or_invalid_collections() -> None:
+    duplicate = PromptTestCase(
+        "same-case", "입력", "billing", "검토 목적", ("billing",)
+    )
+
+    with pytest.raises(PromptVersionError, match="duplicate"):
+        PromptTestDataset("duplicate-data", (duplicate, duplicate))
+    with pytest.raises(PromptVersionError, match="cases"):
+        PromptTestDataset("empty-data", ())
+    with pytest.raises(PromptConfigurationError, match="tag"):
+        prompt_test_dataset().cases_with_tag(" ")

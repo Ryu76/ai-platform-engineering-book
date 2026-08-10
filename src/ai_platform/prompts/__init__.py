@@ -18,6 +18,7 @@ from ai_platform.prompts.prompt_runner import (
     compare_recorded_classifications,
 )
 from ai_platform.prompts.prompt_templates import PromptConfigurationError, PromptSections
+from ai_platform.prompts.prompt_test_data import PromptTestCase, PromptTestDataset
 from ai_platform.prompts.shot_prompts import PromptExample, ShotMode, ShotPrompt
 from ai_platform.prompts.structured_output import (
     RolePrompt,
@@ -42,6 +43,8 @@ __all__ = [
     "PromptConfigurationError",
     "PromptExample",
     "PromptSections",
+    "PromptTestCase",
+    "PromptTestDataset",
     "PromptVersionComparison",
     "PromptVersionError",
     "ReActPrompt",

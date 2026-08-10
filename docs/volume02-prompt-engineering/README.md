@@ -12,9 +12,9 @@ Instruction, Context, Input Data, Output Format, Constraint를 분리해 재사�
 4. [ReAct 개념과 내부 추론 비노출 구조 설계](04-react-without-cot-exposure.md) — 행동·관찰·공개 결과를 분리합니다.
 5. [Prompt Injection 방어와 입력 검증](05-prompt-injection-input-validation.md) — 신뢰 경계, 실패 닫힘 입력 검증, 위험 신호 검토를 분리합니다.
 6. [Prompt Versioning·Template·결과 비교](06-prompt-versioning-comparison.md) — 버전 메타데이터와 고정 검토 기록을 분리해 비교합니다.
-7. Prompt 테스트 데이터와 미니 프로젝트·과제
+7. [Prompt 테스트 데이터](07-prompt-test-data.md) — 검토된 고정 fixture를 버전 비교에서 재사용합니다.
 
-7장은 아직 작성 중입니다. 작성된 장과 검증 이력은 [PROGRESS.md](PROGRESS.md)에서 확인합니다.
+7장의 미니 프로젝트·과제·권 단위 체크리스트는 후속 슬라이스에서 완성합니다. 작성된 장과 검증 이력은 [PROGRESS.md](PROGRESS.md)에서 확인합니다.
 
 ## 이 권의 결과물 경로
 
