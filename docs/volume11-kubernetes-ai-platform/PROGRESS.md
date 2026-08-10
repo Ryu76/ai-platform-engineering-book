@@ -2,6 +2,39 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 06: PVC 수명 주기·접근 모드·보존의 오프라인 경계
+
+### 완료한 범위
+
+- `k8s/volume11/storage/`에 기본 API Kustomize 집합과 분리된 PVC 로컬 렌더링 집합을 추가했습니다.
+  - PVC는 `example-storage-class` 비운영용 자리표시자, `ReadWriteOnce`, `Filesystem`, `1Gi` 요청만 선언합니다.
+  - `volumeName`, data source, Secret 참조, CSI driver, 실제 StorageClass, `volumeMounts`를 포함하지 않았고, 기본 `k8s/volume11/kustomization.yaml`에도 포함하지 않았습니다.
+  - 따라서 로컬 렌더링은 PVC 계약만 읽으며 실제 PV/PVC 바인딩, 프로비저닝, 데이터 기록, 클러스터 연결을 만들지 않습니다.
+- [PVC: 수명 주기·접근 모드·보존 경계](06-pvc-lifecycle-access-retention.md) 장을 작성했습니다.
+  - PVC·PV·StorageClass의 책임, RWO가 단일 Pod 보장이 아닌 단일 노드 접근 요청이라는 점, PVC 삭제와 backing storage 보존의 분리된 책임을 설명합니다.
+  - `kubectl kustomize` 로컬 렌더링과 오프라인 테스트만 안내하며 `apply`, `create`, 실제 StorageClass·PV·데이터 사용을 명시적으로 제외합니다.
+- Volume README와 통합 테스트를 갱신해 새 장 링크, placeholder StorageClass, 접근 모드·volume mode·용량 요청, Secret·인증 값 부재, 기본 Kustomize 집합에서의 제외를 검사합니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `kubectl kustomize k8s/volume11/storage` 및 `kubectl kustomize k8s/volume11` 경계 검사 | 통과 — storage 출력에 PersistentVolumeClaim 1개와 placeholder/RWO/Filesystem/1Gi만, 기본 출력에는 PersistentVolumeClaim·Job·CronJob 없음; 모두 로컬 렌더링이며 클러스터 연결·리소스 생성 없음 |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 19 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 11 source files 문제 없음, 전체 80 passed |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- HPA와 Rolling Update/Rollback 예제 작성하기
+- 로그·메트릭·추적, 장애 대응과 비용 관리 장 작성하기
+- Volume 미니 프로젝트, 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 이미지·자리표시자·로컬 렌더링만으로 HPA의 최소/최대 replica와 CPU 기반 확장 계약을 추가하고, 실제 metrics server, 부하 생성, 클러스터 적용은 하지 않습니다.
+
 ## 2026-08-11 — Slice 05: Job/CronJob 완료·재시도·중복 실행의 오프라인 경계
 
 ### 완료한 범위

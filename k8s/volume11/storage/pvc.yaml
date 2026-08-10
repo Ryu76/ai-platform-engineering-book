@@ -1,0 +1,19 @@
+# Local-render-only teaching manifest. Do not apply it to a cluster.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-platform-index-example
+  namespace: ai-platform-example
+  labels:
+    app.kubernetes.io/name: ai-platform-index
+    app.kubernetes.io/part-of: ai-platform-example
+    app.kubernetes.io/component: storage-example
+spec:
+  # Deliberately non-operational placeholder; no organization StorageClass is named here.
+  storageClassName: example-storage-class
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 1Gi

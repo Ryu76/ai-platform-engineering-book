@@ -149,6 +149,33 @@ def test_batch_manifests_are_placeholder_only_and_excluded_from_the_base_apply_s
     assert "- cronjob.yaml" not in kustomization
 
 
+def test_pvc_is_placeholder_and_excluded_from_base_apply_set() -> None:
+    """Storage lessons declare an offline claim contract, never a bindable production volume."""
+    pvc = (ROOT / "k8s/volume11/storage/pvc.yaml").read_text(encoding="utf-8")
+    storage_kustomization = (ROOT / "k8s/volume11/storage/kustomization.yaml").read_text(
+        encoding="utf-8"
+    )
+    base_kustomization = (ROOT / "k8s/volume11/kustomization.yaml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "apiVersion: v1" in pvc
+    assert "kind: PersistentVolumeClaim" in pvc
+    assert "name: ai-platform-index-example" in pvc
+    assert "storageClassName: example-storage-class" in pvc
+    assert "- ReadWriteOnce" in pvc
+    assert "volumeMode: Filesystem" in pvc
+    assert "storage: 1Gi" in pvc
+    assert "volumeName:" not in pvc
+    assert "dataSource:" not in pvc
+    assert "secretRef:" not in pvc
+    assert "TOKEN" not in pvc
+    assert "PASSWORD" not in pvc
+    assert "- pvc.yaml" in storage_kustomization
+    assert "- pvc.yaml" not in base_kustomization
+    assert "- storage/" not in base_kustomization
+
+
 def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification() -> None:
     """The chapters document exact local files, commands, and deployment boundaries."""
     health_chapter = (VOLUME / "01-health-probes.md").read_text(encoding="utf-8")
@@ -164,6 +191,9 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     batch_chapter = (VOLUME / "05-job-cronjob-completion-retry.md").read_text(
         encoding="utf-8"
     )
+    pvc_chapter = (VOLUME / "06-pvc-lifecycle-access-retention.md").read_text(
+        encoding="utf-8"
+    )
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
@@ -171,8 +201,14 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "](03-compose-dependency-topology.md)" in readme
     assert "](04-ingress-http-boundary.md)" in readme
     assert "](05-job-cronjob-completion-retry.md)" in readme
+    assert "](06-pvc-lifecycle-access-retention.md)" in readme
     combined_chapters = (
-        health_chapter + dependency_chapter + compose_chapter + ingress_chapter + batch_chapter
+        health_chapter
+        + dependency_chapter
+        + compose_chapter
+        + ingress_chapter
+        + batch_chapter
+        + pvc_chapter
     )
     for relative_path in (
         "src/ai_platform/api/health.py",
@@ -186,6 +222,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         "k8s/volume11/secret.example.yaml",
         "k8s/volume11/batch/job.yaml",
         "k8s/volume11/batch/cronjob.yaml",
+        "k8s/volume11/storage/pvc.yaml",
     ):
         assert relative_path in combined_chapters
     expected_command = (
@@ -203,6 +240,9 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     expected_batch_command = "kubectl kustomize k8s/volume11/batch"
     assert expected_batch_command in batch_chapter
     assert "suspend: true" in batch_chapter
+    assert "kubectl kustomize k8s/volume11/storage" in pvc_chapter
+    assert "example-storage-class" in pvc_chapter
+    assert "PersistentVolumeClaim" in pvc_chapter
     assert "클러스터에 적용하거나 배포하지 않습니다" in (
         health_chapter + dependency_chapter + ingress_chapter
     )
