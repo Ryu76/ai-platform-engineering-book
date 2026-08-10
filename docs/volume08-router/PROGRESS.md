@@ -169,3 +169,48 @@ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.p
 다음 슬라이스:
 
 - 외부 호출 없는 고정 semantic score fixture와 명시적 threshold를 갖는 Semantic Router를 추가하고, policy 경계를 통과하는 경로와 안전 실패를 검증합니다.
+
+## 2026-08-11 — Tick 5: 고정 score fixture 기반 Semantic Router
+
+완료한 범위:
+
+- request ID별 모든 configured intent score를 명시하는 `SemanticIntentScore`/`SemanticScoreFixture` 계약을 추가했습니다. 이 slice는 embedding·LLM·API·네트워크를 호출하지 않습니다.
+- 명시적 `minimum_similarity`를 적용하고 similarity → intent 이름 순으로 결정론적으로 선택하는 `SemanticRouter`를 추가했습니다.
+- fixture가 없거나 모든 점수가 threshold 미만이면 각각 `NoSemanticScoreFixtureError`와 `NoConfidentSemanticRouteError`로 fail closed 하게 했습니다.
+- 선택된 semantic intent capability를 기존 요청 capability에 합친 뒤 `PolicyRouter`에 전달하여 permission·상태·비용·지연 시간 제약을 우회하지 못하게 했습니다.
+- 원문 없이 classifier 이름, intent, similarity와 policy 결정만 남기는 JSON 직렬화 가능 로그를 추가했습니다.
+- 고정 fixture 예제, 계약 테스트, `05-semantic-routing.md` 학습 장을 추가했습니다.
+
+검증 결과:
+
+```text
+uv run pytest tests/unit/test_volume08_semantic_router.py -q
+8 passed in 0.07s
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_policy_router.py tests/unit/test_volume08_keyword_router.py tests/unit/test_volume08_router_evaluation.py tests/unit/test_volume08_policy_fallback_router.py tests/unit/test_volume08_semantic_router.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 7 source files
+
+uv run python examples/volume08/semantic_router.py
+{"classifier_name": "offline-semantic-intent-router", "confidence": "1", "estimated_cost": "0.003", "estimated_latency_ms": "70", "intent": "order_tracking", "policy_name": "offline-semantic-support-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-semantic-001", "semantic_similarity": "0.93", "target_kind": "agent", "target_name": "offline-order-agent"}
+
+uv run pytest -q
+105 passed in 0.92s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+```
+
+남은 Volume 08 범위:
+
+- LLM Router와 intent 분류
+- escalation 및 Agent·Tool·Model 다단계 라우팅
+- Router API 및 나머지 학습 장
+
+다음 슬라이스:
+
+- 고정 LLM classifier response fixture와 명시적 confidence threshold를 갖는 LLM Router를 추가하고, semantic·policy 경계를 우회하지 않는 경로와 안전 실패를 검증합니다.

@@ -29,10 +29,21 @@ from ai_platform.router.keyword import (
     NoConfidentKeywordRouteError,
 )
 from ai_platform.router.policy import PolicyRouter
+from ai_platform.router.semantic import (
+    NoConfidentSemanticRouteError,
+    NoSemanticScoreFixtureError,
+    SemanticIntentScore,
+    SemanticRoute,
+    SemanticRouteDecision,
+    SemanticRouter,
+    SemanticScoreFixture,
+)
 
 __all__ = [
     "NoEligibleRouteError",
     "NoConfidentKeywordRouteError",
+    "NoConfidentSemanticRouteError",
+    "NoSemanticScoreFixtureError",
     "FallbackRouteDecision",
     "FallbackRouteExhaustedError",
     "KeywordRoute",
@@ -51,5 +62,10 @@ __all__ = [
     "RoutingQualityGateError",
     "RoutingRequest",
     "RoutingRequirements",
+    "SemanticIntentScore",
+    "SemanticRoute",
+    "SemanticRouteDecision",
+    "SemanticRouter",
+    "SemanticScoreFixture",
     "evaluate_keyword_router",
 ]

@@ -10,7 +10,7 @@
 2. [Keyword Router: confidence threshold와 정책 경계를 함께 적용하기](02-keyword-routing.md)
 3. [Keyword Router 평가: 고정 dataset과 accuracy gate](03-keyword-router-evaluation.md)
 4. [Policy fallback: retry budget 안에서 fail closed 하기](04-policy-fallback.md)
-5. Rule/Semantic/LLM Router와 escalation (작성 예정)
+5. [Semantic Router: 고정 score fixture와 정책 경계](05-semantic-routing.md)
 6. 비용·지연 시간·capability 정책, 다단계 라우팅, 장애 전환 (작성 예정)
 7. Router 결정 로그, API 및 나머지 학습 장 (작성 예정)
 
@@ -26,9 +26,11 @@ uv run python examples/volume08/keyword_router_evaluation.py
 uv run pytest tests/unit/test_volume08_router_evaluation.py -q
 uv run python examples/volume08/policy_fallback_router.py
 uv run pytest tests/unit/test_volume08_policy_fallback_router.py -q
+uv run python examples/volume08/semantic_router.py
+uv run pytest tests/unit/test_volume08_semantic_router.py -q
 ```
 
-여덟 명령은 외부 서비스, API 키, 네트워크 호출 없이 고정된 정책·keyword Router 결정, 평가 accuracy gate, 제한된 policy fallback을 검증합니다.
+열 개 명령은 외부 서비스, API 키, 네트워크 호출 없이 고정된 정책·keyword·semantic Router 결정, 평가 accuracy gate, 제한된 policy fallback을 검증합니다.
 
 ## 진행 기록
 
