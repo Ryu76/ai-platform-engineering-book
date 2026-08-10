@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-10 — Mock dense 후보와 RRF 하이브리드 검색 슬라이스 완료
+
+### 완료
+
+- `DenseCandidateRanker` Protocol과 `HybridRagIndex`를 추가해 로컬 sparse 검색 결과와 주입 가능한 Mock dense 후보를 Reciprocal Rank Fusion(RRF)으로 결합했습니다. dense 모델, 네트워크 클라이언트, 제공자 호출은 만들지 않았습니다.
+- dense 후보는 현재 로컬 인덱스에 존재하는 청크 ID만 한 번씩 가리키도록 검증했습니다. 알 수 없는 ID·중복 ID·요청 수 초과 후보는 거부합니다.
+- 파이프라인 검색 경계를 `SearchableIndex` Protocol로 일반화해 하이브리드 근거도 기존 Mock 생성기·인용·No-answer 흐름으로 전달합니다.
+- 로컬 샘플 예제를 어휘가 겹치지 않는 도착 예정 질문, 반품 질문, No-answer 질문으로 확장했습니다. `SampleDenseRanker`는 고정된 로컬 청크 ID만 반환합니다.
+- RRF 순위 결합, sparse 용어가 없는 Mock dense 근거의 인용, 신뢰할 수 없는 후보 거부, 설정 검증을 포함해 Volume 05 단위 테스트를 32개로 확장했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-10에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 32 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 5 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 3 source files
+uv run python examples/volume05/local_rag.py
+# 도착 예정·반품 근거와 인용, 주차장 할인 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 외부 라이브 서비스 없이 PDF 입력을 파싱·검증하는 경계, 또는 로컬 Query Transformation 계약을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-10 — 명시적 다중 Markdown 문서 색인 슬라이스 완료
 
 ### 완료

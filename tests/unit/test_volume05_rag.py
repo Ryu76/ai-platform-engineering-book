@@ -7,6 +7,10 @@ import pytest
 
 from ai_platform.rag import (
     ChunkingConfig,
+    DenseCandidate,
+    DocumentChunk,
+    HybridRagIndex,
+    HybridSearchConfig,
     LocalMarkdownLoader,
     LocalRagIndex,
     RagConfigurationError,
@@ -14,6 +18,22 @@ from ai_platform.rag import (
     SearchHit,
     SourceDocument,
 )
+
+
+class RecordingDenseRanker:
+    """로컬 청크 ID만 순위대로 반환하는 테스트 전용 dense Mock이다."""
+
+    def __init__(self, candidate_ids: tuple[str, ...], *, ignore_top_k: bool = False) -> None:
+        self.candidate_ids = candidate_ids
+        self.ignore_top_k = ignore_top_k
+        self.calls: list[tuple[str, tuple[str, ...], int]] = []
+
+    def rank(
+        self, *, query: str, chunks: tuple[DocumentChunk, ...], top_k: int
+    ) -> tuple[DenseCandidate, ...]:
+        self.calls.append((query, tuple(chunk.chunk_id for chunk in chunks), top_k))
+        candidate_ids = self.candidate_ids if self.ignore_top_k else self.candidate_ids[:top_k]
+        return tuple(DenseCandidate(chunk_id) for chunk_id in candidate_ids)
 
 
 class RecordingGenerator:
@@ -190,6 +210,63 @@ def test_search_matches_korean_particles_and_conjugations_without_provider() -> 
     assert hits[1].matched_terms == ("배송", "상태")
 
 
+def test_hybrid_search_fuses_sparse_and_mock_dense_candidates_with_rrf() -> None:
+    ranker = RecordingDenseRanker(("returns#1",))
+    index = HybridRagIndex(
+        sparse_index=_index(),
+        dense_ranker=ranker,
+        config=HybridSearchConfig(
+            sparse_candidate_count=2, dense_candidate_count=2, reciprocal_rank_k=10
+        ),
+    )
+
+    hits = index.search("배송 상태", top_k=2)
+
+    assert [hit.chunk.document_id for hit in hits] == ["returns", "shipping"]
+    assert hits[0].matched_terms == ("배송", "상태")
+    assert hits[0].score == pytest.approx(1 / 11 + 1 / 12)
+    assert ranker.calls == [("배송 상태", ("shipping#1", "returns#1"), 2)]
+
+
+def test_hybrid_search_can_use_mock_dense_evidence_without_sparse_term_overlap() -> None:
+    ranker = RecordingDenseRanker(("shipping#1",))
+    index = HybridRagIndex(sparse_index=_index(), dense_ranker=ranker)
+    generator = RecordingGenerator(response="도착 예정 정보는 배송 안내를 확인하세요.")
+
+    answer = RagPipeline(index=index, generator=generator).answer("언제 도착해요?", top_k=1)
+
+    assert answer.no_answer is False
+    assert answer.citations[0].chunk_id == "shipping#1"
+    assert generator.calls[0][1][0].matched_terms == ()
+
+
+@pytest.mark.parametrize(
+    "candidate_ids, message",
+    [
+        (("unknown#1",), "local index chunk"),
+        (("shipping#1", "shipping#1"), "duplicate chunk IDs"),
+    ],
+)
+def test_hybrid_search_rejects_untrusted_mock_dense_candidates(
+    candidate_ids: tuple[str, ...], message: str
+) -> None:
+    index = HybridRagIndex(sparse_index=_index(), dense_ranker=RecordingDenseRanker(candidate_ids))
+
+    with pytest.raises(RagConfigurationError, match=message):
+        index.search("배송")
+
+
+def test_hybrid_search_rejects_mock_dense_result_larger_than_requested() -> None:
+    index = HybridRagIndex(
+        sparse_index=_index(),
+        dense_ranker=RecordingDenseRanker(("shipping#1", "returns#1"), ignore_top_k=True),
+        config=HybridSearchConfig(dense_candidate_count=1),
+    )
+
+    with pytest.raises(RagConfigurationError, match="more candidates than requested"):
+        index.search("배송")
+
+
 def test_pipeline_returns_citations_for_mocked_generation() -> None:
     generator = RecordingGenerator()
     pipeline = RagPipeline(index=_index(), generator=generator)
@@ -227,6 +304,9 @@ def test_chunking_config_accepts_minimum_safe_size() -> None:
         lambda: ChunkingConfig(chunk_size=39),
         lambda: ChunkingConfig(chunk_size=True),
         lambda: ChunkingConfig(chunk_size=40, overlap=40),
+        lambda: HybridSearchConfig(sparse_candidate_count=0),
+        lambda: HybridSearchConfig(dense_candidate_count=True),
+        lambda: HybridSearchConfig(reciprocal_rank_k=0),
         lambda: LocalRagIndex([]),
         lambda: LocalRagIndex(
             [

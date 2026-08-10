@@ -87,7 +87,7 @@ class SearchHit:
     """쿼리 토큰과 겹치는 로컬 문서 조각 및 결정론적 점수다."""
 
     chunk: DocumentChunk
-    score: int
+    score: float
     matched_terms: tuple[str, ...]
 
     def citation(self, *, label: int) -> Citation:
@@ -118,6 +118,60 @@ class ContextualGenerator(Protocol):
         """질문과 인용 가능한 검색 근거로 답변 텍스트를 생성한다."""
 
 
+class SearchableIndex(Protocol):
+    """파이프라인이 의존하는 읽기 전용 검색 경계다."""
+
+    def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
+        """질문에 대한 인용 가능한 로컬 근거를 순위대로 반환한다."""
+
+
+@dataclass(frozen=True, slots=True)
+class DenseCandidate:
+    """Mock 또는 로컬 dense 랭커가 순위대로 반환하는 청크 식별자다.
+
+    점수의 절대값은 제공자마다 비교할 수 없으므로, 하이브리드 결합은 이 후보의 순위만
+    사용한다. 후보는 반드시 전달받은 로컬 청크 중 하나를 가리켜야 한다.
+    """
+
+    chunk_id: str
+
+    def __post_init__(self) -> None:
+        if not self.chunk_id.strip():
+            raise RagConfigurationError("dense candidate chunk_id must not be empty")
+
+
+class DenseCandidateRanker(Protocol):
+    """외부 제공자 없이도 Mock으로 교체 가능한 dense 후보 경계다."""
+
+    def rank(
+        self, *, query: str, chunks: tuple[DocumentChunk, ...], top_k: int
+    ) -> tuple[DenseCandidate, ...]:
+        """로컬 청크만 대상으로 순위가 매겨진 dense 후보를 반환한다."""
+
+
+@dataclass(frozen=True, slots=True)
+class HybridSearchConfig:
+    """Reciprocal Rank Fusion 기반의 결정론적 하이브리드 검색 설정이다."""
+
+    sparse_candidate_count: int = 10
+    dense_candidate_count: int = 10
+    reciprocal_rank_k: int = 60
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("sparse_candidate_count", self.sparse_candidate_count),
+            ("dense_candidate_count", self.dense_candidate_count),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 20:
+                raise RagConfigurationError(f"{field_name} must be an integer between 1 and 20")
+        if (
+            isinstance(self.reciprocal_rank_k, bool)
+            or not isinstance(self.reciprocal_rank_k, int)
+            or self.reciprocal_rank_k < 1
+        ):
+            raise RagConfigurationError("reciprocal_rank_k must be a positive integer")
+
+
 class LocalRagIndex:
     """외부 인프라 없이 문서 청킹과 어휘 검색을 제공하는 교육용 인덱스다."""
 
@@ -145,10 +199,7 @@ class LocalRagIndex:
 
     def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
         """중복을 제거한 쿼리 용어의 출현 수로 상위 근거를 결정론적으로 반환한다."""
-        if not query.strip():
-            raise RagConfigurationError("query must not be empty")
-        if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20:
-            raise RagConfigurationError("top_k must be an integer between 1 and 20")
+        _validate_search_input(query=query, top_k=top_k)
 
         query_terms = set(_terms(query))
         if not query_terms:
@@ -167,6 +218,91 @@ class LocalRagIndex:
         return tuple(hits[:top_k])
 
 
+class HybridRagIndex:
+    """로컬 sparse 검색과 주입 가능한 dense 후보를 RRF로 결합한다.
+
+    이 클래스는 dense 모델이나 네트워크 클라이언트를 만들지 않는다. ``DenseCandidateRanker``
+    구현체는 테스트의 Mock처럼 로컬 메모리에서만 동작할 수 있으며, 반환 후보가 현재
+    인덱스의 청크를 벗어나면 즉시 거부한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        sparse_index: LocalRagIndex,
+        dense_ranker: DenseCandidateRanker,
+        config: HybridSearchConfig | None = None,
+    ) -> None:
+        if not isinstance(sparse_index, LocalRagIndex):
+            raise RagConfigurationError("sparse_index must be a LocalRagIndex")
+        self._sparse_index = sparse_index
+        self._dense_ranker = dense_ranker
+        self._config = config or HybridSearchConfig()
+        self._chunks_by_id = {chunk.chunk_id: chunk for chunk in sparse_index.chunks}
+
+    @property
+    def chunks(self) -> tuple[DocumentChunk, ...]:
+        """dense Mock이 검색할 수 있는 불변 로컬 청크 목록을 노출한다."""
+        return self._sparse_index.chunks
+
+    def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
+        """각 후보 목록의 순위만 결합해 제공자별 점수 척도 차이를 피한다."""
+        _validate_search_input(query=query, top_k=top_k)
+        sparse_hits = self._sparse_index.search(query, top_k=self._config.sparse_candidate_count)
+        dense_candidates = self._dense_ranker.rank(
+            query=query,
+            chunks=self.chunks,
+            top_k=self._config.dense_candidate_count,
+        )
+        dense_chunks = self._validated_dense_chunks(dense_candidates)
+
+        scores: dict[str, float] = {}
+        matched_terms: dict[str, tuple[str, ...]] = {}
+        for rank, hit in enumerate(sparse_hits, start=1):
+            chunk_id = hit.chunk.chunk_id
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1 / (
+                self._config.reciprocal_rank_k + rank
+            )
+            matched_terms[chunk_id] = hit.matched_terms
+        for rank, chunk in enumerate(dense_chunks, start=1):
+            chunk_id = chunk.chunk_id
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1 / (
+                self._config.reciprocal_rank_k + rank
+            )
+            matched_terms.setdefault(chunk_id, ())
+
+        hits = [
+            SearchHit(
+                chunk=self._chunks_by_id[chunk_id],
+                score=score,
+                matched_terms=matched_terms[chunk_id],
+            )
+            for chunk_id, score in scores.items()
+        ]
+        hits.sort(key=lambda hit: (-hit.score, hit.chunk.document_id, hit.chunk.start_offset))
+        return tuple(hits[:top_k])
+
+    def _validated_dense_chunks(
+        self, candidates: tuple[DenseCandidate, ...]
+    ) -> tuple[DocumentChunk, ...]:
+        if not isinstance(candidates, tuple):
+            raise RagConfigurationError("dense ranker must return a tuple of DenseCandidate values")
+        if len(candidates) > self._config.dense_candidate_count:
+            raise RagConfigurationError("dense ranker returned more candidates than requested")
+        chunks: list[DocumentChunk] = []
+        seen_chunk_ids: set[str] = set()
+        for candidate in candidates:
+            if not isinstance(candidate, DenseCandidate):
+                raise RagConfigurationError("dense ranker must return DenseCandidate values")
+            if candidate.chunk_id in seen_chunk_ids:
+                raise RagConfigurationError("dense ranker must not return duplicate chunk IDs")
+            if candidate.chunk_id not in self._chunks_by_id:
+                raise RagConfigurationError("dense candidate must reference a local index chunk")
+            seen_chunk_ids.add(candidate.chunk_id)
+            chunks.append(self._chunks_by_id[candidate.chunk_id])
+        return tuple(chunks)
+
+
 class RagPipeline:
     """검색 근거가 없으면 생성기를 호출하지 않는 최소 RAG 오케스트레이터다."""
 
@@ -174,7 +310,7 @@ class RagPipeline:
         "관련 문서를 찾지 못했습니다. 질문을 더 구체적으로 작성하거나 문서를 추가하세요."
     )
 
-    def __init__(self, *, index: LocalRagIndex, generator: ContextualGenerator) -> None:
+    def __init__(self, *, index: SearchableIndex, generator: ContextualGenerator) -> None:
         self._index = index
         self._generator = generator
 
@@ -228,6 +364,14 @@ def _chunk_document(document: SourceDocument, config: ChunkingConfig) -> tuple[D
             break
         start = max(end - config.overlap, start + 1)
     return tuple(chunks)
+
+
+def _validate_search_input(*, query: str, top_k: int) -> None:
+    """모든 검색 경로에 같은 질문·결과 수 입력 계약을 적용한다."""
+    if not isinstance(query, str) or not query.strip():
+        raise RagConfigurationError("query must not be empty")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or not 1 <= top_k <= 20:
+        raise RagConfigurationError("top_k must be an integer between 1 and 20")
 
 
 def _terms(text: str) -> tuple[str, ...]:

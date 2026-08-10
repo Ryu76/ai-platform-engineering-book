@@ -4,7 +4,33 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_platform.rag import LocalMarkdownLoader, LocalRagIndex, RagPipeline, SearchHit
+from ai_platform.rag import (
+    DenseCandidate,
+    DocumentChunk,
+    HybridRagIndex,
+    LocalMarkdownLoader,
+    LocalRagIndex,
+    RagPipeline,
+    SearchHit,
+)
+
+
+class SampleDenseRanker:
+    """외부 모델 대신 질문별 로컬 샘플 청크만 돌려주는 dense Mock이다."""
+
+    _CANDIDATES_BY_QUERY = {
+        "언제 도착하나요?": "local:handbook.md#1",
+        "반품 요청은 어떻게 접수하나요?": "local:returns.md#1",
+    }
+
+    def rank(
+        self, *, query: str, chunks: tuple[DocumentChunk, ...], top_k: int
+    ) -> tuple[DenseCandidate, ...]:
+        allowed_chunk_ids = {chunk.chunk_id for chunk in chunks}
+        candidate_id = self._CANDIDATES_BY_QUERY.get(query)
+        if candidate_id not in allowed_chunk_ids:
+            return ()
+        return (DenseCandidate(candidate_id),)[:top_k]
 
 
 class SampleOnlyGenerator:
@@ -20,11 +46,12 @@ def main() -> None:
     sample_root = Path(__file__).with_name("sample_data")
     loader = LocalMarkdownLoader(root=sample_root)
     documents = loader.load_many((Path("handbook.md"), Path("returns.md")))
-    index = LocalRagIndex(documents)
+    sparse_index = LocalRagIndex(documents)
+    index = HybridRagIndex(sparse_index=sparse_index, dense_ranker=SampleDenseRanker())
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
 
     for query in (
-        "배송 상태는 어떻게 확인하나요?",
+        "언제 도착하나요?",
         "반품 요청은 어떻게 접수하나요?",
         "주차장 할인 정책이 있나요?",
     ):
