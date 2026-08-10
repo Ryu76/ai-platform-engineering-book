@@ -2,45 +2,47 @@
 
 ## 현재 상태
 
-- 현재 Phase: **Tool 실행 최소 감사 로그**
-- 완료 선언: 아직 하지 않음. Volume 03의 MCP Server/Client, Resource/Prompt, STDIO, Hermes/Codex 연동을 구현·문서화·검증해야 합니다.
+- 현재 Phase: **MCP Tool catalog (전송 계층 없음)**
+- 완료 선언: 아직 하지 않음. Volume 03의 MCP 호출 경계, Resource/Prompt, STDIO, Hermes/Codex 연동을 구현·문서화·검증해야 합니다.
 
-## 이번 슬라이스: 원문 없는 구조화 감사 로그
+## 이번 슬라이스: allowlist를 실행 권한 없이 MCP Tool 목록으로 투영
 
-- `src/ai_platform/tools/audit.py`
-  - `ToolAuditEvent`는 요청 ID, Tool 이름, 위험도, 승인 ID, 결과만 가지는 최소 데이터 모델입니다. 원문 인자, Tool 결과, 예외 메시지, stack trace 필드가 없습니다.
-  - `InMemoryToolAuditSink`는 외부 저장소·네트워크 없이 append-only 교육용 메모리에 이벤트를 기록하고, 호출자에게 수정 불가능한 tuple 스냅샷을 돌려줍니다.
-  - `execute_audited()`는 handler를 직접 호출하지 않고 항상 기존 `execute_authorized()`를 통과합니다. allowlist·Schema·정책·승인 거부는 `DENIED`, 예상 밖 handler 오류는 `FAILED`, 정상 실행은 `SUCCEEDED`로 각각 한 번 기록합니다.
-  - 거부 및 실패 이벤트도 원문 인자·결과·예외를 복사하지 않습니다. `approval_id`는 이 예제에서 인증 정보가 아닌 상관관계 식별자입니다.
-- `src/ai_platform/tools/__init__.py`
-  - 교육용 audit 경계의 공개 API를 export합니다.
-- `examples/volume03/audited_tool_execution.py`
-  - allowlist된 순수 `safe_text_case`를 고위험 Tool로 분류하고 고정 승인 기록으로 문자열 대문자 변환과 최소 감사 이벤트 하나만 시연합니다. 파일·셸·네트워크·환경 변수·실제 서비스에는 접근하지 않습니다.
-- `tests/volume03/test_tool_audit.py`
-  - 성공 이벤트의 최소 필드와 원문 비저장, 승인 누락의 handler 전 거부·기록, handler 실패와 권한 거부의 구분, immutable snapshot을 검증합니다.
-- `docs/volume03-tool-calling-mcp/05-tool-audit-log.md`
-  - 감사가 실행 권한이 아닌 이유, 최소 데이터 원칙, 오프라인 실습, 교육용 sink의 한계와 운영 환경의 변경 불가능·접근 제어 감사 저장소 요구사항을 문서화했습니다.
+- `src/ai_platform/mcp/catalog.py`
+  - `McpToolDefinition`은 MCP Tool 이름·설명·객체형 입력 Schema만 보관하며 handler, 실행 함수, 자격 증명 필드를 갖지 않습니다.
+  - `McpServerCatalog.from_registry()`는 `ToolRegistry.allowed_tools()`에 이미 등록된 Tool만 복사합니다. 동적 Tool 발견·등록이나 실제 Tool 실행은 하지 않습니다.
+  - `list_tools()`는 MCP `tools/list` 관례의 `name`, `description`, `inputSchema`를 새 snapshot으로 반환합니다. 생성과 반환 시 deep copy하므로 client가 받은 Schema를 수정해도 catalog가 변하지 않습니다.
+  - 이 첫 모델은 외부 MCP SDK, STDIO, 네트워크, subprocess를 사용하지 않습니다. 이후 호출 경로도 기존 allowlist·Schema·정책·승인·감사 경계를 유지해야 합니다.
+- `src/ai_platform/mcp/__init__.py`
+  - 교육용 MCP catalog의 제한된 공개 API를 export합니다.
+- `examples/volume03/mcp_tool_catalog.py`
+  - 순수 `safe_calculator`, `safe_text_case`만 명시적으로 등록하고 Tool을 호출하지 않은 채 이름과 설명을 출력합니다. 파일·셸·네트워크·환경 변수·외부 서비스에 접근하지 않습니다.
+- `tests/volume03/test_mcp_catalog.py`
+  - allowlisted Tool만 MCP 목록 형태로 투영됨, catalog에 `execute()`가 없음, 반환된 Schema 변경이 이후 snapshot에 영향을 주지 않음, 중복 이름·객체 외 Schema 거부를 검증합니다.
+- `docs/volume03-tool-calling-mcp/06-mcp-tool-catalog.md`
+  - Tool 발견과 실행 권한의 분리, offline 실습, snapshot 복사, 운영 MCP transport에서 추가할 인증·인가·제한·감사 경계를 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 여섯 번째 학습 장을 목록에 추가했습니다.
 
 ## 검증 기록
 
 실행 위치: `E:\python\ai-platform-engineering-book-volume-03`
 
 ```text
-$ uv run python examples/volume03/audited_tool_execution.py
-safe_text_case: AI PLATFORM
-audit: request_id=audit-demo-request-001, tool=safe_text_case, risk=high, approval_id=audit-demo-approval-001, outcome=succeeded
+$ uv run python examples/volume03/mcp_tool_catalog.py
+safe_calculator: 두 유한 수의 허용된 사칙연산을 수행합니다. 외부 시스템을 변경하지 않습니다.
+safe_text_case: 문자열을 대문자 또는 소문자로만 변환합니다. 외부 시스템을 변경하지 않습니다.
 
-$ uv run pytest tests/volume03/test_tool_audit.py -q
-4 passed in 0.08s
+$ uv run pytest tests/volume03/test_mcp_catalog.py -q
+3 passed in 0.06s
 
 $ uv run ruff check .
 All checks passed!
 
 $ uv run mypy src
-Success: no issues found in 13 source files
+Success: no issues found in 15 source files
 
 $ uv run pytest -q
-91 passed in 0.80s
+94 passed in 0.86s
 
 $ uv run python scripts/validate_docs.py
 문서 검증 통과: Volume 11개
@@ -62,4 +64,4 @@ $ git diff --check
 
 ## 다음 슬라이스
 
-MCP 개념을 시작하기 위해 외부 MCP SDK나 실제 프로세스·네트워크 연결 없이, 명시적으로 등록된 순수 Tool 정의를 좁은 교육용 MCP Server catalog로 투영하는 첫 모델을 구현합니다. Tool allowlist와 JSON Schema를 유지하고 파일·셸·네트워크 도구는 등록하지 않습니다.
+MCP Tool 호출 요청을 받기 전 단계로, 신뢰되지 않은 client의 `name`과 JSON 객체 arguments를 좁게 파싱하고 기존 `ToolRegistry.validate_request()`로 재검증하는 전송 계층 없는 call-request 모델을 구현합니다. 실행, STDIO, 네트워크, 외부 MCP SDK, 파일·셸·네트워크 Tool 등록은 계속 하지 않습니다.

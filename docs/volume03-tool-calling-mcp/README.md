@@ -13,5 +13,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 3. [Tool 실행: timeout과 제한된 retry](03-tool-timeout-retry.md) — 재시도가 기존 allowlist를 우회하지 않게 하고 Python timeout의 취소 한계를 확인하는 경계
 4. [Tool 권한: 위험도와 사람 승인](04-tool-authorization-approval.md) — 승인 기록을 요청 전체에 묶되 allowlist와 Schema 검증을 대체하지 않는 경계
 5. [Tool 감사 로그: 최소 데이터로 실행 경계 추적하기](05-tool-audit-log.md) — 원문 인자·결과 없이 성공·거부·실패를 구조화해 남기는 경계
+6. [MCP Tool catalog: 실행 권한 없이 allowlist를 노출하기](06-mcp-tool-catalog.md) — 등록된 순수 Tool 정의만 MCP `tools/list` 형태로 투영하고 실행 경계와 분리하는 첫 모델
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.
