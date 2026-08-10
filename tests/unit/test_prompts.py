@@ -6,16 +6,21 @@ from ai_platform.prompts import (
     InjectionResistantPrompt,
     InjectionRisk,
     InputValidationError,
+    PromptComparisonCase,
     PromptConfigurationError,
     PromptExample,
     PromptSections,
+    PromptVersionError,
     ReActPrompt,
+    RecordedClassification,
     RolePrompt,
     ShotMode,
     ShotPrompt,
     StructuredOutputError,
     StructuredReasoningError,
+    VersionedPrompt,
     assess_injection_risk,
+    compare_recorded_classifications,
     validate_classification_json,
     validate_reasoning_json,
     validate_untrusted_input,
@@ -296,3 +301,81 @@ def test_injection_defense_rejects_invalid_service_configuration() -> None:
         InjectionResistantPrompt("not a template", "정책")  # type: ignore[arg-type]
     with pytest.raises(PromptConfigurationError, match="trust_policy"):
         InjectionResistantPrompt(template(), " ")
+
+
+def versioned_prompt(version: str = "v2") -> VersionedPrompt:
+    """버전 비교 테스트에서 사용하는 고정된 서비스 소유 Prompt를 만든다."""
+    return VersionedPrompt(version, "JSON 계약을 더 명확히 했습니다.", template())
+
+
+def comparison_cases() -> tuple[PromptComparisonCase, ...]:
+    """버전마다 동일하게 적용할 검토 케이스를 만든다."""
+    return (
+        PromptComparisonCase("receipt", "영수증을 다시 받고 싶어요.", "billing"),
+        PromptComparisonCase("reset", "비밀번호를 재설정할 수 없어요.", "technical"),
+    )
+
+
+def test_versioned_prompt_renders_owned_version_metadata_before_untrusted_input() -> None:
+    rendered = versioned_prompt().render("영수증을 다시 받고 싶어요.")
+
+    assert rendered.startswith(
+        "[PROMPT VERSION]\nv2\n\n[CHANGE SUMMARY]\nJSON 계약을 더 명확히 했습니다."
+    )
+    assert rendered.index("[PROMPT VERSION]") < rendered.index("[INSTRUCTION]")
+    assert rendered.index("[CHANGE SUMMARY]") < rendered.index("[UNTRUSTED USER INPUT]")
+
+
+@pytest.mark.parametrize("version", ["2", "v0", "v01", "version-2"])
+def test_versioned_prompt_rejects_ambiguous_version_identifiers(version: str) -> None:
+    with pytest.raises(PromptVersionError, match="version"):
+        versioned_prompt(version)
+
+
+def test_recorded_comparison_reports_schema_and_category_results_without_repairing_json() -> None:
+    comparison = compare_recorded_classifications(
+        versioned_prompt(),
+        comparison_cases(),
+        (
+            RecordedClassification(
+                "receipt", '{"category": "billing", "reason": "영수증 요청"}'
+            ),
+            RecordedClassification("reset", "technical"),
+        ),
+    )
+
+    assert comparison.version == "v2"
+    assert comparison.total_cases == 2
+    assert comparison.schema_valid_count == 1
+    assert comparison.category_match_count == 1
+    assert comparison.schema_valid_rate == 0.5
+    assert comparison.category_accuracy == 0.5
+    assert comparison.cases[1].case_id == "reset"
+    assert comparison.cases[1].schema_valid is False
+    assert comparison.cases[1].category_matches is False
+    assert comparison.cases[1].error_message == (
+        "response does not match the SupportClassification JSON schema"
+    )
+
+
+@pytest.mark.parametrize(
+    "recorded_outputs",
+    [
+        (
+            RecordedClassification("receipt", '{"category": "billing", "reason": "정상"}'),
+        ),
+        (
+            RecordedClassification("receipt", '{"category": "billing", "reason": "정상"}'),
+            RecordedClassification("receipt", '{"category": "technical", "reason": "중복"}'),
+        ),
+        (
+            RecordedClassification("receipt", '{"category": "billing", "reason": "정상"}'),
+            RecordedClassification("unknown", '{"category": "technical", "reason": "알 수 없음"}'),
+        ),
+    ],
+)
+def test_recorded_comparison_rejects_missing_duplicate_or_unknown_case_mappings(
+    recorded_outputs: tuple[RecordedClassification, ...],
+) -> None:
+    with pytest.raises(PromptVersionError, match="recorded_outputs"):
+        compare_recorded_classifications(versioned_prompt(), comparison_cases(), recorded_outputs)
