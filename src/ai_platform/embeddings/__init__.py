@@ -9,6 +9,10 @@ from ai_platform.embeddings.embedding_service import (
     dot_product,
     euclidean_distance,
 )
+from ai_platform.embeddings.reindex_lifecycle import (
+    ReindexLifecycleReport,
+    run_reindex_lifecycle,
+)
 from ai_platform.embeddings.retrieval_evaluation import (
     RetrievalEvaluationError,
     RetrievalMetrics,
@@ -36,6 +40,7 @@ __all__ = [
     "RetrievalEvaluationError",
     "RetrievalMetrics",
     "RetrievalSummary",
+    "ReindexLifecycleReport",
     "SearchResult",
     "VectorDimensionError",
     "VectorPoint",
@@ -46,4 +51,5 @@ __all__ = [
     "evaluate_ranking",
     "mean_retrieval_metrics",
     "meets_score_threshold",
+    "run_reindex_lifecycle",
 ]
