@@ -8,10 +8,12 @@ from ai_platform.reranker import (
     Candidate,
     CrossEncoderModelAdapter,
     RelevanceJudgment,
+    RerankDecision,
     evaluate_graded_ranking,
     evaluate_ranking,
     mean_ranking_metrics,
     measure_rerank,
+    measure_threshold_sweep,
     rerank_with_adapter,
     rerank_with_threshold,
 )
@@ -129,6 +131,63 @@ def _print_adapter_measurement() -> None:
     )
 
 
+def _print_threshold_sweep() -> None:
+    """같은 pair score에서 threshold policy만 바꾼 acceptance/quality trade-off를 측정한다."""
+    thresholds = (1, 303, 304, 305)
+    decision_by_threshold: dict[int, list[tuple[RerankDecision, set[str]]]] = {
+        threshold: [] for threshold in thresholds
+    }
+    pair_evaluations = 0
+    elapsed_ns = 0
+    for query, judgments, candidates in FIXTURES:
+        relevant_ids = {
+            judgment.candidate_id for judgment in judgments if judgment.relevance_grade >= 2
+        }
+        sweep = measure_threshold_sweep(
+            query, candidates, min_scores=thresholds, top_k=1
+        )
+        pair_evaluations += sweep.rerank_measurement.pair_evaluations
+        elapsed_ns += sweep.rerank_measurement.elapsed_ns
+        for decision in sweep.decisions:
+            decision_by_threshold[decision.min_score].append((decision, relevant_ids))
+
+    fixture_count = len(FIXTURES)
+    for threshold in thresholds:
+        decisions = decision_by_threshold[threshold]
+        accepted_count = sum(decision.outcome == "accepted" for decision, _ in decisions)
+        effective_metrics = mean_ranking_metrics(
+            [
+                evaluate_ranking(
+                    []
+                    if decision.selected is None
+                    else [decision.selected.candidate.candidate_id],
+                    relevant_ids,
+                    k=1,
+                )
+                for decision, relevant_ids in decisions
+            ]
+        )
+        conditional_precision = (
+            0.0
+            if accepted_count == 0
+            else sum(
+                decision.selected is not None
+                and decision.selected.candidate.candidate_id in relevant_ids
+                for decision, relevant_ids in decisions
+            )
+            / accepted_count
+        )
+        print(
+            f"threshold={threshold}; candidate_count=3; top_k=1; "
+            f"shared_pair_evaluations={pair_evaluations}; shared_elapsed_ns={elapsed_ns}; "
+            f"accepted={accepted_count}/{fixture_count}; "
+            f"acceptance_rate={accepted_count / fixture_count:.3f}; "
+            f"conditional_precision={conditional_precision:.3f}; "
+            f"effective_precision={effective_metrics.mean_precision_at_k:.3f}; "
+            f"effective_recall={effective_metrics.mean_recall_at_k:.3f}"
+        )
+
+
 def main() -> None:
     """외부 API·모델 다운로드 없이 fixed-fixture rerank sweep을 출력한다."""
     for candidate_count in range(1, 4):
@@ -178,6 +237,7 @@ def main() -> None:
                 f"reranker_graded_ndcg={sum(reranker_graded_ndcg) / fixture_count:.3f}"
             )
 
+    _print_threshold_sweep()
     _print_adapter_measurement()
     no_answer_query, no_answer_candidates = NO_ANSWER_FIXTURE
     decision = rerank_with_threshold(no_answer_query, no_answer_candidates, min_score=1)

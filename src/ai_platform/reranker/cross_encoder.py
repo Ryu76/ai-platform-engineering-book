@@ -118,6 +118,19 @@ class RerankDecision:
     fallback_reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class ThresholdSweepMeasurement:
+    """한 번의 pair scoring 결과에 여러 threshold 정책을 적용한 local 측정값이다.
+
+    Threshold는 이미 계산된 최상위 score를 선택 또는 거부할 뿐 model pair work를 다시
+    수행하지 않는다. 따라서 ``rerank_measurement.pair_evaluations``는 threshold 개수가
+    아니라 reranker에 전달한 candidate 수를 나타낸다.
+    """
+
+    rerank_measurement: RerankMeasurement
+    decisions: tuple[RerankDecision, ...]
+
+
 class CrossEncoderModel(Protocol):
     """외부 또는 local Cross-Encoder 모델이 제공해야 하는 최소 경계다.
 
@@ -286,23 +299,32 @@ def rerank_with_threshold(
     """
     _require_non_negative_integer(min_score, name="min_score")
     ranked = LexicalCrossEncoder().rerank(query, candidates, top_k=top_k)
-    top_result = ranked[0]
-    if top_result.cross_encoder_score >= min_score:
-        return RerankDecision(
-            ranked=ranked,
-            selected=top_result,
-            min_score=min_score,
-            top_score=top_result.cross_encoder_score,
-            outcome="accepted",
-            fallback_reason=None,
-        )
-    return RerankDecision(
-        ranked=ranked,
-        selected=None,
-        min_score=min_score,
-        top_score=top_result.cross_encoder_score,
-        outcome="no_answer",
-        fallback_reason="top_score_below_threshold",
+    return _threshold_decision(ranked, min_score=min_score)
+
+
+def measure_threshold_sweep(
+    query: str,
+    candidates: Sequence[Candidate],
+    *,
+    min_scores: Sequence[int],
+    top_k: int | None = None,
+    clock_ns: Callable[[], int] = perf_counter_ns,
+) -> ThresholdSweepMeasurement:
+    """하나의 local rerank로 여러 threshold의 acceptance/no-answer를 비교한다.
+
+    같은 candidate set과 score에서 policy만 바꾸는 offline sweep이다. threshold마다
+    reranker를 다시 실행하면 pair work와 local elapsed가 정책 수에 비례해 부풀어
+    비교를 왜곡하므로, 이 함수는 pair score를 한 번만 계산하고 그 결과에만 threshold를
+    적용한다. 실제 model/provider latency와 비용을 추정하는 함수는 아니다.
+    """
+    prepared_min_scores = _prepare_min_scores(min_scores)
+    measurement = measure_rerank(query, candidates, top_k=top_k, clock_ns=clock_ns)
+    return ThresholdSweepMeasurement(
+        rerank_measurement=measurement,
+        decisions=tuple(
+            _threshold_decision(measurement.ranked, min_score=min_score)
+            for min_score in prepared_min_scores
+        ),
     )
 
 
@@ -516,6 +538,44 @@ def mean_ranking_metrics(metrics: Sequence[RankingMetrics]) -> RankingSummary:
         mean_reciprocal_rank=sum(metric.reciprocal_rank for metric in metrics) / count,
         mean_ndcg_at_k=sum(metric.ndcg_at_k for metric in metrics) / count,
     )
+
+
+def _threshold_decision(
+    ranked: tuple[RerankedCandidate, ...], *, min_score: int
+) -> RerankDecision:
+    """이미 계산된 ranking의 최상위 후보를 threshold policy로 선택 또는 거부한다."""
+    top_result = ranked[0]
+    if top_result.cross_encoder_score >= min_score:
+        return RerankDecision(
+            ranked=ranked,
+            selected=top_result,
+            min_score=min_score,
+            top_score=top_result.cross_encoder_score,
+            outcome="accepted",
+            fallback_reason=None,
+        )
+    return RerankDecision(
+        ranked=ranked,
+        selected=None,
+        min_score=min_score,
+        top_score=top_result.cross_encoder_score,
+        outcome="no_answer",
+        fallback_reason="top_score_below_threshold",
+    )
+
+
+def _prepare_min_scores(min_scores: Sequence[int]) -> tuple[int, ...]:
+    """sweep policy가 비어 있거나 중복되지 않도록 명시적으로 검증한다."""
+    if isinstance(min_scores, (str, bytes)) or not isinstance(min_scores, Sequence):
+        raise RerankerConfigurationError("min_scores must be a sequence of non-negative integers")
+    prepared = tuple(min_scores)
+    if not prepared:
+        raise RerankerConfigurationError("min_scores must not be empty")
+    for min_score in prepared:
+        _require_non_negative_integer(min_score, name="min_scores")
+    if len(set(prepared)) != len(prepared):
+        raise RerankerConfigurationError("min_scores must not contain duplicates")
+    return prepared
 
 
 def _adapter_fallback_result(

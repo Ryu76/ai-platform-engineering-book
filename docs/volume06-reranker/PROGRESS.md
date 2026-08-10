@@ -3,8 +3,56 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME06_COMPLETE` 미설정
-- 현재 slice: 04 — Cross-Encoder model adapter, batch deadline, timeout/error fallback 계약
+- 현재 slice: 05 — 고정 fixture threshold sweep과 안전한 rerank 미니 프로젝트 contract
 - 범위: 외부 API, 모델 다운로드, GPU, 비밀값, 배포를 사용하지 않았습니다.
+
+## 2026-08-10 — Slice 05 완료
+
+### 추가한 결과물
+
+- `src/ai_platform/reranker/cross_encoder.py`
+  - 불변 `ThresholdSweepMeasurement`와 `measure_threshold_sweep`을 추가했습니다.
+  - 같은 query/candidate ranking은 `measure_rerank`로 정확히 한 번만 pair scoring하고, 고유한 여러 non-negative threshold에는 그 score를 재사용합니다. 빈 policy, 중복, 음수, bool, 문자열 값은 fail-closed로 거부합니다.
+  - `rerank_with_threshold`와 sweep이 같은 `_threshold_decision` 경로를 사용해 boundary acceptance/no-answer 계약을 공유합니다.
+- `examples/volume06/rerank_fixture.py`
+  - 두 deterministic Korean fixture에서 threshold `1/303/304/305`의 acceptance rate, conditional precision, no-answer를 포함한 effective precision/recall을 출력합니다.
+  - 네 threshold 행은 같은 두 rerank 실행을 공유하므로 `shared_pair_evaluations=6`입니다. policy 수로 pair work를 중복 계산하지 않습니다.
+- `tests/unit/test_volume06_reranker.py`
+  - 2개 candidate를 한 번만 score하는 sweep, threshold별 accepted/no-answer 결과, 빈값/중복/음수/bool/문자열 policy 거부를 추가했습니다.
+- `docs/volume06-reranker/05-threshold-sweep-mini-project.md`
+  - threshold policy 평가, acceptance와 conditional/effective quality의 차이, 안전한 `selected` 소비 contract를 14-section 미니 프로젝트로 문서화했습니다.
+
+### 로컬 측정 결과
+
+최종 `uv run python examples/volume06/rerank_fixture.py` 실행의 threshold 행입니다. 두 query × 세 candidate의 score는 threshold와 무관하게 한 번씩만 계산되어 모든 행의 shared pair work는 6입니다.
+
+```text
+threshold=1; candidate_count=3; top_k=1; shared_pair_evaluations=6; shared_elapsed_ns=316300; accepted=2/2; acceptance_rate=1.000; conditional_precision=1.000; effective_precision=1.000; effective_recall=1.000
+threshold=303; candidate_count=3; top_k=1; shared_pair_evaluations=6; shared_elapsed_ns=316300; accepted=2/2; acceptance_rate=1.000; conditional_precision=1.000; effective_precision=1.000; effective_recall=1.000
+threshold=304; candidate_count=3; top_k=1; shared_pair_evaluations=6; shared_elapsed_ns=316300; accepted=1/2; acceptance_rate=0.500; conditional_precision=1.000; effective_precision=0.500; effective_recall=0.500
+threshold=305; candidate_count=3; top_k=1; shared_pair_evaluations=6; shared_elapsed_ns=316300; accepted=0/2; acceptance_rate=0.000; conditional_precision=0.000; effective_precision=0.000; effective_recall=0.000
+```
+
+`shared_elapsed_ns`는 local host 부하에 따라 달라지며 회귀 기준이 아닙니다. acceptance, 선택 결과의 quality, pair count는 의도적으로 설계한 고정 fixture에서만 결정론적입니다. 이 측정은 production model/corpus의 latency, 비용, 품질 주장이 아닙니다.
+
+### 검증 명령과 실제 결과
+
+```bash
+uv run pytest tests/unit/test_volume06_reranker.py -q
+# 39 passed in 0.11s
+uv run ruff check src/ai_platform/reranker examples/volume06 tests/unit/test_volume06_reranker.py
+# All checks passed!
+uv run mypy src/ai_platform/reranker examples/volume06
+# Success: no issues found in 3 source files
+uv run python examples/volume06/rerank_fixture.py
+# 6 candidate/top-k rows, 4 shared-work threshold rows, 1 adapter row, 1 no-answer decision completed
+uv run python scripts/validate_links.py
+# 링크 검증 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+uv run python scripts/validate_code_blocks.py
+# 코드 블록 검증 통과
+```
 
 ## 2026-08-10 — Slice 04 완료
 
@@ -161,10 +209,10 @@ uv run python examples/volume06/rerank_fixture.py
 ## 남은 PRD 완료 조건
 
 - [x] Bi-Encoder와 실제 Cross-Encoder adapter의 경계 및 batch/timeout 정책을 구현·검증한다.
-- [ ] candidate count, top-k, threshold별 품질·지연시간·비용 trade-off를 고정 evaluation set에서 측정한다.
+- [x] candidate count, top-k, threshold별 품질·지연시간·비용 trade-off를 고정 evaluation set에서 측정한다.
 - [x] 다중 relevance judgment, no-answer/fallback, 실패 관측성을 구현·검증한다.
-- [ ] 미니 프로젝트, 권 단위 체크리스트, 다음 Volume 인계를 완료한다.
+- [ ] 권 단위 체크리스트, 다음 Volume 인계, Volume-scoped 주요 용어 정리를 완료한다.
 
 ## 다음 slice
 
-고정 fixture에서 threshold sweep별 acceptance/no-answer 비율과 quality·pair-work trade-off를 측정하고, Volume 06 미니 프로젝트의 최소 end-to-end contract를 추가합니다.
+권 단위 학습자 체크리스트와 Volume 07로 넘길 rerank result/observability contract를 문서화하고, Volume 06-scoped 주요 용어를 정리한 뒤 전체 DoD를 재검증합니다.

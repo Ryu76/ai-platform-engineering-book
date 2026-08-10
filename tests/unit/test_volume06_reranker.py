@@ -18,6 +18,7 @@ from ai_platform.reranker import (
     evaluate_ranking,
     mean_ranking_metrics,
     measure_rerank,
+    measure_threshold_sweep,
     rerank_with_adapter,
     rerank_with_threshold,
 )
@@ -227,6 +228,57 @@ def test_measure_rerank_rejects_clock_that_moves_backwards() -> None:
             "query",
             (Candidate("id", "query", 0.1),),
             clock_ns=lambda: next(readings),
+        )
+
+
+def test_threshold_sweep_scores_candidates_once_and_preserves_each_policy_decision() -> None:
+    """여러 threshold를 비교해도 동일 candidate pair를 다시 계산하면 안 된다."""
+    readings = iter((100, 145))
+    sweep = measure_threshold_sweep(
+        "비밀번호 재설정 방법",
+        (
+            Candidate("weak", "비밀번호 정책", 0.99),
+            Candidate("strong", "비밀번호 재설정 방법", 0.1),
+        ),
+        min_scores=(303, 304),
+        top_k=1,
+        clock_ns=lambda: next(readings),
+    )
+
+    assert sweep.rerank_measurement.candidate_count == 2
+    assert sweep.rerank_measurement.pair_evaluations == 2
+    assert sweep.rerank_measurement.elapsed_ns == 45
+    assert [decision.min_score for decision in sweep.decisions] == [303, 304]
+    assert [decision.outcome for decision in sweep.decisions] == ["accepted", "no_answer"]
+    assert [
+        decision.selected.candidate.candidate_id if decision.selected is not None else None
+        for decision in sweep.decisions
+    ] == ["strong", None]
+    assert [decision.fallback_reason for decision in sweep.decisions] == [
+        None,
+        "top_score_below_threshold",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("min_scores", "message"),
+    [
+        ((), "must not be empty"),
+        ((1, 1), "duplicates"),
+        ((-1,), "min_scores"),
+        ((True,), "min_scores"),
+        ("1", "sequence"),
+    ],
+)
+def test_threshold_sweep_rejects_ambiguous_policy_contracts(
+    min_scores: object, message: str
+) -> None:
+    """비어 있거나 중복·잘못된 threshold policy는 측정 전에 중단한다."""
+    with pytest.raises(RerankerConfigurationError, match=message):
+        measure_threshold_sweep(
+            "query",
+            (Candidate("id", "query", 0.1),),
+            min_scores=min_scores,  # type: ignore[arg-type]
         )
 
 
