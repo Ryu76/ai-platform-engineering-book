@@ -1,0 +1,230 @@
+"""외부 API를 명시적으로 호출하는 OpenAI 호환 LLM 클라이언트."""
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Protocol, cast
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+
+class LlmConfigurationError(ValueError):
+    """필수 설정이 없거나 호출 인자가 유효하지 않을 때 발생한다."""
+
+
+class LlmNetworkError(ConnectionError):
+    """원격 제공자에 연결하지 못했을 때 발생한다."""
+
+
+class LlmRemoteError(RuntimeError):
+    """원격 제공자가 HTTP 오류 응답을 반환했을 때 발생한다."""
+
+
+class LlmResponseError(RuntimeError):
+    """제공자 응답이 예상한 OpenAI 호환 형식이 아닐 때 발생한다."""
+
+
+@dataclass(frozen=True, slots=True)
+class ChatMessage:
+    """대화의 역할과 텍스트 내용을 나타낸다."""
+
+    role: str
+    content: str
+
+    def __post_init__(self) -> None:
+        """지원하는 역할과 비어 있지 않은 내용을 검증한다."""
+        if self.role not in {"system", "user", "assistant"}:
+            raise LlmConfigurationError("message role must be system, user, or assistant")
+        if not self.content.strip():
+            raise LlmConfigurationError("message content must not be empty")
+
+
+@dataclass(frozen=True, slots=True)
+class TokenUsage:
+    """제공자가 반환한 입력·출력 토큰 사용량이다."""
+
+    input_tokens: int
+    output_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
+class LlmResponse:
+    """최소한의 텍스트 응답과 사용량을 제공한다."""
+
+    content: str
+    model: str
+    usage: TokenUsage
+
+
+@dataclass(frozen=True, slots=True)
+class HttpResponse:
+    """전송 계층이 반환하는 HTTP 상태와 JSON 객체다."""
+
+    status_code: int
+    payload: Mapping[str, object]
+
+
+class JsonTransport(Protocol):
+    """테스트에서 네트워크 없이 대체할 수 있는 JSON 전송 경계다."""
+
+    def post_json(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        payload: Mapping[str, object],
+        timeout_seconds: float,
+    ) -> HttpResponse:
+        """JSON POST 요청을 전송하고 HTTP 응답을 반환한다."""
+
+
+class UrllibJsonTransport:
+    """표준 라이브러리만 사용하는 동기 JSON 전송 구현체다."""
+
+    def post_json(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        payload: Mapping[str, object],
+        timeout_seconds: float,
+    ) -> HttpResponse:
+        """POST 요청을 보내되 네트워크 실패를 비밀값 없는 예외로 변환한다."""
+        request = Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=dict(headers),
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=timeout_seconds) as raw_response:  # noqa: S310
+                return HttpResponse(
+                    status_code=raw_response.status,
+                    payload=_decode_json_mapping(raw_response.read()),
+                )
+        except HTTPError as error:
+            return HttpResponse(
+                status_code=error.code,
+                payload=_decode_json_or_empty(error.read()),
+            )
+        except URLError as error:
+            raise LlmNetworkError("LLM provider could not be reached") from error
+
+
+class LlmClient:
+    """명시적 `complete` 호출에서만 원격 LLM API를 사용하는 클라이언트다."""
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        api_key: str | None,
+        base_url: str = "https://api.openai.com/v1",
+        timeout_seconds: float = 30.0,
+        transport: JsonTransport | None = None,
+    ) -> None:
+        """설정을 검증하고 선택적으로 테스트용 전송 계층을 주입한다."""
+        if not model.strip():
+            raise LlmConfigurationError("LLM_MODEL must be configured")
+        if not api_key:
+            raise LlmConfigurationError("OPENAI_API_KEY must be configured before a live call")
+        if not base_url.startswith(("https://", "http://")):
+            raise LlmConfigurationError("LLM_BASE_URL must start with http:// or https://")
+        if timeout_seconds <= 0:
+            raise LlmConfigurationError("timeout_seconds must be greater than zero")
+
+        self._model = model
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
+        self._timeout_seconds = timeout_seconds
+        self._transport = transport or UrllibJsonTransport()
+
+    def complete(self, messages: list[ChatMessage]) -> LlmResponse:
+        """메시지를 전송하고 OpenAI Chat Completions 호환 응답을 해석한다."""
+        if not messages:
+            raise LlmConfigurationError("at least one message is required")
+
+        payload: dict[str, object] = {
+            "model": self._model,
+            "messages": [
+                {"role": message.role, "content": message.content} for message in messages
+            ],
+        }
+        response = self._transport.post_json(
+            url=f"{self._base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            },
+            payload=payload,
+            timeout_seconds=self._timeout_seconds,
+        )
+        if response.status_code < 200 or response.status_code >= 300:
+            raise LlmRemoteError(_remote_error_message(response))
+        return _parse_completion(response.payload, requested_model=self._model)
+
+
+def _decode_json_mapping(body: bytes) -> Mapping[str, object]:
+    """HTTP 본문이 JSON 객체인지 확인해 반환한다."""
+    try:
+        decoded: object = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise LlmResponseError("LLM provider returned invalid JSON") from error
+    if not isinstance(decoded, dict):
+        raise LlmResponseError("LLM provider JSON response must be an object")
+    return cast(Mapping[str, object], decoded)
+
+
+def _decode_json_or_empty(body: bytes) -> Mapping[str, object]:
+    """오류 본문이 JSON이 아니어도 상태 코드를 보존하도록 빈 객체를 반환한다."""
+    try:
+        return _decode_json_mapping(body)
+    except LlmResponseError:
+        return {}
+
+
+def _parse_completion(payload: Mapping[str, object], *, requested_model: str) -> LlmResponse:
+    """Chat Completions 응답에서 첫 번째 텍스트와 사용량을 추출한다."""
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise LlmResponseError("LLM response does not contain choices")
+    first_choice = choices[0]
+    if not isinstance(first_choice, Mapping):
+        raise LlmResponseError("LLM response choice has an invalid shape")
+    message = first_choice.get("message")
+    if not isinstance(message, Mapping):
+        raise LlmResponseError("LLM response choice does not contain a message")
+    content = message.get("content")
+    if not isinstance(content, str):
+        raise LlmResponseError("LLM response message does not contain text content")
+
+    response_model = payload.get("model")
+    model = response_model if isinstance(response_model, str) else requested_model
+    usage = payload.get("usage")
+    usage_mapping = usage if isinstance(usage, Mapping) else {}
+    return LlmResponse(
+        content=content,
+        model=model,
+        usage=TokenUsage(
+            input_tokens=_nonnegative_int(usage_mapping.get("prompt_tokens")),
+            output_tokens=_nonnegative_int(usage_mapping.get("completion_tokens")),
+        ),
+    )
+
+
+def _nonnegative_int(value: object) -> int:
+    """누락되었거나 비정상인 사용량은 0으로 안전하게 처리한다."""
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return 0
+
+
+def _remote_error_message(response: HttpResponse) -> str:
+    """원격 오류 설명은 간단히 만들고 요청 비밀값은 포함하지 않는다."""
+    error = response.payload.get("error")
+    if isinstance(error, Mapping):
+        message = error.get("message")
+        if isinstance(message, str) and message.strip():
+            return f"LLM provider rejected the request ({response.status_code}): {message}"
+    return f"LLM provider rejected the request ({response.status_code})"
