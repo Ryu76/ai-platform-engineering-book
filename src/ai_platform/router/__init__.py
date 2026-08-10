@@ -28,6 +28,14 @@ from ai_platform.router.keyword import (
     KeywordRouter,
     NoConfidentKeywordRouteError,
 )
+from ai_platform.router.llm import (
+    LLMClassifierResponseFixture,
+    LLMRoute,
+    LLMRouteDecision,
+    LLMRouter,
+    NoConfidentLLMRouteError,
+    NoLLMClassifierResponseFixtureError,
+)
 from ai_platform.router.policy import PolicyRouter
 from ai_platform.router.semantic import (
     NoConfidentSemanticRouteError,
@@ -42,7 +50,9 @@ from ai_platform.router.semantic import (
 __all__ = [
     "NoEligibleRouteError",
     "NoConfidentKeywordRouteError",
+    "NoConfidentLLMRouteError",
     "NoConfidentSemanticRouteError",
+    "NoLLMClassifierResponseFixtureError",
     "NoSemanticScoreFixtureError",
     "FallbackRouteDecision",
     "FallbackRouteExhaustedError",
@@ -53,6 +63,10 @@ __all__ = [
     "KeywordRoutingEvaluationReport",
     "KeywordRoutingExpectation",
     "KeywordRoutingOutcome",
+    "LLMClassifierResponseFixture",
+    "LLMRoute",
+    "LLMRouteDecision",
+    "LLMRouter",
     "PolicyFallbackRouter",
     "PolicyRouter",
     "RouteDecision",
