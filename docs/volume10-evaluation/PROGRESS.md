@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 11 — Volume 10 Evaluation**
-- 이번 슬라이스: **고정 사용량 기록의 Latency·Token·Cost 결정론적 집계와 nearest-rank P95·정수 micro USD 계약**
-- 완료 선언: 아직 하지 않음. 회귀 리포트, 미니 프로젝트, 전체 체크리스트가 남아 있습니다.
+- 이번 슬라이스: **동일 골든 계약의 기준선·후보 회귀 리포트와 방향별 무허용 저하 승인 게이트**
+- 완료 선언: 아직 하지 않음. 미니 프로젝트와 전체 체크리스트가 남아 있습니다.
 
 ## 이번 슬라이스 (2026-08-10)
 
@@ -218,13 +218,13 @@ $ uv run python scripts/validate_code_blocks.py && uv run python scripts/validat
 
 ## 알려진 차단 사항
 
-- Volume 10은 여섯 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석, 답변·보류·환각·인용 기준선, Router·Agent 기준선, 고정 Latency·Token·Cost 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
+- Volume 10은 일곱 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석, 답변·보류·환각·인용 기준선, Router·Agent 기준선, 고정 Latency·Token·Cost 기준선, 동일 계약의 회귀 리포트만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
 - 고정 사실 ID 비교는 자연어 주장 의미, 인용 문서의 정확한 구간, 필수 인용의 완전성을 판정하지 않습니다. 사람 검토와 LLM-as-a-Judge는 후속 운영 평가 설계에서 라벨 지침·익명화·판정 변동 통제와 함께 보완해야 합니다.
 - 고정 Top-3 순위와 기록 답변은 평가 계산을 설명하기 위한 입력입니다. 실제 Retriever·LLM·Router·Agent에 연결하는 통합 평가와 데이터셋 변경 승인 정책은 후속 장에서 구현합니다.
 
 ## 다음 작업
 
-- 같은 고정 기준선을 후보 결과와 비교하는 회귀 리포트 계약을 작성합니다.
+- 고정 기준선·후보·정책을 하나의 오프라인 평가 파이프라인으로 조합하는 미니 프로젝트 계약을 작성합니다.
 
 ### Latency·Token·Cost 슬라이스 (2026-08-11)
 
@@ -261,6 +261,52 @@ All checks passed!
 
 $ uv run mypy src/ai_platform/evaluation
 Success: no issues found in 7 source files
+
+$ uv run python scripts/validate_code_blocks.py && uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py
+코드 블록 검증 통과
+문서 검증 통과: Volume 11개
+링크 검증 통과
+```
+
+### 회귀 비교·평가 리포트 슬라이스 (2026-08-11)
+
+- `docs/volume10-evaluation/07-regression-report.md`
+  - PRD 장 구조의 14개 섹션으로 동일 dataset·version·사례 순서 비교, higher/lower 방향, 원래 단위의 절대 허용 저하, 하나의 회귀도 상쇄하지 않는 승인 결정을 작성했습니다.
+  - 라이브 LLM·Router·Agent·도구·네트워크·시계·난수를 사용하지 않는 고정 스냅샷 경계를 명시했습니다.
+- `src/ai_platform/evaluation/regression_report.py`
+  - `EvaluationSnapshot`, `MetricValue`, `RegressionPolicy`, 정책 순서의 결과와 전체 승인 결정을 구현했습니다.
+  - dataset ID·version·사례 ID/순서·지표·정책 완전성, 유한 수치, 방향, 허용치 계약을 검증하고 경계 부동 소수 오차를 안정적으로 처리합니다.
+- `src/ai_platform/evaluation/datasets.py`, `src/ai_platform/evaluation/__init__.py`
+  - 기존 고정 지표에서 계산한 기준선과 `access-reset` Recall 회귀, Agent Task·P95·비용 개선을 가진 고정 후보를 연결했습니다.
+  - 같은 `volume10-support-policy@1.0.0` 다섯 사례에서 Recall@3 0.750000 → 0.500000 때문에 후보를 거부하도록 고정했습니다.
+- `examples/volume10/regression_report.py`
+  - 기준선·후보 delta, 허용 저하, 상태, 최종 `REJECT`를 외부 호출 없이 출력합니다.
+- `tests/evaluation/test_regression_report.py`, `tests/evaluation/test_volume10_completion_contract.py`
+  - 품질 회귀가 비용 개선으로 상쇄되지 않음, 경계 허용치, 평가 계약 불일치, NaN·무한대·불리언, 고정 후보 수치, 일곱 번째 장의 실제 산출물 연결을 검증합니다.
+- `docs/volume10-evaluation/README.md`
+  - 일곱 번째 장과 회귀 리포트 오프라인 실행 경로를 추가했습니다.
+
+#### 검증 기록
+
+```text
+$ uv run python examples/volume10/regression_report.py
+Dataset: volume10-support-policy@1.0.0
+Evaluation cases: 5
+Decision: REJECT
+retrieval.recall_at_3: baseline=0.750000; candidate=0.500000; delta=-0.250000; allowed_degradation=0.000000; status=regression
+answer.answer_accuracy: baseline=0.800000; candidate=0.800000; delta=+0.000000; allowed_degradation=0.000000; status=within_tolerance
+workflow.agent_task_success_rate: baseline=0.600000; candidate=0.800000; delta=+0.200000; allowed_degradation=0.000000; status=improved
+usage.p95_latency_ms: baseline=340.000000; candidate=300.000000; delta=-40.000000; allowed_degradation=0.000000; status=improved
+usage.total_cost_micro_usd: baseline=5240.000000; candidate=5080.000000; delta=-160.000000; allowed_degradation=0.000000; status=improved
+
+$ uv run pytest tests/evaluation -q
+67 passed
+
+$ uv run ruff check src/ai_platform/evaluation tests/evaluation examples/volume10
+All checks passed!
+
+$ uv run mypy src/ai_platform/evaluation
+Success: no issues found in 8 source files
 
 $ uv run python scripts/validate_code_blocks.py && uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py
 코드 블록 검증 통과

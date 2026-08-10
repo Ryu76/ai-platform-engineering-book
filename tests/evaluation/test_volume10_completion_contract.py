@@ -153,3 +153,27 @@ def test_volume10_sixth_chapter_connects_usage_metrics_to_verified_artifacts() -
     )
     assert all(artifact.is_file() for artifact in expected_artifacts)
     assert "](06-latency-token-cost.md)" in readme
+
+
+def test_volume10_seventh_chapter_connects_regression_report_to_verified_artifacts() -> None:
+    """회귀 리포트 장은 동일 계약 비교와 결정론적 거부 실행 경로를 제공해야 한다."""
+    chapter = (VOLUME / "07-regression-report.md").read_text(encoding="utf-8")
+    readme = (VOLUME / "README.md").read_text(encoding="utf-8")
+    expected_artifacts = (
+        ROOT / "src" / "ai_platform" / "evaluation" / "regression_report.py",
+        ROOT / "src" / "ai_platform" / "evaluation" / "datasets.py",
+        ROOT / "examples" / "volume10" / "regression_report.py",
+        ROOT / "tests" / "evaluation" / "test_regression_report.py",
+    )
+
+    assert all(section in chapter for section in REQUIRED_SECTIONS)
+    assert "uv run python examples/volume10/regression_report.py" in chapter
+    assert "uv run pytest tests/evaluation/test_regression_report.py -q" in chapter
+    assert "Decision: REJECT" in chapter
+    assert "retrieval.recall_at_3" in chapter
+    assert (
+        "LLM API · Agent 도구 · Vector DB · 네트워크 · 라이브 시계 · 난수 "
+        "── 사용하지 않음" in chapter
+    )
+    assert all(artifact.is_file() for artifact in expected_artifacts)
+    assert "](07-regression-report.md)" in readme
