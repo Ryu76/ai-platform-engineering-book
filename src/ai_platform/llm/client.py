@@ -496,8 +496,10 @@ def _parse_stream_chunk(payload: Mapping[str, object], *, requested_model: str) 
 
 def _parse_optional_usage(value: object) -> TokenUsage | None:
     """스트림 마지막 이벤트의 선택적 사용량을 읽는다."""
-    if not isinstance(value, Mapping):
+    if value is None:
         return None
+    if not isinstance(value, Mapping):
+        raise LlmResponseError("LLM stream response usage has an invalid shape")
     return TokenUsage(
         input_tokens=_nonnegative_int(value.get("prompt_tokens")),
         output_tokens=_nonnegative_int(value.get("completion_tokens")),

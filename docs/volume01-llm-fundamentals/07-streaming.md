@@ -128,6 +128,7 @@ Mock 테스트의 정상 결과에는 다음과 같은 통과 수가 표시됩�
 |---|---|---|
 | `LLM stream response does not contain choices` | 제공자가 OpenAI 호환 이벤트 형식을 보내지 않았거나 프록시가 응답을 바꿨습니다. | 제공자 문서에서 스트리밍 형식을 확인하고, 원문 이벤트는 비밀값을 제외해 점검합니다. |
 | `LLM stream response has neither choices nor usage` | 빈 이벤트를 JSON 이벤트로 전달했습니다. | SSE 제어 행은 건너뛰고 유효한 `data:` JSON만 전송 계층에서 반환하는지 확인합니다. |
+| `LLM stream response usage has an invalid shape` | 제공자는 사용량을 반환했지만 JSON 객체가 아닙니다. | 사용량이 없으면 필드를 생략하거나 `null`로 두고, 반환한다면 `prompt_tokens`·`completion_tokens`가 있는 객체인지 제공자 형식을 확인합니다. |
 | 글자가 한 번에 보임 | 터미널 또는 프록시가 버퍼링하고 있습니다. | 예제처럼 `flush=True`를 쓰고, Gateway·프록시의 응답 버퍼링 설정을 운영 환경에서 점검합니다. |
 | 사용량이 없음 | 제공자가 스트림 사용량 이벤트를 지원하지 않습니다. | `usage is None`을 정상 상태로 처리하고, 제공자별 계측 정책을 문서화합니다. |
 | 응답이 중간에 끝남 | `max_output_tokens` 상한 또는 네트워크 단절일 수 있습니다. | `finish_reason`을 기록하고, `length`이면 상한·프롬프트 길이·재시도 정책을 검토합니다. |
@@ -162,4 +163,4 @@ Mock 테스트의 정상 결과에는 다음과 같은 통과 수가 표시됩�
 
 ## 14. 핵심 정리
 
-`LlmClient.stream()`은 기존 메시지·생성 파라미터 계약에 `stream: true`만 추가하고 `StreamChunk` iterator를 제공합니다. SSE delta는 표시에는 즉시 사용하되, 최종 저장·검증·위험 작업에는 완성된 결과와 별도 권한 경계를 사용해야 합니다.
+`LlmClient.stream()`은 기존 메시지·생성 파라미터 계약에 `stream: true`만 추가하고 `StreamChunk` iterator를 제공합니다. SSE delta는 표시에는 즉시 사용하되, 최종 저장·검증·위험 작업에는 완성된 결과와 별도 권한 경계를 사용해야 합니다. [다음 오류 처리 장](08-error-handling.md)에서는 시간 초과와 제공자 오류를 제한된 재시도 정책으로 구분합니다.

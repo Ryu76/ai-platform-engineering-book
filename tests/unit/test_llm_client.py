@@ -424,6 +424,17 @@ def test_client_stream_rejects_malformed_event() -> None:
         list(client.stream([ChatMessage(role="user", content="형식을 검사합니다.")]))
 
 
+def test_client_stream_rejects_non_mapping_usage_event() -> None:
+    """사용량은 생략할 수 있지만 제공되면 OpenAI 호환 객체여야 한다."""
+    transport = RecordingStreamTransport(
+        [HttpResponse(status_code=200, payload={"choices": [], "usage": "not-an-object"})]
+    )
+    client = LlmClient(model="offline-test-model", api_key="unit-test-token", transport=transport)
+
+    with pytest.raises(LlmResponseError, match="usage has an invalid shape"):
+        list(client.stream([ChatMessage(role="user", content="사용량 형식을 검사합니다.")]))
+
+
 def test_client_stream_surfaces_provider_error() -> None:
     transport = RecordingStreamTransport(
         [HttpResponse(status_code=503, payload={"error": {"message": "temporarily unavailable"}})]

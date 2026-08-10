@@ -255,3 +255,41 @@ def test_volume01_generation_parameters_is_a_self_contained_safe_contract_chapte
     assert "외부 요청과 비용을 발생시킵니다" in chapter
     assert "네트워크는 사용하지 않습니다" in chapter
     assert "](07-streaming.md)" in chapter
+
+
+def test_volume01_streaming_is_a_self_contained_safe_sse_contract_chapter() -> None:
+    """일곱 번째 장은 delta·종료·선택적 사용량과 Mock SSE 경계를 함께 보존해야 한다."""
+    chapter = (VOLUME / "07-streaming.md").read_text(encoding="utf-8")
+
+    required_sections = (
+        "## 1. 학습 목표",
+        "## 2. 왜 필요한가",
+        "## 3. 핵심 개념",
+        "## 4. 동작 구조",
+        "## 5. 실습 환경",
+        "## 6. 단계별 실습",
+        "## 7. 코드 설명",
+        "## 8. 정상 실행 결과",
+        "## 9. 오류 해결",
+        "## 10. 응용 실습",
+        "## 11. 실무 적용",
+        "## 12. 과제",
+        "## 13. 완료 체크리스트",
+        "## 14. 핵심 정리",
+    )
+
+    assert all(section in chapter for section in required_sections)
+    for concept in (
+        "Streaming",
+        "Server-Sent Events",
+        "delta",
+        "finish reason",
+        "StreamChunk",
+        "Mock StreamTransport",
+        "RecordingStreamTransport",
+    ):
+        assert concept in chapter
+    assert "uv run pytest tests/unit/test_llm_client.py -q" in chapter
+    assert "외부 요청과 비용을 발생시킵니다" in chapter
+    assert "네트워크는 사용하지 않습니다" in chapter
+    assert "](08-error-handling.md)" in chapter
