@@ -1,0 +1,121 @@
+"""Volume 03의 좁은 MCP STDIO JSON-RPC framing·lifecycle 경계를 검사한다."""
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from ai_platform.mcp.stdio import (
+    MCP_PROTOCOL_VERSION,
+    McpStdioError,
+    McpStdioSession,
+    McpStdioState,
+    encode_stdio_jsonrpc_message,
+    parse_stdio_jsonrpc_line,
+)
+
+
+def _initialize_line(*, request_id: str = "initialize-001") -> str:
+    return json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": MCP_PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "0.1.0"},
+            },
+        }
+    ) + "\n"
+
+
+def test_stdio_session_requires_initialize_then_notification_and_emits_response() -> None:
+    session = McpStdioSession()
+
+    response_line = session.receive_line(_initialize_line())
+
+    assert response_line is not None
+    assert response_line.endswith("\n")
+    response = json.loads(response_line)
+    assert response == {
+        "jsonrpc": "2.0",
+        "id": "initialize-001",
+        "result": {
+            "protocolVersion": MCP_PROTOCOL_VERSION,
+            "capabilities": {},
+            "serverInfo": {"name": "volume03-stdio-boundary", "version": "0.1.0"},
+        },
+    }
+    assert session.state is McpStdioState.WAITING_FOR_INITIALIZED
+
+    assert session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n') is None
+    assert session.state is McpStdioState.READY
+
+
+def test_stdio_session_never_dispatches_tool_methods_after_handshake() -> None:
+    session = McpStdioSession()
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    with pytest.raises(McpStdioError, match="no MCP methods are enabled"):
+        session.receive_line(
+            '{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n'
+        )
+
+
+def test_stdio_rejects_out_of_order_messages_without_producing_a_response() -> None:
+    session = McpStdioSession()
+
+    with pytest.raises(McpStdioError, match="first MCP message must be an initialize request"):
+        session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    assert session.state is McpStdioState.WAITING_FOR_INITIALIZE
+
+
+@pytest.mark.parametrize(
+    ("raw_line", "message"),
+    (
+        ('{"jsonrpc":"2.0","method":"initialize"}', "end with one LF"),
+        ('{"jsonrpc":"2.0","method":"initialize"}\r\n', "exactly one LF-delimited"),
+        (
+            '{"jsonrpc":"2.0","method":"initialize"}\n'
+            '{"jsonrpc":"2.0","method":"initialize"}\n',
+            "exactly one LF-delimited",
+        ),
+        ('{"jsonrpc":"2.0","method":"one","method":"two"}\n', "duplicate key"),
+        ('{"jsonrpc":"1.0","method":"initialize"}\n', "version must be exactly 2.0"),
+        ('{"jsonrpc":"2.0","id":null,"method":"initialize"}\n', "id must be a string or integer"),
+        ('{"jsonrpc":"2.0","method":"initialize","extra":true}\n', "unexpected key"),
+    ),
+)
+def test_stdio_parser_rejects_ambiguous_or_invalid_envelopes(raw_line: str, message: str) -> None:
+    with pytest.raises(McpStdioError, match=message):
+        parse_stdio_jsonrpc_line(raw_line)
+
+
+def test_stdio_limits_actual_utf8_bytes_for_input_and_output() -> None:
+    unicode_line = '{"jsonrpc":"2.0","method":"가"}\n'
+
+    with pytest.raises(McpStdioError, match="exceeds 256 bytes"):
+        parse_stdio_jsonrpc_line(unicode_line * 20, max_message_bytes=256)
+    with pytest.raises(McpStdioError, match="exceeds 256 bytes"):
+        encode_stdio_jsonrpc_message({"result": "가" * 100}, max_message_bytes=256)
+
+
+def test_initialize_rejects_unknown_protocol_and_never_advances_lifecycle() -> None:
+    session = McpStdioSession()
+    raw_line = _initialize_line().replace(MCP_PROTOCOL_VERSION, "2099-01-01")
+
+    with pytest.raises(McpStdioError, match="unsupported MCP protocol version"):
+        session.receive_line(raw_line)
+
+    assert session.state is McpStdioState.WAITING_FOR_INITIALIZE
+
+
+def test_closed_stdio_session_rejects_new_input() -> None:
+    session = McpStdioSession()
+    session.close()
+
+    with pytest.raises(McpStdioError, match="session is closed"):
+        session.receive_line(_initialize_line())

@@ -14,6 +14,15 @@ from ai_platform.mcp.requests import (
     parse_mcp_tool_call_request,
 )
 from ai_platform.mcp.resources import McpResourceCatalog, McpResourceError, McpStaticResource
+from ai_platform.mcp.stdio import (
+    MCP_PROTOCOL_VERSION,
+    McpJsonRpcRequest,
+    McpStdioError,
+    McpStdioSession,
+    McpStdioState,
+    encode_stdio_jsonrpc_message,
+    parse_stdio_jsonrpc_line,
+)
 
 __all__ = [
     "McpCallRequestError",
@@ -24,11 +33,18 @@ __all__ = [
     "McpPromptMessage",
     "McpResourceCatalog",
     "McpResourceError",
+    "McpJsonRpcRequest",
     "McpStaticPrompt",
     "McpStaticResource",
+    "McpStdioError",
+    "McpStdioSession",
+    "McpStdioState",
     "McpServerCatalog",
     "McpToolCallRequest",
     "McpToolDefinition",
+    "MCP_PROTOCOL_VERSION",
+    "encode_stdio_jsonrpc_message",
     "parse_mcp_tool_call_request",
+    "parse_stdio_jsonrpc_line",
     "dispatch_mcp_tool_call",
 ]
