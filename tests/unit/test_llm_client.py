@@ -24,6 +24,7 @@ class RecordingTransport:
 
     def __init__(self, response: HttpResponse) -> None:
         self.response = response
+        self.post_json_call_count = 0
         self.url = ""
         self.headers: Mapping[str, str] = {}
         self.payload: Mapping[str, object] = {}
@@ -37,6 +38,7 @@ class RecordingTransport:
         payload: Mapping[str, object],
         timeout_seconds: float,
     ) -> HttpResponse:
+        self.post_json_call_count += 1
         self.url = url
         self.headers = headers
         self.payload = payload
@@ -141,6 +143,26 @@ def test_client_sends_openai_compatible_request_and_parses_response() -> None:
         {"role": "user", "content": "플랫폼은 무엇인가요?"},
     ]
     assert transport.headers["Authorization"] == "Bearer unit-test-token"
+
+
+def test_client_construction_does_not_send_until_complete_is_called() -> None:
+    """Client 생성은 설정 검증만 하고 명시한 완료 요청에서만 전송한다."""
+    transport = RecordingTransport(
+        HttpResponse(
+            status_code=200,
+            payload={"choices": [{"message": {"content": "Mock 응답"}}]},
+        )
+    )
+
+    client = LlmClient(
+        model="offline-test-model",
+        api_key="unit-test-token",
+        transport=transport,
+    )
+
+    assert transport.post_json_call_count == 0
+    client.complete([ChatMessage(role="user", content="전송 시점을 검사합니다.")])
+    assert transport.post_json_call_count == 1
 
 
 def test_client_rejects_missing_key_without_echoing_value() -> None:

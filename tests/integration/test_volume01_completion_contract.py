@@ -181,3 +181,38 @@ def test_volume01_environment_setup_is_a_self_contained_windows_wsl_safe_chapter
         assert boundary in chapter
     assert "네트워크와 API 키를 사용하지 않습니다" in chapter
     assert "](05-first-call.md)" in chapter
+
+
+def test_volume01_first_call_is_a_self_contained_explicit_transport_chapter() -> None:
+    """다섯 번째 장은 명시적 전송, Mock 검증, 비밀값 없는 오류를 함께 설명해야 한다."""
+    chapter = (VOLUME / "05-first-call.md").read_text(encoding="utf-8")
+
+    required_sections = (
+        "## 1. 학습 목표",
+        "## 2. 왜 필요한가",
+        "## 3. 핵심 개념",
+        "## 4. 동작 구조",
+        "## 5. 실습 환경",
+        "## 6. 단계별 실습",
+        "## 7. 코드 설명",
+        "## 8. 정상 실행 결과",
+        "## 9. 오류 해결",
+        "## 10. 응용 실습",
+        "## 11. 실무 적용",
+        "## 12. 과제",
+        "## 13. 완료 체크리스트",
+        "## 14. 핵심 정리",
+    )
+
+    assert all(section in chapter for section in required_sections)
+    for boundary in (
+        "`LlmClient`를 만드는 것만으로는 요청이 전송되지 않으며",
+        "RecordingTransport",
+
+        "uv run --env-file .env python examples/volume01/first_call.py",
+        "실제 제공자에 요청을 보내지 않습니다",
+    ):
+        assert boundary in chapter
+    assert "uv run pytest tests/unit/test_llm_client.py -q" in chapter
+    assert "네트워크와 API 키를 사용하지 않습니다" in chapter
+    assert "](06-system-prompt-and-parameters.md)" in chapter
