@@ -19,11 +19,20 @@ class ActionKind(StrEnum):
     SEND = "send"
 
 
+class RouteKind(StrEnum):
+    """오프라인 Router가 선택할 수 있는 학습용 전문 Node다."""
+
+    RESEARCH = "research"
+    DEVELOPMENT = "development"
+    REVIEW = "review"
+
+
 class WorkflowStatus(StrEnum):
     """START에서 END까지 이동하는 Workflow의 상태다."""
 
     PENDING = "pending"
     PLANNED = "planned"
+    WAITING_FOR_ROUTE_REVIEW = "waiting_for_route_review"
     WAITING_FOR_APPROVAL = "waiting_for_approval"
     READY = "ready"
     COMPLETED = "completed"
@@ -43,6 +52,22 @@ class WorkflowEvent:
 
 
 @dataclass(frozen=True)
+class RouterDecision:
+    """외부 Router를 호출하지 않고 전달받는 결정론적 라우팅 입력이다."""
+
+    route: RouteKind
+    confidence: float
+    source: str = "offline-router"
+
+    def __post_init__(self) -> None:
+        """신뢰도와 출처를 Node 실행 전에 검증한다."""
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("router confidence must be between 0.0 and 1.0")
+        if not self.source.strip():
+            raise ValueError("router source must not be empty")
+
+
+@dataclass(frozen=True)
 class WorkflowState:
     """Node 사이에서 전달되는 불변 상태다."""
 
@@ -51,6 +76,7 @@ class WorkflowState:
     status: WorkflowStatus
     approval_required: bool
     approval_granted: bool | None
+    selected_route: RouteKind | None
     result: str | None
     events: tuple[WorkflowEvent, ...]
 
@@ -66,6 +92,7 @@ class WorkflowState:
             status=WorkflowStatus.PENDING,
             approval_required=action in RISKY_ACTIONS,
             approval_granted=None,
+            selected_route=None,
             result=None,
             events=(),
         )
@@ -77,6 +104,7 @@ class WorkflowState:
         detail: str,
         status: WorkflowStatus | None = None,
         approval_granted: bool | None = None,
+        selected_route: RouteKind | None = None,
         result: str | None = None,
     ) -> WorkflowState:
         """상태 변경과 함께 순서가 정해진 이벤트를 추가한다."""
@@ -87,6 +115,7 @@ class WorkflowState:
             approval_granted=(
                 self.approval_granted if approval_granted is None else approval_granted
             ),
+            selected_route=self.selected_route if selected_route is None else selected_route,
             result=self.result if result is None else result,
             events=(*self.events, event),
         )

@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 첫 장 `01-learning-objectives.md`와 오프라인·결정론적 상태형 Workflow 기반을 출고했습니다.
+- 이번 슬라이스: Conditional Edge와 Router 입력을 받는 다중 Node Workflow를 추가했습니다. Router 결과가 없거나 신뢰도가 낮으면 사람 경로 검토에서 interrupt하고, 위험 작업은 경로 검토 뒤에도 별도의 실행 승인을 요구합니다.
 - 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(Conditional Edge, Router 연동, Planner-Developer-Reviewer, 제한된 재시도와 Error Node, 영속 Checkpoint, Streaming, Subgraph, FastAPI 연동)을 포함한 나머지 장과 Volume Definition of Done이 남아 있습니다.
 
 ## 이번에 완료한 파일
@@ -23,7 +23,13 @@
 - `examples/volume09/single_node_workflow.py`
   - 배포 작업이 승인 전 `waiting_for_approval`에 멈추고 승인 뒤 `completed`가 되는 오프라인 데모를 추가했습니다.
 - `tests/unit/test_volume09_graph.py`
-  - 안전 작업 완료, 위험 작업 interrupt/승인 재개, 거절 미실행, 잘못된 재개, 빈 작업 거부 계약을 추가했습니다.
+  - 안전 작업 완료, 위험 작업 interrupt/승인 재개, 거절 미실행, 잘못된 재개, 빈 작업 거부와 Router 조건 분기 계약을 추가했습니다.
+- `docs/volume09-langgraph/02-conditional-router-workflow.md`
+  - Conditional Edge, RouterDecision 입력 계약, 낮은 신뢰도 fallback, 경로 검토와 위험 작업 승인의 분리를 14개 장 템플릿으로 문서화했습니다.
+- `src/ai_platform/graph/state.py`, `src/ai_platform/graph/nodes.py`, `src/ai_platform/graph/workflow.py`, `src/ai_platform/graph/__init__.py`
+  - `RouterDecision`, `RouteKind`, `RoutedWorkflow`와 `plan → router → specialist → approval → execute` 오프라인 경로를 구현했습니다.
+- `examples/volume09/router_conditional_workflow.py`
+  - 낮은 신뢰도의 `SEND` 요청이 경로 검토, 별도 실행 승인, 거절 종료를 순서대로 거치는 데모를 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다.
 
@@ -41,16 +47,16 @@ result=오프라인 시뮬레이션 완료: deploy / 학습용 배포 계획을 
 events=plan | approval | approval | execute
 
 $ uv run pytest tests/unit/test_volume09_graph.py -q
-5 passed in 0.07s
+9 passed in 0.05s
 
 $ uv run pytest -q
-66 passed in 0.83s
+70 passed in 0.72s
 
-$ uv run ruff check .
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
 All checks passed!
 
-$ uv run mypy src
-Success: no issues found in 12 source files
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 5 source files
 
 $ uv run python scripts/validate_docs.py
 문서 검증 통과: Volume 11개
@@ -78,4 +84,4 @@ $ git diff --check
 
 ## 다음 작업
 
-- 두 번째 장에서 Conditional Edge와 Router 결과를 입력으로 받는 다중 Node Workflow를 추가하고, Router가 없거나 신뢰도가 낮을 때 안전한 fallback/사람 검토로 이동하는 오프라인 테스트를 작성합니다.
+- 세 번째 장에서 Planner-Developer-Reviewer Workflow를 추가하고, 각 역할의 순서·검토 거절 경로·위험 ActionKind의 별도 사람 승인 경계를 오프라인 테스트로 고정합니다.

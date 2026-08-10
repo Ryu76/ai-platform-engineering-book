@@ -1,7 +1,7 @@
 """외부 부작용 없이 상태만 전이하는 Volume 09 학습용 Node."""
 from __future__ import annotations
 
-from ai_platform.graph.state import WorkflowState, WorkflowStatus
+from ai_platform.graph.state import RouteKind, RouterDecision, WorkflowState, WorkflowStatus
 
 
 def plan_node(state: WorkflowState) -> WorkflowState:
@@ -12,6 +12,68 @@ def plan_node(state: WorkflowState) -> WorkflowState:
         node="plan",
         detail=f"'{state.task}' 작업에 대한 오프라인 계획을 만들었습니다.",
         status=WorkflowStatus.PLANNED,
+    )
+
+
+def route_node(
+    state: WorkflowState,
+    *,
+    decision: RouterDecision | None,
+    confidence_threshold: float,
+) -> WorkflowState:
+    """Router 입력을 검증하고 부족한 결정은 사람 검토 interrupt로 보낸다."""
+    if state.status is not WorkflowStatus.PLANNED:
+        raise ValueError("route_node requires a planned state")
+    if not 0.0 <= confidence_threshold <= 1.0:
+        raise ValueError("confidence_threshold must be between 0.0 and 1.0")
+    if decision is None:
+        return state.record(
+            node="router",
+            detail="Router 결정이 없어 사람의 경로 검토를 기다립니다.",
+            status=WorkflowStatus.WAITING_FOR_ROUTE_REVIEW,
+        )
+    if decision.confidence < confidence_threshold:
+        return state.record(
+            node="router",
+            detail=(
+                "Router 신뢰도가 임계값보다 낮아 사람의 경로 검토를 기다립니다: "
+                f"{decision.confidence:.2f} < {confidence_threshold:.2f}."
+            ),
+            status=WorkflowStatus.WAITING_FOR_ROUTE_REVIEW,
+        )
+    return state.record(
+        node="router",
+        detail=f"{decision.source}가 {decision.route.value} 경로를 선택했습니다.",
+        selected_route=decision.route,
+    )
+
+
+def resolve_route_review_node(state: WorkflowState, *, route: RouteKind) -> WorkflowState:
+    """누락되거나 낮은 신뢰도의 Router 결정을 사람이 명시적으로 보완한다."""
+    if state.status is not WorkflowStatus.WAITING_FOR_ROUTE_REVIEW:
+        raise ValueError("resolve_route_review_node requires a route-review waiting state")
+    return state.record(
+        node="route_review",
+        detail=f"사람 검토자가 {route.value} 경로를 선택했습니다.",
+        status=WorkflowStatus.PLANNED,
+        selected_route=route,
+    )
+
+
+def specialist_node(state: WorkflowState) -> WorkflowState:
+    """선택한 연구·개발·검토 Node를 외부 도구 없이 한 번 실행한다."""
+    if state.status is not WorkflowStatus.PLANNED:
+        raise ValueError("specialist_node requires a planned state")
+    if state.selected_route is None:
+        raise ValueError("specialist_node requires a selected route")
+    detail_by_route = {
+        RouteKind.RESEARCH: "연구 Node가 오프라인 조사 계획을 정리했습니다.",
+        RouteKind.DEVELOPMENT: "개발 Node가 오프라인 구현 계획을 정리했습니다.",
+        RouteKind.REVIEW: "검토 Node가 오프라인 검토 계획을 정리했습니다.",
+    }
+    return state.record(
+        node=state.selected_route.value,
+        detail=detail_by_route[state.selected_route],
     )
 
 
