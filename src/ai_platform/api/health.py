@@ -6,6 +6,8 @@ from json import dumps
 from os import getenv
 from typing import TypeAlias
 
+from ai_platform.api.dependencies import environment_dependency_readiness
+
 StartResponse: TypeAlias = Callable[[str, list[tuple[str, str]]], object]  # noqa: UP040
 WsgiApplication: TypeAlias = Callable[[dict[str, object], StartResponse], Iterable[bytes]]  # noqa: UP040
 
@@ -14,12 +16,13 @@ _READY_VALUES = {"true": True, "false": False}
 
 
 def readiness_from_environment() -> bool:
-    """Read the example readiness flag without reading credentials or contacting a dependency."""
+    """Evaluate non-secret example readiness settings without contacting a dependency."""
     value = getenv("AI_PLATFORM_READY", "true").strip().casefold()
     try:
-        return _READY_VALUES[value]
+        application_ready = _READY_VALUES[value]
     except KeyError as error:
         raise ValueError("AI_PLATFORM_READY must be true or false") from error
+    return application_ready and environment_dependency_readiness()
 
 
 def _response(*, status: str, payload: dict[str, str]) -> tuple[str, list[tuple[str, str]], bytes]:
@@ -56,7 +59,10 @@ class HealthApplication:
                 payload={"status": "ok", "service": SERVICE_NAME, "check": "liveness"},
             )
         elif path == "/readyz":
-            ready = self._readiness_check()
+            try:
+                ready = self._readiness_check()
+            except Exception:
+                ready = False
             status, headers, body = _response(
                 status="200 OK" if ready else "503 Service Unavailable",
                 payload={

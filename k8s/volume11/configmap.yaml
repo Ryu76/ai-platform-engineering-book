@@ -5,3 +5,6 @@ metadata:
   namespace: ai-platform-example
 data:
   AI_PLATFORM_READY: "true"
+  # Example policy labels only. They are not hostnames, URLs, or credentials.
+  AI_PLATFORM_REQUIRED_DEPENDENCIES: "qdrant,redis,postgresql"
+  AI_PLATFORM_READY_DEPENDENCIES: "qdrant,redis,postgresql"

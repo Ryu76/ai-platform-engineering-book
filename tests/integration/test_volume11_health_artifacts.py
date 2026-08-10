@@ -30,6 +30,21 @@ def test_health_probe_demo_runs_without_network_or_cluster() -> None:
     assert expected_readiness in result.stdout
 
 
+def test_dependency_readiness_demo_runs_without_network_or_cluster() -> None:
+    """The dependency-policy lesson injects checks rather than reaching real services."""
+    result = run(
+        [sys.executable, "examples/volume11/dependency_readiness_demo.py"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "all-required-dependencies-ready True" in result.stdout
+    assert "redis-unavailable False" in result.stdout
+
+
 def test_probe_manifests_use_example_image_and_distinct_readiness_and_liveness_routes() -> None:
     """Manifests are safe examples, never a deployable production image or embedded secret."""
     deployment = (ROOT / "k8s/volume11/deployment.yaml").read_text(encoding="utf-8")
@@ -42,27 +57,46 @@ def test_probe_manifests_use_example_image_and_distinct_readiness_and_liveness_r
     assert "path: /livez" in deployment
     assert "readOnlyRootFilesystem: true" in deployment
     assert "AI_PLATFORM_READY: \"true\"" in configmap
+    assert "AI_PLATFORM_REQUIRED_DEPENDENCIES: \"qdrant,redis,postgresql\"" in configmap
     assert "type: ClusterIP" in service
     assert "- deployment.yaml" in kustomization
     assert "kind: Secret" not in deployment + configmap + service
 
 
-def test_volume11_entry_chapter_links_to_existing_artifacts_and_offline_verification() -> None:
-    """The first chapter documents the exact files and commands learners can inspect locally."""
-    chapter = (VOLUME / "01-health-probes.md").read_text(encoding="utf-8")
+def test_secret_example_has_a_placeholder_and_is_not_part_of_the_apply_set() -> None:
+    """The required Secret shape teaches separation without storing a usable credential."""
+    secret_example = (ROOT / "k8s/volume11/secret.example.yaml").read_text(encoding="utf-8")
+    kustomization = (ROOT / "k8s/volume11/kustomization.yaml").read_text(encoding="utf-8")
+
+    assert "kind: Secret" in secret_example
+    assert "REPLACE_WITH_APPROVED_SECRET_REFERENCE" in secret_example
+    assert "secret.example.yaml" not in kustomization
+
+
+def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification() -> None:
+    """The chapters document exact local files, commands, and deployment boundaries."""
+    health_chapter = (VOLUME / "01-health-probes.md").read_text(encoding="utf-8")
+    dependency_chapter = (VOLUME / "02-configmap-dependency-readiness.md").read_text(
+        encoding="utf-8"
+    )
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
+    assert "](02-configmap-dependency-readiness.md)" in readme
     for relative_path in (
         "src/ai_platform/api/health.py",
+        "src/ai_platform/api/dependencies.py",
         "examples/volume11/health_probe_demo.py",
+        "examples/volume11/dependency_readiness_demo.py",
         "docker/volume11/Dockerfile",
         "k8s/volume11/deployment.yaml",
+        "k8s/volume11/secret.example.yaml",
     ):
-        assert relative_path in chapter
+        assert relative_path in health_chapter + dependency_chapter
     expected_command = (
         "uv run pytest tests/unit/test_volume11_health.py "
+        "tests/unit/test_volume11_dependencies.py "
         "tests/integration/test_volume11_health_artifacts.py -q"
     )
-    assert expected_command in chapter
-    assert "클러스터에 적용하거나 배포하지 않습니다" in chapter
+    assert expected_command in dependency_chapter
+    assert "클러스터에 적용하거나 배포하지 않습니다" in health_chapter + dependency_chapter

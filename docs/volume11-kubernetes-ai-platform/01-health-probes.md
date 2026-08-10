@@ -24,7 +24,7 @@ liveness probe는 **프로세스가 계속 실행 가능한가**를 확인합니
 - **Liveness probe:** 프로세스가 교착 상태이거나 요청을 처리할 수 없을 때 재시작 판단에 쓰는 검사입니다. 외부 DB의 일시 장애를 여기서 검사하면 불필요한 재시작이 생길 수 있습니다.
 - **Readiness probe:** 초기화 완료와 요청 수신 가능 여부를 Service에 알리는 검사입니다. `503 Service Unavailable`은 이 Pod로의 새 트래픽을 보류해야 한다는 신호로 쓸 수 있습니다.
 - **HTTP 상태 코드:** 이 예제에서 `200 OK`는 검사 통과, `503 Service Unavailable`은 준비되지 않음을 뜻합니다. 정의되지 않은 경로는 `404`, GET 이외 메서드는 `405`입니다.
-- **ConfigMap:** 비밀이 아닌 설정을 Pod에 주입하는 Kubernetes 객체입니다. `k8s/volume11/configmap.yaml`은 실습용 Boolean만 담습니다.
+- **ConfigMap:** 비밀이 아닌 설정을 Pod에 주입하는 Kubernetes 객체입니다. `k8s/volume11/configmap.yaml`은 실습용 Boolean과 비밀 없는 readiness 정책 라벨만 담습니다. 정책과 Secret의 경계는 [다음 장](02-configmap-dependency-readiness.md)에서 다룹니다.
 - **리소스 요청과 제한:** `requests`는 스케줄링 판단의 기준이고 `limits`는 컨테이너가 사용할 수 있는 상한입니다. 예제 값은 측정된 운영 권장값이 아닙니다.
 
 ## 4. 동작 구조
@@ -42,7 +42,7 @@ Kubernetes kubelet                         Service Endpoint Controller
         │
         └── liveness 실패 시에만 재시작 정책의 후보가 됨
 
-ConfigMap: AI_PLATFORM_READY=true|false
+ConfigMap: AI_PLATFORM_READY=true|false (+ 비밀 없는 정책 라벨)
         │
         └── 예제 readiness 판단에만 주입; Secret이나 실제 의존성 주소는 없음
 ```
