@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 프로세스 재생성 뒤에도 재개되는 `JsonFileCheckpointer`를 추가했습니다. 명시한 기존 로컬 디렉터리의 단일 JSON 파일만 사용하며, run ID별 State를 엄격한 스키마로 검증하고 임시 파일의 원자적 교체로 기록합니다. 위험 ActionKind는 복원 뒤에도 사람 실행 승인 전 `WAITING_FOR_APPROVAL`에 유지됩니다. 자격 증명 표식이 있는 State·run ID와 손상 JSON은 실행 전에 거부합니다.
-- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(Streaming, Subgraph, FastAPI 연동)과 Volume Definition of Done의 나머지 항목이 남아 있습니다.
+- 이번 슬라이스: 완료된 Node 전이를 `StreamUpdate`로 내보내는 `StreamingWorkflow`를 추가했습니다. 업데이트는 구독자에게 전달되기 전에 Checkpoint에 저장되고, 순번·Node·상태를 함께 전달합니다. 위험 ActionKind의 초기 스트림은 `WAITING_FOR_APPROVAL`에서 끝나며 명시적 사람 승인 뒤 재개 스트림에서만 `execute` 업데이트가 생성됩니다. 모든 실행은 오프라인·결정론적 시뮬레이션입니다.
+- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(Subgraph, FastAPI 연동)과 Volume Definition of Done의 나머지 항목이 남아 있습니다.
 
 ## 이번에 완료한 파일
 
@@ -56,6 +56,16 @@
   - 임시 디렉터리에서 새 Workflow 인스턴스가 `DEPLOY` 승인 대기 상태를 복원한 뒤 명시적 승인으로만 오프라인 완료하는 데모를 추가했습니다.
 - `tests/unit/test_volume09_graph.py`
   - 새 인스턴스 복원, 승인 경계 유지, 민감정보 표식 거부, 손상 JSON 거부 계약을 추가했습니다.
+- `docs/volume09-langgraph/06-streaming-state-updates.md`
+  - 상태 Streaming, Checkpoint-before-yield, 위험 작업의 승인 전 `execute` 부재를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 여섯 번째 장 링크와 상태 Streaming 출고 범위를 반영했습니다.
+- `src/ai_platform/graph/state.py`, `src/ai_platform/graph/workflow.py`, `src/ai_platform/graph/__init__.py`
+  - 마지막 감사 이벤트와 불변 State를 함께 전달하는 `StreamUpdate`, 저장 뒤 출력하는 `StreamingWorkflow`, 승인 뒤 재개 스트림을 추가했습니다.
+- `examples/volume09/streaming_workflow.py`
+  - `DEPLOY`의 초기 상태 스트림이 승인 대기에서 멈추고, 명시적 승인 뒤에만 `execute`를 출력하는 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 안전 작업의 고정 상태 순서, 위험 작업 승인 전 `execute` 부재, 승인·거절 재개 계약을 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다.
 
@@ -159,6 +169,42 @@ $ uv run python scripts/validate_code_blocks.py
 
 $ uv run python scripts/check_secrets.py
 비밀값 검사 통과
+
+$ uv run python examples/volume09/streaming_workflow.py
+initial_stream
+1:plan status=planned detail='학습용 배포를 준비한다' 작업에 대한 오프라인 계획을 만들었습니다.
+2:approval status=waiting_for_approval detail=deploy 작업은 사람 승인을 기다립니다.
+checkpoint=waiting_for_approval
+approved_resume_stream
+3:approval status=ready detail=사람 승인을 받았습니다. 실행 시뮬레이션으로 이동합니다.
+4:execute status=completed detail=외부 시스템을 변경하지 않는 결정론적 실행 결과를 만들었습니다.
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+23 passed in 0.21s
+
+$ uv run pytest -q
+84 passed in 0.76s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 5 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
 ```
 
 > [!NOTE]
@@ -171,4 +217,4 @@ $ uv run python scripts/check_secrets.py
 
 ## 다음 작업
 
-- 다음 장에서 외부 API 없이 순서가 고정된 Streaming 상태 출력을 추가하고, 위험 ActionKind의 승인 대기 중에는 실행 이벤트가 스트리밍되지 않는 계약을 테스트합니다.
+- 다음 장에서 외부 API 없이 Planner-Developer-Reviewer 역할을 합성하는 고정 순서 Subgraph를 추가하고, 부모 Workflow의 위험 ActionKind 승인 경계가 Subgraph 완료 뒤에도 유지되는 계약을 테스트합니다.

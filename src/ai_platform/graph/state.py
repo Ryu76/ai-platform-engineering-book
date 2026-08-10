@@ -55,6 +55,20 @@ class WorkflowEvent:
 
 
 @dataclass(frozen=True)
+class StreamUpdate:
+    """한 Node 전이 뒤 구독자에게 전달하는 결정론적 상태 업데이트다.
+
+    토큰이나 네트워크 스트림이 아니라, 이미 완료된 한 Node 전이를 나타낸다.
+    ``state``는 해당 이벤트를 포함한 불변 스냅샷이므로 구독자는 부분 변경을 추측하지
+    않고 상태와 이벤트 순서를 함께 검사할 수 있다.
+    """
+
+    run_id: str
+    state: WorkflowState
+    event: WorkflowEvent
+
+
+@dataclass(frozen=True)
 class RouterDecision:
     """외부 Router를 호출하지 않고 전달받는 결정론적 라우팅 입력이다."""
 

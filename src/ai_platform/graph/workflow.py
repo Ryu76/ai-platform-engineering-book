@@ -1,6 +1,8 @@
 """START에서 END까지 전이하는 오프라인 Workflow 참조 모델."""
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from ai_platform.graph.checkpointer import Checkpointer, MemoryCheckpointer
 from ai_platform.graph.nodes import (
     approval_node,
@@ -21,6 +23,7 @@ from ai_platform.graph.state import (
     ReviewDecision,
     RouteKind,
     RouterDecision,
+    StreamUpdate,
     WorkflowState,
     WorkflowStatus,
 )
@@ -59,6 +62,50 @@ class DeterministicWorkflow:
     def checkpoint(self, *, run_id: str) -> WorkflowState:
         """검증 또는 표시를 위해 최신 Checkpoint를 읽는다."""
         return self._checkpointer.load(run_id=run_id)
+
+
+class StreamingWorkflow:
+    """완료된 Node 전이를 순서대로 내보내는 오프라인 상태 Streaming Workflow다.
+
+    이 클래스는 LLM 토큰이나 Server-Sent Event를 전송하지 않는다. 각 업데이트는 하나의
+    Node 전이 후 저장된 불변 상태다. 위험 작업은 명시적 ``resume_stream(..., approved=True)``
+    전까지 approval 업데이트까지만 내보내며 execute 업데이트를 만들지 않는다.
+    """
+
+    def __init__(self, *, checkpointer: Checkpointer | None = None) -> None:
+        """선택한 Checkpointer와 상태 업데이트 스트림을 연결한다."""
+        self._checkpointer = checkpointer or MemoryCheckpointer()
+
+    def stream(
+        self, *, run_id: str, task: str, action: ActionKind
+    ) -> Iterator[StreamUpdate]:
+        """START 뒤 각 완료 Node의 저장된 상태 업데이트를 순서대로 내보낸다."""
+        state = WorkflowState.start(task=task, action=action)
+        state = plan_node(state)
+        yield self._save_and_update(run_id=run_id, state=state)
+        state = approval_node(state)
+        yield self._save_and_update(run_id=run_id, state=state)
+        if state.status is WorkflowStatus.READY:
+            state = execute_node(state)
+            yield self._save_and_update(run_id=run_id, state=state)
+
+    def resume_stream(self, *, run_id: str, approved: bool) -> Iterator[StreamUpdate]:
+        """사람 결정을 기록한 뒤 허용된 Node 전이만 순서대로 내보낸다."""
+        state = self._checkpointer.load(run_id=run_id)
+        state = resolve_approval_node(state, approved=approved)
+        yield self._save_and_update(run_id=run_id, state=state)
+        if state.status is WorkflowStatus.READY:
+            state = execute_node(state)
+            yield self._save_and_update(run_id=run_id, state=state)
+
+    def checkpoint(self, *, run_id: str) -> WorkflowState:
+        """검증 또는 표시를 위해 최신 Checkpoint를 읽는다."""
+        return self._checkpointer.load(run_id=run_id)
+
+    def _save_and_update(self, *, run_id: str, state: WorkflowState) -> StreamUpdate:
+        """각 업데이트를 내보내기 전에 Checkpoint와 마지막 이벤트를 고정한다."""
+        self._checkpointer.save(run_id=run_id, state=state)
+        return StreamUpdate(run_id=run_id, state=state, event=state.events[-1])
 
 
 class RoutedWorkflow:

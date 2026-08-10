@@ -16,6 +16,7 @@ from ai_platform.graph import (
     RoutedWorkflow,
     RouteKind,
     RouterDecision,
+    StreamingWorkflow,
     WorkflowState,
     WorkflowStatus,
 )
@@ -389,3 +390,73 @@ def test_json_file_checkpoint_rejects_a_corrupt_payload(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="not valid JSON"):
         JsonFileCheckpointer(path=checkpoint_path).load(run_id="persistent-safe-001")
+
+
+def test_streaming_workflow_emits_saved_node_updates_in_fixed_safe_order() -> None:
+    """안전 작업의 상태 스트림은 저장 뒤 plan, approval, execute 순서로 끝난다."""
+    workflow = StreamingWorkflow()
+
+    updates = list(
+        workflow.stream(
+            run_id="stream-safe-001",
+            task="로컬 문서를 읽는다",
+            action=ActionKind.READ,
+        )
+    )
+
+    assert [update.event.node for update in updates] == ["plan", "approval", "execute"]
+    assert [update.state.status for update in updates] == [
+        WorkflowStatus.PLANNED,
+        WorkflowStatus.READY,
+        WorkflowStatus.COMPLETED,
+    ]
+    assert [update.event.sequence for update in updates] == [1, 2, 3]
+    assert updates[-1].state == workflow.checkpoint(run_id="stream-safe-001")
+    assert updates[-1].state.result == "오프라인 시뮬레이션 완료: read / 로컬 문서를 읽는다"
+
+
+def test_streaming_workflow_holds_risky_execution_until_explicit_approval() -> None:
+    """위험 작업은 초기 스트림에 execute를 만들지 않고 승인 재개 뒤에만 만든다."""
+    workflow = StreamingWorkflow()
+
+    waiting_updates = list(
+        workflow.stream(
+            run_id="stream-risky-001",
+            task="학습용 배포를 준비한다",
+            action=ActionKind.DEPLOY,
+        )
+    )
+
+    assert [update.event.node for update in waiting_updates] == ["plan", "approval"]
+    assert waiting_updates[-1].state.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert "execute" not in [update.event.node for update in waiting_updates]
+    assert workflow.checkpoint(run_id="stream-risky-001") == waiting_updates[-1].state
+
+    resumed_updates = list(
+        workflow.resume_stream(run_id="stream-risky-001", approved=True)
+    )
+
+    assert [update.event.node for update in resumed_updates] == ["approval", "execute"]
+    assert [update.state.status for update in resumed_updates] == [
+        WorkflowStatus.READY,
+        WorkflowStatus.COMPLETED,
+    ]
+    assert resumed_updates[-1].state.approval_granted is True
+
+
+def test_streaming_workflow_emits_no_execute_update_when_risky_action_is_rejected() -> None:
+    """거절된 위험 작업은 approval 결정만 스트리밍하고 execute를 생략한다."""
+    workflow = StreamingWorkflow()
+    list(
+        workflow.stream(
+            run_id="stream-rejected-001",
+            task="임시 파일을 삭제한다",
+            action=ActionKind.DELETE,
+        )
+    )
+
+    updates = list(workflow.resume_stream(run_id="stream-rejected-001", approved=False))
+
+    assert [update.event.node for update in updates] == ["approval"]
+    assert updates[-1].state.status is WorkflowStatus.REJECTED
+    assert updates[-1].state.result is None
