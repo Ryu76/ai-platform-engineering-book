@@ -23,6 +23,13 @@
 - 기본 `PENDING`은 consensus recommendation에서 멈추고, `APPROVED`에서만 `completed`가 된다. `REJECTED`는 모든 Agent 호출 전에 종료한다. 합의하지 못하면 `conflict_limit_reached`로 fail-closed한다.
 - `examples/volume07/offline_conflict_resolution.py`와 `tests/volume07/test_bounded_conflict_resolution.py`는 API·비밀값·장기 메모리 없이 이 경계를 재현하고 검증한다.
 
+## 2026-08-10 — Slice 04: 승인 게이트가 있는 로컬 Release Handoff
+
+- `src/ai_platform/agents/release_handoff.py`에 Planner, Developer, Reviewer, QA, DevOps용 결정론적 Mock 경계와 immutable handoff audit message 모델을 추가했다.
+- `ApprovalGatedReleaseHandoffWorkflow`는 Developer/Reviewer 재작업을 `max_review_cycles` 양의 정수로 제한한다. Reviewer 결정 누락, 빈 응답, script 소진은 다음 역할이나 fallback 없이 fail-closed한다.
+- 기본 `HumanApproval.PENDING`은 Reviewer 승인 audit trail에서 멈춘다. `APPROVED`일 때만 QA와 DevOps가 순서대로 호출되어 **로컬 handoff note**를 만들며, 배포·네트워크·도구 실행은 구현하지 않는다. `REJECTED`는 모든 역할 호출 전에 종료한다.
+- `examples/volume07/offline_release_handoff.py`와 `tests/volume07/test_approval_gated_release_handoff.py`로 역할별 결과 공유, 승인 게이트, 재작업 상한, 거절, protocol 오류와 script 소진의 fail-closed 동작을 API·비밀값 없이 재현하고 검증한다.
+
 ## 완료 상태
 
 Volume 07 전체 PRD Definition of Done은 아직 완료되지 않았다. 따라서 `VOLUME07_COMPLETE=true`는 설정하지 않았고, cron self-pause도 하지 않는다.

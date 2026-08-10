@@ -23,6 +23,11 @@ from ai_platform.agents.delegation import (
     DeterministicMockWorker,
     WorkerResponse,
 )
+from ai_platform.agents.release_handoff import (
+    ApprovalGatedReleaseHandoffWorkflow,
+    ReleaseHandoffResult,
+    ReleaseHandoffStatus,
+)
 from ai_platform.agents.workflow import (
     AgentContext,
     AgentMessage,
@@ -39,6 +44,7 @@ from ai_platform.agents.workflow import (
 
 __all__ = [
     "ApprovalGatedDelegationWorkflow",
+    "ApprovalGatedReleaseHandoffWorkflow",
     "AgentContext",
     "AgentMessage",
     "AgentProtocolError",
@@ -64,6 +70,8 @@ __all__ = [
     "DelegationTask",
     "HumanApproval",
     "ReviewDecision",
+    "ReleaseHandoffResult",
+    "ReleaseHandoffStatus",
     "WorkflowConfigurationError",
     "WorkflowResult",
     "WorkflowStatus",
