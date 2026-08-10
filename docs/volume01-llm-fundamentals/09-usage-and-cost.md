@@ -124,7 +124,7 @@ estimate = estimate_cost(response.usage, pricing)
 
 ## 7. 코드 설명
 
-`estimate_cost()`는 `TokenUsage`의 두 값이 0 이상의 정수인지 검사한 뒤, 각 값에 100만 토큰당 가격을 곱합니다. `CostEstimate`는 입력 비용·출력 비용·합계를 분리하므로 출력 토큰 증가가 비용에 미치는 영향을 확인할 수 있습니다. 함수는 네트워크, 환율 조회, 반올림을 수행하지 않아 테스트 결과가 항상 같습니다.
+`estimate_cost()`는 `TokenUsage`의 두 값이 0 이상의 정수인지 검사한 뒤, 각 값에 100만 토큰당 가격을 곱합니다. `CostEstimate`는 입력 비용·출력 비용·합계를 분리하므로 출력 토큰 증가가 비용에 미치는 영향을 확인할 수 있습니다. 수동으로 `CostEstimate`를 만들 때도 각 금액은 유한한 0 이상의 `Decimal`이어야 하고, `총액 = 입력 비용 + 출력 비용` 및 세 글자 대문자 통화 코드 계약을 만족해야 합니다. 따라서 음수 총액이나 합계가 맞지 않는 값을 만들어 예산 검사를 우회할 수 없습니다. 함수는 네트워크, 외부 가격 조회, 환율 변환, 반올림을 수행하지 않아 테스트 결과가 항상 같습니다.
 
 `ModelPricing`과 `CostBudget`은 `Decimal`과 대문자 세 글자 통화 코드를 검증합니다. 서로 다른 통화를 숫자로 직접 비교하면 환율이라는 숨은 가정이 들어가므로 `CostBudget.require_within()`은 통화가 다르면 실패합니다. 환율 변환은 별도 데이터 출처·시점·반올림 정책이 필요한 운영 기능이므로 이 기초 모듈에 넣지 않습니다.
 
@@ -143,7 +143,7 @@ estimate = estimate_cost(response.usage, pricing)
 단위 테스트는 이후 장에서 테스트가 추가되어도 이 파일만 실행하면 다음과 유사하게 표시됩니다.
 
 ```text
-13 passed
+18 passed
 ```
 
 ## 9. 오류 해결
@@ -152,6 +152,7 @@ estimate = estimate_cost(response.usage, pricing)
 |---|---|---|
 | `... must be a Decimal` | 가격 또는 예산을 `float`나 문자열로 전달했습니다. | `Decimal("2.50")`처럼 문자열에서 만든 `Decimal`을 사용합니다. |
 | `... must be a finite nonnegative Decimal` | 음수, `NaN`, `Infinity` 가격·예산입니다. | 제공자 가격표를 다시 확인하고 0 이상의 유한한 값을 설정합니다. |
+| `total_cost must equal input_cost plus output_cost` | 수동으로 만든 추정값의 합계가 입력·출력 비용과 다릅니다. | 비용 항목을 다시 계산하고 직접 만든 `CostEstimate` 대신 `estimate_cost()`를 사용합니다. |
 | `estimate currency must match budget currency` | USD 추정과 KRW 예산처럼 서로 다른 통화를 비교했습니다. | 같은 통화만 비교하거나, 출처·시점·반올림을 명시한 별도 환율 변환 모듈을 설계합니다. |
 | `CostBudgetExceeded` | 기록 또는 보수적 추정 비용이 상한보다 큽니다. | 문맥·출력 상한·모델 선택을 줄이고, 승인된 예산 정책을 검토합니다. 예외를 무시하지 않습니다. |
 | 사용량이 모두 0 | 제공자가 사용량을 생략했거나 응답 형식이 다릅니다. | 0 비용으로 기록하지 말고 제공자 응답·계측 정책을 확인합니다. |
@@ -187,3 +188,5 @@ estimate = estimate_cost(response.usage, pricing)
 ## 14. 핵심 정리
 
 `TokenUsage`는 LLM 응답의 입력·출력 사용량을 보관하고, `ModelPricing`과 `estimate_cost()`는 이를 결정론적인 `Decimal` 추정 비용으로 바꿉니다. `CostBudget`은 같은 통화의 추정 상한을 검사하지만 실제 제공자 결제를 차단하지는 않습니다. 가격표와 사용량 수신 여부를 함께 기록하고, 호출 전에는 보수적인 토큰 상한·제공자 예산 정책으로 비용을 별도로 통제해야 합니다.
+
+다음 장에서는 이 안전한 사용량 경계를 유지한 채 [안전한 CLI 챗봇](10-cli-chatbot.md)을 오프라인으로 실행하고, 빈 입력·종료 명령·대화 이력의 경계를 확인합니다.

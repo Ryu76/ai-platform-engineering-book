@@ -331,3 +331,45 @@ def test_volume01_error_handling_is_a_self_contained_safe_retry_chapter() -> Non
     assert "외부 요청과 비용을 발생시킬 수 있습니다" in chapter
     assert "API 키와 네트워크를 사용하지 않습니다" in chapter
     assert "](09-usage-and-cost.md)" in chapter
+
+
+def test_volume01_usage_and_cost_is_a_self_contained_offline_budget_chapter() -> None:
+    """아홉 번째 장은 사용량·Decimal 가격·로컬 예산 검사의 한계를 보존해야 한다."""
+    chapter = (VOLUME / "09-usage-and-cost.md").read_text(encoding="utf-8")
+
+    required_sections = (
+        "## 1. 학습 목표",
+        "## 2. 왜 필요한가",
+        "## 3. 핵심 개념",
+        "## 4. 동작 구조",
+        "## 5. 실습 환경",
+        "## 6. 단계별 실습",
+        "## 7. 코드 설명",
+        "## 8. 정상 실행 결과",
+        "## 9. 오류 해결",
+        "## 10. 응용 실습",
+        "## 11. 실무 적용",
+        "## 12. 과제",
+        "## 13. 완료 체크리스트",
+        "## 14. 핵심 정리",
+    )
+
+    assert all(section in chapter for section in required_sections)
+    for concept in (
+        "입력 토큰",
+        "출력 토큰",
+        "Decimal",
+        "ModelPricing",
+        "CostEstimate",
+        "CostBudget",
+        "CostBudgetExceeded",
+        "제공자 청구 한도",
+        "사용량 미수신",
+        "외부 가격 조회",
+    ):
+        assert concept in chapter
+    assert "uv run python examples/volume01/usage_and_cost.py" in chapter
+    assert "uv run pytest tests/unit/test_usage.py -q" in chapter
+    assert "API 키, 제공자 계정, 외부 네트워크를 사용하지 않습니다" in chapter
+    assert "실제 청구서와 동일하다고 가정하지 않습니다" in chapter
+    assert "](10-cli-chatbot.md)" in chapter

@@ -45,6 +45,15 @@ class CostEstimate:
     total_cost: Decimal
     currency: str
 
+    def __post_init__(self) -> None:
+        """수동 생성한 추정값도 유한한 금액·통화·합계 계약을 지키게 한다."""
+        _validate_nonnegative_decimal(self.input_cost, "input_cost")
+        _validate_nonnegative_decimal(self.output_cost, "output_cost")
+        _validate_nonnegative_decimal(self.total_cost, "total_cost")
+        _validate_currency(self.currency)
+        if self.input_cost + self.output_cost != self.total_cost:
+            raise UsageConfigurationError("total_cost must equal input_cost plus output_cost")
+
 
 @dataclass(frozen=True, slots=True)
 class CostBudget:

@@ -5,6 +5,7 @@ import pytest
 from ai_platform.llm import (
     CostBudget,
     CostBudgetExceeded,
+    CostEstimate,
     ModelPricing,
     TokenUsage,
     UsageConfigurationError,
@@ -59,6 +60,33 @@ def test_budget_rejects_an_estimate_with_a_different_currency() -> None:
 
     with pytest.raises(UsageConfigurationError, match="currency"):
         CostBudget(maximum_cost=Decimal("1"), currency="USD").require_within(estimate)
+
+
+@pytest.mark.parametrize(
+    ("input_cost", "output_cost", "total_cost", "currency", "expected_message"),
+    [
+        (Decimal("-0.01"), Decimal("0"), Decimal("0"), "USD", "input_cost"),
+        (Decimal("0"), Decimal("NaN"), Decimal("0"), "USD", "output_cost"),
+        (Decimal("0"), Decimal("0"), Decimal("Infinity"), "USD", "total_cost"),
+        (Decimal("0.001"), Decimal("0.002"), Decimal("0.002"), "USD", "total_cost"),
+        (Decimal("0"), Decimal("0"), Decimal("0"), "usd", "currency"),
+    ],
+)
+def test_cost_estimate_rejects_invalid_or_non_additive_manual_values(
+    input_cost: Decimal,
+    output_cost: Decimal,
+    total_cost: Decimal,
+    currency: str,
+    expected_message: str,
+) -> None:
+    """예산 검사를 우회할 수 있는 잘못된 수동 추정값을 만들 수 없어야 한다."""
+    with pytest.raises(UsageConfigurationError, match=expected_message):
+        CostEstimate(
+            input_cost=input_cost,
+            output_cost=output_cost,
+            total_cost=total_cost,
+            currency=currency,
+        )
 
 
 @pytest.mark.parametrize(
