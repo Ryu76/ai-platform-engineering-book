@@ -4,9 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from ai_platform.graph import (
     ActionKind,
+    ApprovalRequest,
     DeterministicWorkflow,
     JsonFileCheckpointer,
     PlannerDeveloperReviewerWorkflow,
@@ -16,8 +18,11 @@ from ai_platform.graph import (
     RoutedWorkflow,
     RouteKind,
     RouterDecision,
+    RunIdPath,
+    StartWorkflowRequest,
     StreamingWorkflow,
     SubgraphWorkflow,
+    WorkflowApiAdapter,
     WorkflowState,
     WorkflowStatus,
 )
@@ -512,3 +517,69 @@ def test_streaming_workflow_emits_no_execute_update_when_risky_action_is_rejecte
     assert [update.event.node for update in updates] == ["approval"]
     assert updates[-1].state.status is WorkflowStatus.REJECTED
     assert updates[-1].state.result is None
+
+
+def test_api_adapter_keeps_risky_start_request_at_the_approval_boundary() -> None:
+    """HTTP 형태의 DEPLOY 요청도 별도 사람 승인 전에는 execute를 만들지 않는다."""
+    adapter = WorkflowApiAdapter()
+
+    waiting = adapter.start(
+        request=StartWorkflowRequest.model_validate(
+            {
+                "run_id": "api-risky-001",
+                "task": "학습용 배포를 준비한다",
+                "action": "deploy",
+            }
+        )
+    )
+
+    assert waiting.run_id == "api-risky-001"
+    assert waiting.action is ActionKind.DEPLOY
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert waiting.approval_required is True
+    assert waiting.approval_granted is None
+    assert [event.node for event in waiting.events] == ["plan", "approval"]
+    assert "execute" not in [event.node for event in waiting.events]
+    assert waiting.model_dump(mode="json")["status"] == "waiting_for_approval"
+
+
+def test_api_adapter_requires_a_strict_separate_approval_request() -> None:
+    """문자열 승인과 거절 결정은 위험 실행을 허용하지 않는다."""
+    adapter = WorkflowApiAdapter()
+    adapter.start(
+        request=StartWorkflowRequest(
+            run_id="api-rejected-001",
+            task="학습용 메시지를 전송한다",
+            action=ActionKind.SEND,
+        )
+    )
+
+    with pytest.raises(ValidationError):
+        ApprovalRequest.model_validate({"approved": "true"})
+
+    rejected = adapter.resume(
+        run_id="api-rejected-001",
+        request=ApprovalRequest(approved=False),
+    )
+
+    assert rejected.status is WorkflowStatus.REJECTED
+    assert rejected.approval_granted is False
+    assert rejected.result is None
+    assert [event.node for event in rejected.events] == ["plan", "approval", "approval"]
+    assert "execute" not in [event.node for event in rejected.events]
+
+
+def test_api_request_models_reject_extra_fields_and_blank_path_run_id() -> None:
+    """HTTP 경계는 계약 밖 입력을 Workflow나 Checkpointer에 전달하지 않는다."""
+    with pytest.raises(ValidationError):
+        StartWorkflowRequest.model_validate(
+            {
+                "run_id": "api-invalid-001",
+                "task": "로컬 문서를 읽는다",
+                "action": "read",
+                "approved": True,
+            }
+        )
+
+    with pytest.raises(ValidationError):
+        RunIdPath(run_id="   ")

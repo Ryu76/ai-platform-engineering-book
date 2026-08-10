@@ -1,5 +1,13 @@
 """Volume 09의 오프라인·결정론적 Workflow 학습 도구."""
 
+from ai_platform.graph.api import (
+    ApprovalRequest,
+    RunIdPath,
+    StartWorkflowRequest,
+    WorkflowApiAdapter,
+    WorkflowEventResponse,
+    WorkflowResponse,
+)
 from ai_platform.graph.checkpointer import Checkpointer, JsonFileCheckpointer, MemoryCheckpointer
 from ai_platform.graph.state import (
     ActionKind,
@@ -24,6 +32,7 @@ from ai_platform.graph.workflow import (
 
 __all__ = [
     "ActionKind",
+    "ApprovalRequest",
     "Checkpointer",
     "DeterministicWorkflow",
     "JsonFileCheckpointer",
@@ -36,10 +45,15 @@ __all__ = [
     "RouteKind",
     "RoutedWorkflow",
     "RouterDecision",
+    "RunIdPath",
+    "StartWorkflowRequest",
     "StreamUpdate",
     "StreamingWorkflow",
     "SubgraphWorkflow",
+    "WorkflowApiAdapter",
     "WorkflowEvent",
+    "WorkflowEventResponse",
+    "WorkflowResponse",
     "WorkflowState",
     "WorkflowStatus",
 ]

@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 부모 `SubgraphWorkflow`가 Planner-Developer-Reviewer 역할 Subgraph를 호출하게 했습니다. Subgraph는 계획·개발·검토까지만 수행하고, 위험 ActionKind는 검토 통과 뒤에도 부모의 `WAITING_FOR_APPROVAL` interrupt에서 멈춥니다. 명시적인 사람 승인 뒤에만 부모가 `execute` 시뮬레이션을 수행합니다. 모든 실행은 오프라인·결정론적입니다.
-- 완료 선언: 아직 하지 않음. PRD의 Volume 09 필수 실습(FastAPI 연동)과 Volume Definition of Done의 나머지 항목이 남아 있습니다.
+- 이번 슬라이스: FastAPI route가 소비할 Pydantic 요청·응답 어댑터를 추가했습니다. 위험 ActionKind의 시작 요청은 `WAITING_FOR_APPROVAL` 응답에서 멈추며, 별도의 엄격한 Boolean 승인 요청 뒤에만 오프라인 `execute` 시뮬레이션으로 이동합니다. 서버·네트워크·실제 위험 작업은 실행하지 않았습니다.
+- 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
 
@@ -76,6 +76,16 @@
   - `DEPLOY`의 Subgraph 검토 통과 뒤에도 부모 승인 대기에서 멈추고, 명시적 승인 뒤에만 오프라인 완료하는 데모를 추가했습니다.
 - `tests/unit/test_volume09_graph.py`
   - 위험 작업의 Subgraph 통과 뒤 부모 Approval interrupt 유지, 승인 전 `execute` 부재, Reviewer 거절 시 부모 Approval·Execute 생략 계약을 추가했습니다.
+- `docs/volume09-langgraph/08-fastapi-request-response-approval-boundary.md`
+  - FastAPI route가 사용할 요청·응답 어댑터, Pydantic 입력 검증, 별도 승인 요청과 실제 서버를 실행하지 않는 안전 경계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 여덟 번째 장 링크와 FastAPI 어댑터 출고 범위를 반영했습니다.
+- `src/ai_platform/graph/api.py`, `src/ai_platform/graph/__init__.py`
+  - `StartWorkflowRequest`, 엄격한 `ApprovalRequest`, `WorkflowResponse`와 프레임워크 독립 `WorkflowApiAdapter`를 추가했습니다. 어댑터는 `DeterministicWorkflow`만 호출하며 위험 작업을 별도의 승인 전에는 재개하지 않습니다.
+- `examples/volume09/fastapi_adapter_workflow.py`
+  - `DEPLOY` 시작 응답이 승인 대기에서 멈추고 별도 명시적 승인 뒤에만 오프라인 완료하는 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 위험 시작 요청의 `execute` 부재, 문자열 승인 거부·명시적 거절의 비실행, 추가 필드·빈 경로 run ID 거부 계약을 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다.
 
@@ -248,6 +258,39 @@ $ uv run python scripts/check_secrets.py
 
 $ git diff --check
 (exit 0)
+
+$ uv run python examples/volume09/fastapi_adapter_workflow.py
+시작 응답: status=waiting_for_approval
+events=plan | approval
+명시적 승인 응답: status=completed
+events=plan | approval | approval | execute
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+28 passed in 1.00s
+
+$ uv run pytest -q
+89 passed in 0.99s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
 ```
 
 > [!NOTE]
@@ -255,9 +298,9 @@ $ git diff --check
 
 ## 알려진 차단 사항
 
-- `pyproject.toml`에는 `langgraph` 의존성이 없습니다. 이번 작업의 수정 허용 범위는 Volume 09 문서·예제·테스트와 `src/ai_platform/graph/`이므로 프로젝트 의존성을 임의로 추가하지 않았습니다. 따라서 이번 구현은 LangGraph API 실행이 아니라 개념·안전 계약을 검증하는 직접 구현 참조 모델입니다.
+- `pyproject.toml`에는 `langgraph`와 `fastapi` 의존성이 없습니다. 이번 작업의 수정 허용 범위는 Volume 09 문서·예제·테스트와 `src/ai_platform/graph/`이므로 프로젝트 의존성을 임의로 추가하지 않았습니다. 따라서 이번 구현은 LangGraph API·FastAPI 서버 실행이 아니라 개념·안전 계약을 검증하는 직접 구현 참조 모델입니다.
 - Volume 09의 전체 PRD DoD가 충족되지 않았습니다. `VOLUME09_COMPLETE=true`를 추가하거나 작업을 self-pause하지 않았습니다.
 
 ## 다음 작업
 
-- 다음 장에서 외부 API 없이 FastAPI 연동을 위한 요청·응답 어댑터 경계를 추가하고, 위험 ActionKind가 HTTP 요청을 통해서도 명시적 승인 전에는 `execute`에 도달하지 않는 계약을 테스트합니다.
+- 별도 승인된 프로젝트 의존성 변경이 있을 때 FastAPI를 추가하고, 이 어댑터를 실제 route·TestClient에 연결합니다. 그 전까지 HTTP 서버·네트워크 실행은 하지 않습니다.
