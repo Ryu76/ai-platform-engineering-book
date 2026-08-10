@@ -52,20 +52,17 @@ uv run pytest tests/unit/test_volume06_reranker.py -q
 
 ## 8. 정상 실행 결과
 
-고정 fixture의 실제 실행 계약은 다음과 같습니다.
+초기 `top_k=1` 비교는 아래처럼 고정 fixture에서 재현됩니다.
 
 ```text
-query=비밀번호 재설정 방법
-retriever_top1=password-policy
-reranker_top1=account-recovery; cross_encoder_score=304
-query=장애 대응 연락처
-retriever_top1=infra-overview
-reranker_top1=incident-contacts; cross_encoder_score=303
-retriever_mean@1=precision=0.000; recall=0.000; mrr=0.500; ndcg=0.000
-reranker_mean@1=precision=1.000; recall=1.000; mrr=1.000; ndcg=1.000
+candidate_count=2; top_k=1; pair_evaluations=4; ...
+retriever_precision=0.000; reranker_precision=1.000; ...
+retriever_recall=0.000; reranker_recall=1.000; ...
+retriever_mrr=0.500; reranker_mrr=1.000; ...
+retriever_ndcg=0.000; reranker_ndcg=1.000
 ```
 
-이는 의도적으로 작은 고정 fixture의 측정값입니다. 실제 corpus, 사람의 judgment, 모델 비용이나 지연시간에 대한 성능 주장이 아닙니다.
+`elapsed_ns`는 local host마다 달라서 위 축약 출력의 회귀 값이 아닙니다. 전체 candidate-count/top-k 행과 해석은 [02. 고정 후보 수와 Top-k Sweep](02-local-candidate-top-k-sweep.md)을 따릅니다. 이는 의도적으로 작은 고정 fixture의 측정값이며 실제 corpus, 사람의 judgment, 모델 비용이나 지연시간에 대한 성능 주장이 아닙니다.
 
 ## 9. 문제 해결
 

@@ -12,6 +12,7 @@ from ai_platform.reranker import (
     RerankerConfigurationError,
     evaluate_ranking,
     mean_ranking_metrics,
+    measure_rerank,
 )
 
 
@@ -95,6 +96,75 @@ def test_mean_metrics_prove_rerank_improves_fixed_fixture_at_one() -> None:
     assert reranked.mean_recall_at_k == pytest.approx(1.0)
     assert reranked.mean_reciprocal_rank == pytest.approx(1.0)
     assert reranked.mean_ndcg_at_k == pytest.approx(1.0)
+
+
+def test_measure_rerank_reports_all_pair_evaluations_and_injected_elapsed_time() -> None:
+    """top-k 출력 제한은 비교 비용을 줄이지 않으며 측정 범위는 재현 가능해야 한다."""
+    readings = iter((100, 145))
+    candidates = (
+        Candidate("weak", "비밀번호 정책", 0.99),
+        Candidate("strong", "비밀번호 재설정 방법", 0.1),
+    )
+
+    measurement = measure_rerank(
+        "비밀번호 재설정 방법", candidates, top_k=1, clock_ns=lambda: next(readings)
+    )
+
+    assert [result.candidate.candidate_id for result in measurement.ranked] == ["strong"]
+    assert measurement.candidate_count == 2
+    assert measurement.pair_evaluations == 2
+    assert measurement.elapsed_ns == 45
+
+
+def test_candidate_count_bounds_recall_and_top_k_does_not_reduce_pair_work() -> None:
+    """관련 후보가 rerank 입력 밖이면 pair scorer는 recall을 회복할 수 없다."""
+    candidates = (
+        Candidate("policy", "비밀번호 정책은 주기적으로 변경합니다.", 0.99),
+        Candidate("recovery", "비밀번호 재설정 방법은 계정 설정에서 확인합니다.", 0.71),
+        Candidate("incident", "장애 보고 절차입니다.", 0.61),
+    )
+
+    one_candidate = measure_rerank("비밀번호 재설정 방법", candidates[:1], top_k=1)
+    two_candidates = measure_rerank("비밀번호 재설정 방법", candidates[:2], top_k=1)
+
+    assert evaluate_ranking(
+        [result.candidate.candidate_id for result in one_candidate.ranked], {"recovery"}, k=1
+    ) == RankingMetrics(0.0, 0.0, 0.0, 0.0)
+    assert evaluate_ranking(
+        [result.candidate.candidate_id for result in two_candidates.ranked], {"recovery"}, k=1
+    ) == RankingMetrics(1.0, 1.0, 1.0, 1.0)
+    assert one_candidate.pair_evaluations == 1
+    assert two_candidates.pair_evaluations == 2
+
+
+@pytest.mark.parametrize(
+    ("clock_ns", "message"),
+    [
+        (lambda: -1, "non-negative"),
+        (lambda: "10", "non-negative"),
+        (1, "callable"),
+    ],
+)
+def test_measure_rerank_rejects_invalid_clock_contract(
+    clock_ns: object, message: str
+) -> None:
+    """깨진 local clock은 그럴듯한 latency 수치로 변환하면 안 된다."""
+    with pytest.raises(RerankerConfigurationError, match=message):
+        measure_rerank(
+            "query", (Candidate("id", "query", 0.1),), clock_ns=clock_ns  # type: ignore[arg-type]
+        )
+
+
+def test_measure_rerank_rejects_clock_that_moves_backwards() -> None:
+    """monotonic elapsed time의 기본 계약을 fail-closed로 보장한다."""
+    readings = iter((20, 19))
+
+    with pytest.raises(RerankerConfigurationError, match="backwards"):
+        measure_rerank(
+            "query",
+            (Candidate("id", "query", 0.1),),
+            clock_ns=lambda: next(readings),
+        )
 
 
 @pytest.mark.parametrize(

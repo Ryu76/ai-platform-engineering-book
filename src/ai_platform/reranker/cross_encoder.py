@@ -7,9 +7,10 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from math import isfinite, log2
+from time import perf_counter_ns
 
 
 class RerankerConfigurationError(ValueError):
@@ -60,6 +61,20 @@ class RankingSummary:
     mean_ndcg_at_k: float
 
 
+@dataclass(frozen=True, slots=True)
+class RerankMeasurement:
+    """한 번의 local rerank에서 비교한 후보 수와 경과 시간을 보존한다.
+
+    ``pair_evaluations``는 이 교육용 scorer가 실제로 질의와 함께 비교한 후보 쌍의
+    수다. 모델 비용의 대용 지표일 뿐, 운영 모델의 금액이나 처리량을 뜻하지 않는다.
+    """
+
+    ranked: tuple[RerankedCandidate, ...]
+    candidate_count: int
+    pair_evaluations: int
+    elapsed_ns: int
+
+
 class LexicalCrossEncoder:
     """질의와 각 후보를 함께 비교하는 결정론적 교육용 reranker다.
 
@@ -93,6 +108,36 @@ class LexicalCrossEncoder:
             key=lambda result: (-result.cross_encoder_score, result.candidate.candidate_id)
         )
         return tuple(reranked if top_k is None else reranked[:top_k])
+
+
+def measure_rerank(
+    query: str,
+    candidates: Sequence[Candidate],
+    *,
+    top_k: int | None = None,
+    clock_ns: Callable[[], int] = perf_counter_ns,
+) -> RerankMeasurement:
+    """rerank 범위만 monotonic local clock으로 측정하고 후보 비교 수를 함께 반환한다.
+
+    후보 검증, clock 호출, 출력은 타이밍 범위 밖에 둔다. ``top_k``는 전체 후보를
+    pair scoring한 뒤 출력만 제한하므로 ``pair_evaluations``를 줄이지 않는다.
+    테스트에서는 결정론적 clock을 주입해 경과 시간 계약을 재현할 수 있다.
+    """
+    prepared_candidates = _prepare_candidates(candidates)
+    if not callable(clock_ns):
+        raise RerankerConfigurationError("clock_ns must be callable")
+
+    started_ns = _require_clock_reading(clock_ns(), name="clock_ns start")
+    ranked = LexicalCrossEncoder().rerank(query, prepared_candidates, top_k=top_k)
+    finished_ns = _require_clock_reading(clock_ns(), name="clock_ns end")
+    if finished_ns < started_ns:
+        raise RerankerConfigurationError("clock_ns must not move backwards")
+    return RerankMeasurement(
+        ranked=ranked,
+        candidate_count=len(prepared_candidates),
+        pair_evaluations=len(prepared_candidates),
+        elapsed_ns=finished_ns - started_ns,
+    )
 
 
 def evaluate_ranking(
@@ -227,3 +272,9 @@ def _require_top_k(k: int) -> None:
 def _require_finite_number(value: float, *, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not isfinite(value):
         raise RerankerConfigurationError(f"{name} must be a finite number")
+
+
+def _require_clock_reading(value: int, *, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise RerankerConfigurationError(f"{name} must be a non-negative integer")
+    return value

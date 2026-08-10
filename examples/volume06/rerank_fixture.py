@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from ai_platform.reranker import (
     Candidate,
-    LexicalCrossEncoder,
     evaluate_ranking,
     mean_ranking_metrics,
+    measure_rerank,
 )
 
 FIXTURES = (
@@ -39,39 +39,37 @@ FIXTURES = (
 
 
 def main() -> None:
-    """외부 API·모델 다운로드 없이 두 질의의 before/after 지표를 출력한다."""
-    reranker = LexicalCrossEncoder()
-    retriever_metrics = []
-    reranker_metrics = []
+    """외부 API·모델 다운로드 없이 fixed-fixture rerank sweep을 출력한다."""
+    for candidate_count in range(1, 4):
+        for top_k in range(1, candidate_count + 1):
+            retriever_metrics = []
+            reranker_metrics = []
+            elapsed_ns = 0
+            pair_evaluations = 0
+            for query, relevant_ids, candidates in FIXTURES:
+                limited_candidates = candidates[:candidate_count]
+                retriever_ids = [candidate.candidate_id for candidate in limited_candidates]
+                measurement = measure_rerank(query, limited_candidates, top_k=top_k)
+                reranked_ids = [result.candidate.candidate_id for result in measurement.ranked]
+                retriever_metrics.append(evaluate_ranking(retriever_ids, relevant_ids, k=top_k))
+                reranker_metrics.append(evaluate_ranking(reranked_ids, relevant_ids, k=top_k))
+                elapsed_ns += measurement.elapsed_ns
+                pair_evaluations += measurement.pair_evaluations
 
-    for query, relevant_ids, candidates in FIXTURES:
-        retriever_ids = [candidate.candidate_id for candidate in candidates]
-        reranked = reranker.rerank(query, candidates)
-        reranked_ids = [result.candidate.candidate_id for result in reranked]
-        retriever_metrics.append(evaluate_ranking(retriever_ids, relevant_ids, k=1))
-        reranker_metrics.append(evaluate_ranking(reranked_ids, relevant_ids, k=1))
-        print(f"query={query}")
-        print("retriever_top1=" + retriever_ids[0])
-        print(
-            "reranker_top1="
-            f"{reranked_ids[0]}; cross_encoder_score={reranked[0].cross_encoder_score}"
-        )
-
-    baseline = mean_ranking_metrics(retriever_metrics)
-    reranked_summary = mean_ranking_metrics(reranker_metrics)
-    print(
-        "retriever_mean@1="
-        f"precision={baseline.mean_precision_at_k:.3f}; "
-        f"recall={baseline.mean_recall_at_k:.3f}; "
-        f"mrr={baseline.mean_reciprocal_rank:.3f}; ndcg={baseline.mean_ndcg_at_k:.3f}"
-    )
-    print(
-        "reranker_mean@1="
-        f"precision={reranked_summary.mean_precision_at_k:.3f}; "
-        f"recall={reranked_summary.mean_recall_at_k:.3f}; "
-        f"mrr={reranked_summary.mean_reciprocal_rank:.3f}; "
-        f"ndcg={reranked_summary.mean_ndcg_at_k:.3f}"
-    )
+            baseline = mean_ranking_metrics(retriever_metrics)
+            reranked_summary = mean_ranking_metrics(reranker_metrics)
+            print(
+                f"candidate_count={candidate_count}; top_k={top_k}; "
+                f"pair_evaluations={pair_evaluations}; elapsed_ns={elapsed_ns}; "
+                f"retriever_precision={baseline.mean_precision_at_k:.3f}; "
+                f"reranker_precision={reranked_summary.mean_precision_at_k:.3f}; "
+                f"retriever_recall={baseline.mean_recall_at_k:.3f}; "
+                f"reranker_recall={reranked_summary.mean_recall_at_k:.3f}; "
+                f"retriever_mrr={baseline.mean_reciprocal_rank:.3f}; "
+                f"reranker_mrr={reranked_summary.mean_reciprocal_rank:.3f}; "
+                f"retriever_ndcg={baseline.mean_ndcg_at_k:.3f}; "
+                f"reranker_ndcg={reranked_summary.mean_ndcg_at_k:.3f}"
+            )
 
 
 if __name__ == "__main__":

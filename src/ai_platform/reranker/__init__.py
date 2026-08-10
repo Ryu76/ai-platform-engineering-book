@@ -7,8 +7,10 @@ from ai_platform.reranker.cross_encoder import (
     RankingSummary,
     RerankedCandidate,
     RerankerConfigurationError,
+    RerankMeasurement,
     evaluate_ranking,
     mean_ranking_metrics,
+    measure_rerank,
 )
 
 __all__ = [
@@ -18,6 +20,8 @@ __all__ = [
     "RerankerConfigurationError",
     "RankingMetrics",
     "RankingSummary",
+    "RerankMeasurement",
     "evaluate_ranking",
+    "measure_rerank",
     "mean_ranking_metrics",
 ]
