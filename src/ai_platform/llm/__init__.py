@@ -9,6 +9,8 @@ from ai_platform.llm.client import (
     LlmRemoteError,
     LlmResponse,
     LlmResponseError,
+    LlmTimeoutError,
+    RetryPolicy,
     StreamChunk,
     TokenUsage,
 )
@@ -22,6 +24,8 @@ __all__ = [
     "LlmRemoteError",
     "LlmResponse",
     "LlmResponseError",
+    "LlmTimeoutError",
+    "RetryPolicy",
     "StreamChunk",
     "TokenUsage",
 ]

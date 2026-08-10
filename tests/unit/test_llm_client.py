@@ -10,8 +10,11 @@ from ai_platform.llm.client import (
     HttpResponse,
     LlmClient,
     LlmConfigurationError,
+    LlmNetworkError,
     LlmRemoteError,
     LlmResponseError,
+    LlmTimeoutError,
+    RetryPolicy,
     _sse_data,
 )
 
@@ -71,6 +74,33 @@ class RecordingStreamTransport(RecordingTransport):
         self.payload = payload
         self.timeout_seconds = timeout_seconds
         yield from self.responses
+
+
+class ScriptedTransport(RecordingTransport):
+    """완료 요청마다 응답 또는 안전한 전송 예외를 순서대로 재현한다."""
+
+    def __init__(self, outcomes: list[HttpResponse | Exception]) -> None:
+        super().__init__(HttpResponse(status_code=200, payload={}))
+        self.outcomes = outcomes
+        self.call_count = 0
+
+    def post_json(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        payload: Mapping[str, object],
+        timeout_seconds: float,
+    ) -> HttpResponse:
+        self.url = url
+        self.headers = headers
+        self.payload = payload
+        self.timeout_seconds = timeout_seconds
+        outcome = self.outcomes[self.call_count]
+        self.call_count += 1
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
 
 
 def test_client_sends_openai_compatible_request_and_parses_response() -> None:
@@ -149,6 +179,108 @@ def test_client_rejects_malformed_success_response() -> None:
 
     with pytest.raises(LlmResponseError, match="does not contain choices"):
         client.complete([ChatMessage(role="user", content="응답 형식을 검사합니다.")])
+
+
+def test_client_retries_transient_remote_error_then_returns_response() -> None:
+    transport = ScriptedTransport(
+        [
+            HttpResponse(
+                status_code=503,
+                payload={"error": {"message": "temporarily unavailable"}},
+            ),
+            HttpResponse(
+                status_code=200,
+                payload={"choices": [{"message": {"content": "복구된 응답"}}]},
+            ),
+        ]
+    )
+    delays: list[float] = []
+    client = LlmClient(
+        model="offline-test-model",
+        api_key="unit-test-token",
+        transport=transport,
+        retry_policy=RetryPolicy(max_attempts=3, base_delay_seconds=0.25),
+        sleeper=delays.append,
+    )
+
+    response = client.complete([ChatMessage(role="user", content="상태를 알려 주세요.")])
+
+    assert response.content == "복구된 응답"
+    assert transport.call_count == 2
+    assert delays == [0.25]
+
+
+def test_client_does_not_retry_non_retryable_remote_error() -> None:
+    transport = ScriptedTransport(
+        [HttpResponse(status_code=401, payload={"error": {"message": "invalid key"}})]
+    )
+    delays: list[float] = []
+    client = LlmClient(
+        model="offline-test-model",
+        api_key="unit-test-token",
+        transport=transport,
+        retry_policy=RetryPolicy(max_attempts=3, base_delay_seconds=0.25),
+        sleeper=delays.append,
+    )
+
+    with pytest.raises(LlmRemoteError, match=r"\(401\): invalid key") as error:
+        client.complete([ChatMessage(role="user", content="상태를 알려 주세요.")])
+
+    assert error.value.status_code == 401
+    assert transport.call_count == 1
+    assert delays == []
+    assert "unit-test-token" not in str(error.value)
+
+
+def test_client_stops_retrying_network_and_timeout_errors_at_attempt_limit() -> None:
+    transport = ScriptedTransport(
+        [
+            LlmNetworkError("LLM provider could not be reached"),
+            LlmTimeoutError("LLM provider request timed out"),
+            LlmTimeoutError("LLM provider request timed out"),
+        ]
+    )
+    delays: list[float] = []
+    client = LlmClient(
+        model="offline-test-model",
+        api_key="unit-test-token",
+        transport=transport,
+        retry_policy=RetryPolicy(max_attempts=3, base_delay_seconds=0.1),
+        sleeper=delays.append,
+    )
+
+    with pytest.raises(LlmTimeoutError, match="timed out"):
+        client.complete([ChatMessage(role="user", content="상태를 알려 주세요.")])
+
+    assert transport.call_count == 3
+    assert delays == [0.1, 0.2]
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [
+        RetryPolicy(max_attempts=1, base_delay_seconds=0),
+        RetryPolicy(max_attempts=5, base_delay_seconds=0.5),
+    ],
+)
+def test_retry_policy_accepts_bounded_values(policy: RetryPolicy) -> None:
+    assert policy.delay_after(1) == policy.base_delay_seconds
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"max_attempts": 0},
+        {"max_attempts": 6},
+        {"max_attempts": True},
+        {"base_delay_seconds": -0.1},
+        {"base_delay_seconds": float("nan")},
+        {"base_delay_seconds": True},
+    ],
+)
+def test_retry_policy_rejects_unbounded_or_invalid_values(arguments: dict[str, object]) -> None:
+    with pytest.raises(LlmConfigurationError):
+        RetryPolicy(**arguments)
 
 
 def test_message_rejects_unknown_role_and_empty_content() -> None:

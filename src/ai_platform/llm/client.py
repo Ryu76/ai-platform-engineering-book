@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
+from math import isfinite
+from time import sleep
 from typing import Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -17,8 +19,17 @@ class LlmNetworkError(ConnectionError):
     """원격 제공자에 연결하지 못했을 때 발생한다."""
 
 
+class LlmTimeoutError(TimeoutError):
+    """원격 제공자가 설정한 시간 안에 응답하지 않았을 때 발생한다."""
+
+
 class LlmRemoteError(RuntimeError):
     """원격 제공자가 HTTP 오류 응답을 반환했을 때 발생한다."""
+
+    def __init__(self, message: str, *, status_code: int) -> None:
+        """재시도 정책이 판단할 HTTP 상태 코드를 안전하게 보관한다."""
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class LlmResponseError(RuntimeError):
@@ -80,6 +91,37 @@ class GenerationParameters:
         if self.stop_sequences:
             payload["stop"] = list(self.stop_sequences)
         return payload
+
+
+@dataclass(frozen=True, slots=True)
+class RetryPolicy:
+    """명시적으로 선택하는 제한된 완료 요청 재시도 정책이다."""
+
+    max_attempts: int = 3
+    base_delay_seconds: float = 0.5
+
+    def __post_init__(self) -> None:
+        """무한 재시도와 음수 대기 시간을 요청 전에 차단한다."""
+        if (
+            isinstance(self.max_attempts, bool)
+            or not isinstance(self.max_attempts, int)
+            or not 1 <= self.max_attempts <= 5
+        ):
+            raise LlmConfigurationError("max_attempts must be an integer between 1 and 5")
+        if (
+            isinstance(self.base_delay_seconds, bool)
+            or not isinstance(self.base_delay_seconds, (int, float))
+            or not isfinite(self.base_delay_seconds)
+            or self.base_delay_seconds < 0
+        ):
+            raise LlmConfigurationError("base_delay_seconds must be a nonnegative number")
+
+    def delay_after(self, failed_attempt: int) -> float:
+        """첫 실패 뒤 기본 대기부터 시작하는 제한된 지수 백오프를 반환한다."""
+        delay = float(self.base_delay_seconds)
+        for _ in range(failed_attempt - 1):
+            delay *= 2
+        return delay
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,7 +220,11 @@ class UrllibJsonTransport:
                 status_code=error.code,
                 payload=_decode_json_or_empty(error.read()),
             )
+        except TimeoutError as error:
+            raise LlmTimeoutError("LLM provider request timed out") from error
         except URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise LlmTimeoutError("LLM provider request timed out") from error
             raise LlmNetworkError("LLM provider could not be reached") from error
 
     def post_stream(
@@ -213,7 +259,11 @@ class UrllibJsonTransport:
                 status_code=error.code,
                 payload=_decode_json_or_empty(error.read()),
             )
+        except TimeoutError as error:
+            raise LlmTimeoutError("LLM provider stream timed out") from error
         except URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise LlmTimeoutError("LLM provider stream timed out") from error
             raise LlmNetworkError("LLM provider could not be reached") from error
 
 
@@ -228,8 +278,10 @@ class LlmClient:
         base_url: str = "https://api.openai.com/v1",
         timeout_seconds: float = 30.0,
         transport: LlmTransport | None = None,
+        retry_policy: RetryPolicy | None = None,
+        sleeper: Callable[[float], None] = sleep,
     ) -> None:
-        """설정을 검증하고 선택적으로 테스트용 전송 계층을 주입한다."""
+        """설정을 검증하고 선택적으로 테스트용 전송 계층과 재시도 대기 함수를 주입한다."""
         if not model.strip():
             raise LlmConfigurationError("LLM_MODEL must be configured")
         if not api_key:
@@ -244,6 +296,8 @@ class LlmClient:
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._transport = transport or UrllibJsonTransport()
+        self._retry_policy = retry_policy
+        self._sleeper = sleeper
 
     def complete(
         self,
@@ -251,10 +305,30 @@ class LlmClient:
         *,
         generation: GenerationParameters | None = None,
     ) -> LlmResponse:
-        """메시지와 선택한 생성 파라미터를 전송하고 응답을 해석한다."""
+        """메시지를 전송하고, 명시한 정책에 한해서만 안전하게 재시도한다."""
         if not messages:
             raise LlmConfigurationError("at least one message is required")
 
+        attempt = 1
+        while True:
+            try:
+                return self._complete_once(messages, generation=generation)
+            except (LlmNetworkError, LlmTimeoutError, LlmRemoteError) as error:
+                if not self._should_retry(error, failed_attempt=attempt):
+                    raise
+                policy = self._retry_policy
+                if policy is None:  # pragma: no cover - _should_retry가 먼저 보장한다.
+                    raise
+                self._sleeper(policy.delay_after(attempt))
+                attempt += 1
+
+    def _complete_once(
+        self,
+        messages: list[ChatMessage],
+        *,
+        generation: GenerationParameters | None,
+    ) -> LlmResponse:
+        """단일 완료 요청을 보내고 재시도 여부와 무관한 응답 계약을 해석한다."""
         payload: dict[str, object] = {
             "model": self._model,
             "messages": [
@@ -273,8 +347,22 @@ class LlmClient:
             timeout_seconds=self._timeout_seconds,
         )
         if response.status_code < 200 or response.status_code >= 300:
-            raise LlmRemoteError(_remote_error_message(response))
+            raise LlmRemoteError(_remote_error_message(response), status_code=response.status_code)
         return _parse_completion(response.payload, requested_model=self._model)
+
+    def _should_retry(
+        self,
+        error: LlmNetworkError | LlmTimeoutError | LlmRemoteError,
+        *,
+        failed_attempt: int,
+    ) -> bool:
+        """일시 오류만 최대 시도 횟수 전까지 재시도할지 판단한다."""
+        policy = self._retry_policy
+        if policy is None or failed_attempt >= policy.max_attempts:
+            return False
+        if isinstance(error, (LlmNetworkError, LlmTimeoutError)):
+            return True
+        return error.status_code in {429, 500, 502, 503, 504}
 
     def stream(
         self,
@@ -306,7 +394,9 @@ class LlmClient:
             timeout_seconds=self._timeout_seconds,
         ):
             if response.status_code < 200 or response.status_code >= 300:
-                raise LlmRemoteError(_remote_error_message(response))
+                raise LlmRemoteError(
+                    _remote_error_message(response), status_code=response.status_code
+                )
             yield _parse_stream_chunk(response.payload, requested_model=self._model)
 
 
