@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-platform-api-config
+  namespace: ai-platform-example
+data:
+  AI_PLATFORM_READY: "true"
