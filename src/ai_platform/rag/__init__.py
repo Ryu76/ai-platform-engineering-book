@@ -1,6 +1,14 @@
 """Volume 05의 로컬·인용 가능 RAG 구성 요소."""
 
-from ai_platform.rag.loader import LocalMarkdownLoader, clean_markdown, extract_markdown_title
+from ai_platform.rag.loader import (
+    LocalMarkdownLoader,
+    LocalPdfLoader,
+    PdfLoadingConfig,
+    PdfTextExtractor,
+    clean_document_text,
+    clean_markdown,
+    extract_markdown_title,
+)
 from ai_platform.rag.retrieval import (
     ChunkingConfig,
     Citation,
@@ -32,6 +40,9 @@ __all__ = [
     "HybridRagIndex",
     "HybridSearchConfig",
     "LocalMarkdownLoader",
+    "LocalPdfLoader",
+    "PdfLoadingConfig",
+    "PdfTextExtractor",
     "LocalRagIndex",
     "RagAnswer",
     "RagConfigurationError",
@@ -42,6 +53,7 @@ __all__ = [
     "SearchHit",
     "SearchableIndex",
     "SourceDocument",
+    "clean_document_text",
     "clean_markdown",
     "extract_markdown_title",
 ]

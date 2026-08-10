@@ -12,7 +12,9 @@ from ai_platform.rag import (
     HybridRagIndex,
     HybridSearchConfig,
     LocalMarkdownLoader,
+    LocalPdfLoader,
     LocalRagIndex,
+    PdfLoadingConfig,
     QueryTransformationConfig,
     QueryTransformingIndex,
     RagConfigurationError,
@@ -36,6 +38,18 @@ class RecordingDenseRanker:
         self.calls.append((query, tuple(chunk.chunk_id for chunk in chunks), top_k))
         candidate_ids = self.candidate_ids if self.ignore_top_k else self.candidate_ids[:top_k]
         return tuple(DenseCandidate(chunk_id) for chunk_id in candidate_ids)
+
+
+class RecordingPdfTextExtractor:
+    """실제 PDF 엔진 없이 바이트와 페이지 출력 계약을 기록하는 Mock이다."""
+
+    def __init__(self, pages: tuple[str, ...] | object) -> None:
+        self.pages = pages
+        self.calls: list[bytes] = []
+
+    def extract_pages(self, *, pdf_bytes: bytes) -> tuple[str, ...]:
+        self.calls.append(pdf_bytes)
+        return self.pages  # type: ignore[return-value]
 
 
 class RecordingGenerator:
@@ -156,6 +170,88 @@ def test_markdown_loader_rejects_non_utf8_file_and_invalid_root(tmp_path: Path) 
         LocalMarkdownLoader(root=root).load(Path("legacy.md"))
     with pytest.raises(RagConfigurationError, match="existing directory"):
         LocalMarkdownLoader(root=tmp_path / "missing")
+
+
+def test_pdf_loader_reads_mocked_local_pages_with_cleaned_citations(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+    root.mkdir()
+    pdf_bytes = b"%PDF-1.7\n% local test fixture\n"
+    (root / "guides").mkdir()
+    (root / "guides" / "shipping policy.pdf").write_bytes(pdf_bytes)
+    extractor = RecordingPdfTextExtractor(
+        ("\ufeff배송\t안내\r\n\r\n\r\n영업일 기준 2일입니다.", "반품은 7일 안에 신청합니다.")
+    )
+
+    documents = LocalPdfLoader(root=root, extractor=extractor).load(
+        Path("guides/shipping policy.pdf")
+    )
+
+    assert [document.document_id for document in documents] == [
+        "local:guides/shipping policy.pdf#page=1",
+        "local:guides/shipping policy.pdf#page=2",
+    ]
+    assert [document.title for document in documents] == [
+        "shipping policy — page 1",
+        "shipping policy — page 2",
+    ]
+    assert documents[0].source_uri == "local://volume05/guides/shipping%20policy.pdf#page=1"
+    assert documents[0].content == "배송 안내\n\n영업일 기준 2일입니다."
+    assert extractor.calls == [pdf_bytes]
+
+
+@pytest.mark.parametrize(
+    "relative_path, content, config, message",
+    [
+        (Path("notes.txt"), b"not a PDF", None, "only PDF"),
+        (Path("broken.pdf"), b"not a PDF", None, "PDF header"),
+        (Path("empty.pdf"), b"", None, "must not be empty"),
+        (Path("large.pdf"), b"%PDF-1.7\nabc", PdfLoadingConfig(max_file_bytes=8), "size limit"),
+        (Path("../outside.pdf"), b"", None, "stay within root"),
+    ],
+)
+def test_pdf_loader_rejects_unsafe_or_invalid_local_files(
+    tmp_path: Path,
+    relative_path: Path,
+    content: bytes,
+    config: PdfLoadingConfig | None,
+    message: str,
+) -> None:
+    root = tmp_path / "knowledge"
+    root.mkdir()
+    if relative_path.parts[0] != "..":
+        (root / relative_path).write_bytes(content)
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalPdfLoader(
+            root=root, extractor=RecordingPdfTextExtractor(("valid page",)), config=config
+        ).load(relative_path)
+
+
+@pytest.mark.parametrize(
+    "pages, config, message",
+    [
+        ((), None, "returned no pages"),
+        (["valid page"], None, "tuple of page strings"),
+        ((" ",), None, "empty page"),
+        ((42,), None, "page strings"),
+        (("first", "second"), PdfLoadingConfig(max_pages=1), "more pages than configured"),
+        (("too long",), PdfLoadingConfig(max_page_characters=7), "character limit"),
+    ],
+)
+def test_pdf_loader_rejects_untrusted_mock_extractor_output(
+    tmp_path: Path,
+    pages: tuple[str, ...] | list[str] | tuple[int, ...],
+    config: PdfLoadingConfig | None,
+    message: str,
+) -> None:
+    root = tmp_path / "knowledge"
+    root.mkdir()
+    (root / "guide.pdf").write_bytes(b"%PDF-1.7\nfixture")
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalPdfLoader(root=root, extractor=RecordingPdfTextExtractor(pages), config=config).load(
+            Path("guide.pdf")
+        )
 
 
 def _index() -> LocalRagIndex:
@@ -378,6 +474,9 @@ def test_chunking_config_accepts_minimum_safe_size() -> None:
         lambda: HybridSearchConfig(sparse_candidate_count=0),
         lambda: HybridSearchConfig(dense_candidate_count=True),
         lambda: HybridSearchConfig(reciprocal_rank_k=0),
+        lambda: PdfLoadingConfig(max_file_bytes=0),
+        lambda: PdfLoadingConfig(max_pages=True),
+        lambda: PdfLoadingConfig(max_page_characters=500_001),
         lambda: QueryTransformationConfig(max_queries=0),
         lambda: QueryTransformationConfig(reciprocal_rank_k=False),
         lambda: LocalRagIndex([]),

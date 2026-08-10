@@ -9,11 +9,21 @@ from ai_platform.rag import (
     DocumentChunk,
     HybridRagIndex,
     LocalMarkdownLoader,
+    LocalPdfLoader,
     LocalRagIndex,
     QueryTransformingIndex,
     RagPipeline,
     SearchHit,
 )
+
+
+class SamplePdfTextExtractor:
+    """실제 PDF 엔진 대신 로컬 고정 샘플 페이지를 반환하는 파서 Mock이다."""
+
+    def extract_pages(self, *, pdf_bytes: bytes) -> tuple[str, ...]:
+        if not pdf_bytes.startswith(b"%PDF-"):
+            raise ValueError("sample PDF fixture has no PDF header")
+        return ("교환은 미사용 상품에 한해 수령 뒤 7일 안에 신청할 수 있습니다.",)
 
 
 class SampleDenseRanker:
@@ -55,10 +65,14 @@ class SampleOnlyGenerator:
 
 
 def main() -> None:
-    """명시한 샘플 Markdown 문서만 인덱싱하고 세 질문의 결과를 출력한다."""
+    """명시한 샘플 Markdown·PDF 문서만 인덱싱하고 네 질문의 결과를 출력한다."""
     sample_root = Path(__file__).with_name("sample_data")
     loader = LocalMarkdownLoader(root=sample_root)
-    documents = loader.load_many((Path("handbook.md"), Path("returns.md")))
+    pdf_loader = LocalPdfLoader(root=sample_root, extractor=SamplePdfTextExtractor())
+    documents = (
+        *loader.load_many((Path("handbook.md"), Path("returns.md"))),
+        *pdf_loader.load(Path("exchange-notice.pdf")),
+    )
     sparse_index = LocalRagIndex(documents)
     hybrid_index = HybridRagIndex(sparse_index=sparse_index, dense_ranker=SampleDenseRanker())
     index = QueryTransformingIndex(index=hybrid_index, transformer=SampleQueryTransformer())
@@ -67,6 +81,7 @@ def main() -> None:
     for query in (
         "언제 도착하나요?",
         "반품 요청은 어떻게 접수하나요?",
+        "교환은 언제 신청하나요?",
         "주차장 할인 정책이 있나요?",
     ):
         answer = pipeline.answer(query)

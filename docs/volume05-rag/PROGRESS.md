@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 로컬 Mock PDF 입력·페이지 인용 경계 슬라이스 완료
+
+### 완료
+
+- `PdfTextExtractor` Protocol과 `LocalPdfLoader`를 추가했습니다. PDF 엔진·네트워크 클라이언트는 생성하지 않고, 호출자가 주입한 로컬/Mock 파서만 사용합니다.
+- PDF 입력은 허용 루트 안의 명시 `.pdf`만 읽으며, 경로 탈출·존재하지 않는 파일·빈 파일·헤더 누락·파일 크기 초과를 차단합니다. 파서 결과도 tuple 타입, 페이지 수, 페이지 문자 수, 빈 페이지, NUL, 비문자 값을 검증합니다.
+- 정제된 각 페이지는 독립 `SourceDocument`가 되며 `local:path.pdf#page=N` ID 및 URL 인코딩된 `#page=N` 출처 URI를 갖습니다. 따라서 기존 청킹·검색·인용 경계가 페이지 원문 범위를 그대로 유지합니다.
+- 실제 PDF 라이브러리 없이 `%PDF-` 고정 로컬 샘플과 `SamplePdfTextExtractor` Mock을 예제에 추가했습니다. PDF 교환 질문은 페이지 출처 인용을 출력하고, 기존 배송·반품·No-answer 흐름도 유지합니다.
+- 정상·정제·메타데이터와 파일/파서 출력의 신뢰 경계를 포함해 Volume 05 단위 테스트를 57개로 확장했습니다. 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 57 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 5 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 3 source files
+uv run python examples/volume05/local_rag.py
+# 배송·반품·PDF 교환 근거와 인용, 주차장 할인 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 로컬 검색 근거를 점수 계약과 후보 제한으로 재순위화하는 RAG reranking 경계를 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-10 — 로컬 Mock Query Transformation·RRF 검색 슬라이스 완료
 
 ### 완료
