@@ -14,6 +14,7 @@ from ai_platform.llm.client import (
     StreamChunk,
     TokenUsage,
 )
+from ai_platform.llm.context import ContextAssessment, ContextBudget, ContextBudgetError
 from ai_platform.llm.usage import (
     CostBudget,
     CostBudgetExceeded,
@@ -25,6 +26,9 @@ from ai_platform.llm.usage import (
 
 __all__ = [
     "ChatMessage",
+    "ContextAssessment",
+    "ContextBudget",
+    "ContextBudgetError",
     "CostBudget",
     "CostBudgetExceeded",
     "CostEstimate",

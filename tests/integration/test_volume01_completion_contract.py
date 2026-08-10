@@ -111,3 +111,35 @@ def test_volume01_why_it_matters_is_a_self_contained_safe_boundary_chapter() -> 
     assert "네트워크와 API 키를 사용하지 않습니다" in chapter
     assert "사람 승인" in chapter
     assert "](03-theory.md)" in chapter
+
+
+def test_volume01_theory_is_a_self_contained_token_budget_chapter() -> None:
+    """세 번째 장은 이론, 실행 코드, 오프라인 컨텍스트 검증을 연결해야 한다."""
+    chapter = (VOLUME / "03-theory.md").read_text(encoding="utf-8")
+
+    required_sections = (
+        "## 1. 학습 목표",
+        "## 2. 왜 필요한가",
+        "## 3. 핵심 개념",
+        "## 4. 동작 구조",
+        "## 5. 실습 환경",
+        "## 6. 단계별 실습",
+        "## 7. 코드 설명",
+        "## 8. 정상 실행 결과",
+        "## 9. 오류 해결",
+        "## 10. 응용 실습",
+        "## 11. 실무 적용",
+        "## 12. 과제",
+        "## 13. 완료 체크리스트",
+        "## 14. 핵심 정리",
+    )
+
+    assert all(section in chapter for section in required_sections)
+    assert "examples/volume01/token_budget.py" in chapter
+    assert "tests/unit/test_context.py -q" in chapter
+    assert "API 키·네트워크·비용이 필요하지 않습니다" in chapter
+    assert "토크나이저를 대신하지 않습니다" in chapter
+    assert "](04-environment-setup.md)" in chapter
+    assert (ROOT / "src" / "ai_platform" / "llm" / "context.py").is_file()
+    assert (ROOT / "examples" / "volume01" / "token_budget.py").is_file()
+    assert (ROOT / "tests" / "unit" / "test_context.py").is_file()
