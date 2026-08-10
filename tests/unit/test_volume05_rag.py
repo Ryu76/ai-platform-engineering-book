@@ -7,6 +7,8 @@ import pytest
 
 from ai_platform.rag import (
     ChunkingConfig,
+    ContextBudgetConfig,
+    ContextBudgetIndex,
     DenseCandidate,
     DocumentChunk,
     HybridRagIndex,
@@ -91,6 +93,34 @@ class RecordingReranker:
     ) -> tuple[RerankResult, ...]:
         self.calls.append((query, tuple(hit.chunk.chunk_id for hit in candidates), top_k))
         return self.results  # type: ignore[return-value]
+
+
+class RecordingSearchIndex:
+    """검색 후보와 요청 제한을 기록하는 로컬 인덱스 Mock이다."""
+
+    def __init__(self, hits: tuple[SearchHit, ...] | object) -> None:
+        self.hits = hits
+        self.calls: list[tuple[str, int]] = []
+
+    def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
+        self.calls.append((query, top_k))
+        return self.hits  # type: ignore[return-value]
+
+
+def _hit(*, chunk_id: str, document_id: str, text: str, score: float = 1.0) -> SearchHit:
+    return SearchHit(
+        chunk=DocumentChunk(
+            chunk_id=chunk_id,
+            document_id=document_id,
+            title=f"{document_id} title",
+            source_uri=f"local://{document_id}",
+            text=text,
+            start_offset=0,
+            end_offset=len(text),
+        ),
+        score=score,
+        matched_terms=("근거",),
+    )
 
 
 def test_markdown_loader_cleans_local_content_and_derives_safe_metadata(tmp_path: Path) -> None:
@@ -429,6 +459,79 @@ def test_rerank_result_rejects_scores_outside_the_normalized_contract(score: flo
         RerankResult("shipping#1", score)
 
 
+def test_context_budget_index_selects_whole_ranked_chunks_within_a_fixed_budget() -> None:
+    source = RecordingSearchIndex(
+        (
+            _hit(chunk_id="first#1", document_id="first", text="a" * 40, score=0.9),
+            _hit(chunk_id="second#1", document_id="second", text="b" * 30, score=0.8),
+            _hit(chunk_id="third#1", document_id="third", text="c" * 20, score=0.7),
+        )
+    )
+    index = ContextBudgetIndex(
+        index=source,
+        config=ContextBudgetConfig(candidate_count=3, max_context_characters=60),
+    )
+
+    hits = index.search("근거", top_k=3)
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["first#1", "third#1"]
+    assert [hit.score for hit in hits] == [0.9, 0.7]
+    assert sum(len(hit.chunk.text) for hit in hits) == 60
+    assert hits[1].citation(label=2).source_uri == "local://third"
+    assert source.calls == [("근거", 3)]
+
+
+def test_context_budget_index_returns_no_answer_without_truncating_an_oversized_chunk() -> None:
+    source = RecordingSearchIndex((_hit(chunk_id="large#1", document_id="large", text="a" * 61),))
+    generator = RecordingGenerator()
+    pipeline = RagPipeline(
+        index=ContextBudgetIndex(
+            index=source,
+            config=ContextBudgetConfig(candidate_count=1, max_context_characters=60),
+        ),
+        generator=generator,
+    )
+
+    answer = pipeline.answer("근거")
+
+    assert answer.no_answer is True
+    assert answer.citations == ()
+    assert generator.calls == []
+
+
+@pytest.mark.parametrize(
+    "hits, config, message",
+    [
+        ([_hit(chunk_id="first#1", document_id="first", text="evidence")], None, "tuple"),
+        (
+            (
+                _hit(chunk_id="same#1", document_id="first", text="first"),
+                _hit(chunk_id="same#1", document_id="second", text="second"),
+            ),
+            None,
+            "duplicate candidate",
+        ),
+        (
+            (
+                _hit(chunk_id="first#1", document_id="first", text="first"),
+                _hit(chunk_id="second#1", document_id="second", text="second"),
+            ),
+            ContextBudgetConfig(candidate_count=1),
+            "more candidates than requested",
+        ),
+    ],
+)
+def test_context_budget_index_rejects_untrusted_search_candidates(
+    hits: tuple[SearchHit, ...] | list[SearchHit],
+    config: ContextBudgetConfig | None,
+    message: str,
+) -> None:
+    index = ContextBudgetIndex(index=RecordingSearchIndex(hits), config=config)
+
+    with pytest.raises(RagConfigurationError, match=message):
+        index.search("근거")
+
+
 def test_query_transforming_index_fuses_original_and_mock_expansion_with_rrf() -> None:
     transformer = RecordingQueryTransformer(("배송 상태", "반품 신청"))
     index = QueryTransformingIndex(
@@ -560,6 +663,9 @@ def test_chunking_config_accepts_minimum_safe_size() -> None:
         lambda: QueryTransformationConfig(reciprocal_rank_k=False),
         lambda: RerankingConfig(candidate_count=0),
         lambda: RerankingConfig(minimum_relevance_score=1.1),
+        lambda: ContextBudgetConfig(candidate_count=21),
+        lambda: ContextBudgetConfig(max_context_characters=True),
+        lambda: ContextBudgetConfig(max_context_characters=20_001),
         lambda: LocalRagIndex([]),
         lambda: LocalRagIndex(
             [

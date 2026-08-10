@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_platform.rag import (
+    ContextBudgetConfig,
+    ContextBudgetIndex,
     DenseCandidate,
     DocumentChunk,
     HybridRagIndex,
@@ -93,7 +95,11 @@ def main() -> None:
     transformed_index = QueryTransformingIndex(
         index=hybrid_index, transformer=SampleQueryTransformer()
     )
-    index = RerankingIndex(index=transformed_index, reranker=SampleEvidenceReranker())
+    reranked_index = RerankingIndex(index=transformed_index, reranker=SampleEvidenceReranker())
+    index = ContextBudgetIndex(
+        index=reranked_index,
+        config=ContextBudgetConfig(candidate_count=3, max_context_characters=600),
+    )
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
 
     for query in (

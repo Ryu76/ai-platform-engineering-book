@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 결정론적 전체 청크 컨텍스트 예산 슬라이스 완료
+
+### 완료
+
+- `ContextBudgetConfig`와 `ContextBudgetIndex`를 추가했습니다. 이 경계는 이미 검색된 제한 후보만 받고, 생성기에 전달할 근거의 텍스트 합계를 명시적인 문자 예산 안으로 제한합니다.
+- 청크를 절단하거나 새 메타데이터를 만들지 않습니다. 원래 순위를 유지하면서 전체 청크만 선택하므로 출처 URI·문자 범위·매칭 용어·점수와 인용 경계가 그대로 보존됩니다. 남은 예산에 맞지 않는 상위 청크는 건너뛰고 뒤의 더 작은 근거를 결정론적으로 선택할 수 있습니다.
+- 후보 수는 1~20, 문자 예산은 1~20,000으로 제한했습니다. 기반 인덱스가 tuple 이외 값, 요청보다 많은 후보, 중복 청크 ID, `SearchHit` 이외 값을 반환하면 거부합니다.
+- 예제의 로컬 Mock Hybrid/RRF·재순위화 체인 뒤에 후보 3개·600문자 `ContextBudgetIndex`를 연결했습니다. 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+- 전체 청크 선택·예산 내 문자 합계·상위 초과 청크 건너뛰기·인용 보존·초과 청크에서의 No-answer와 생성기 미호출·비신뢰 검색 후보·설정 범위를 Volume 05 단위 테스트에 추가했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 78 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 5 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 3 source files
+uv run python examples/volume05/local_rag.py
+# 배송·반품·PDF 교환 근거와 인용, 주차장 할인 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 로컬 검색 근거의 문서 수준 다양성을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 제한 후보·정규화 점수 재순위화 슬라이스 완료
 
 ### 완료

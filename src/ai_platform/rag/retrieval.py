@@ -270,6 +270,83 @@ class RerankingIndex:
         return results
 
 
+@dataclass(frozen=True, slots=True)
+class ContextBudgetConfig:
+    """생성기에 전달할 로컬 근거 후보 수와 전체 문자 예산이다.
+
+    청크 일부를 잘라 보내면 원래 문자 범위와 인용의 의미가 달라질 수 있다. 따라서
+    예산은 완전한 청크 텍스트의 문자 수 합계에만 적용한다.
+    """
+
+    candidate_count: int = 10
+    max_context_characters: int = 1_200
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.candidate_count, bool)
+            or not isinstance(self.candidate_count, int)
+            or not 1 <= self.candidate_count <= 20
+        ):
+            raise RagConfigurationError("candidate_count must be an integer between 1 and 20")
+        if (
+            isinstance(self.max_context_characters, bool)
+            or not isinstance(self.max_context_characters, int)
+            or not 1 <= self.max_context_characters <= 20_000
+        ):
+            raise RagConfigurationError(
+                "max_context_characters must be an integer between 1 and 20000"
+            )
+
+
+class ContextBudgetIndex:
+    """인용 범위를 바꾸지 않고 완전한 로컬 청크를 문자 예산 안에서 선택한다.
+
+    기반 검색의 순서를 보존하면서 맞는 청크만 선택한다. 높은 순위의 청크가 남은
+    예산보다 크면 그 청크를 자르지 않고 건너뛰며, 뒤의 더 작은 근거는 선택할 수 있다.
+    이 클래스는 외부 모델·토크나이저·네트워크 클라이언트를 만들지 않는다.
+    """
+
+    def __init__(
+        self, *, index: SearchableIndex, config: ContextBudgetConfig | None = None
+    ) -> None:
+        if not hasattr(index, "search"):
+            raise RagConfigurationError("index must provide a search method")
+        self._index = index
+        self._config = config or ContextBudgetConfig()
+
+    def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
+        """후보 순서를 보존하며 전체 텍스트가 예산에 들어가는 근거만 반환한다."""
+        _validate_search_input(query=query, top_k=top_k)
+        candidates = self._validated_candidates(
+            self._index.search(query, top_k=self._config.candidate_count)
+        )
+        selected: list[SearchHit] = []
+        used_characters = 0
+        for candidate in candidates:
+            candidate_characters = len(candidate.chunk.text)
+            if used_characters + candidate_characters > self._config.max_context_characters:
+                continue
+            selected.append(candidate)
+            used_characters += candidate_characters
+            if len(selected) == top_k:
+                break
+        return tuple(selected)
+
+    def _validated_candidates(self, candidates: tuple[SearchHit, ...]) -> tuple[SearchHit, ...]:
+        if not isinstance(candidates, tuple):
+            raise RagConfigurationError("index must return a tuple of SearchHit values")
+        if len(candidates) > self._config.candidate_count:
+            raise RagConfigurationError("index returned more candidates than requested")
+        candidate_ids: set[str] = set()
+        for candidate in candidates:
+            if not isinstance(candidate, SearchHit):
+                raise RagConfigurationError("index must return SearchHit values")
+            if candidate.chunk.chunk_id in candidate_ids:
+                raise RagConfigurationError("index must not return duplicate candidate chunk IDs")
+            candidate_ids.add(candidate.chunk.chunk_id)
+        return candidates
+
+
 class QueryTransformer(Protocol):
     """원 질문을 보존한 결정론적 질의 변형 경계다.
 
