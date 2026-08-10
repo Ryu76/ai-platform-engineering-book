@@ -2,9 +2,54 @@
 
 ## 현재 상태
 
-- 완료 표식: `VOLUME06_COMPLETE` 미설정
-- 현재 slice: 05 — 고정 fixture threshold sweep과 안전한 rerank 미니 프로젝트 contract
+- 완료 표식: `VOLUME06_COMPLETE=true`
+- 현재 slice: 완료 — 후속 cron tick은 self-paused 상태로 새 slice를 시작하지 않습니다.
 - 범위: 외부 API, 모델 다운로드, GPU, 비밀값, 배포를 사용하지 않았습니다.
+
+## 2026-08-11 — Slice 06 완료 및 Volume DoD 검증
+
+### 추가한 결과물
+
+- `docs/volume06-reranker/06-completion-handoff-glossary.md`
+  - Volume 완료 범위와 재현 가능한 local 검증 명령을 정리했습니다.
+  - 학습자 완료 체크리스트, 안전한 `selected`/`no_answer`/fallback 소비 contract, Volume 07 인계 metadata와 재평가 순서를 문서화했습니다.
+  - Volume 06-scoped reranker, pair work, threshold, graded judgment, timeout, partial-score discard, rank provenance 주요 용어를 정리했습니다.
+- `docs/volume06-reranker/README.md`
+  - 완료 점검·인계·용어 장을 학습 경로 여섯 번째 항목으로 연결했습니다.
+
+### 로컬 측정 결과
+
+최종 `uv run python examples/volume06/rerank_fixture.py` 실행에서 고정 두 query × 세 candidate threshold sweep은 shared pair work `6`을 유지했습니다. threshold `303`은 `accepted=2/2`, effective precision/recall `1.000/1.000`; threshold `304`는 `accepted=1/2`, `0.500/0.500`; threshold `305`는 `accepted=0/2`, `0.000/0.000`이었습니다. adapter fixture는 `batch_count=4`, `pair_evaluations=6`, retriever/adapter precision `0.000/1.000`, graded nDCG `0.143/1.000`을 출력했습니다.
+
+local elapsed는 실행 host 부하에 따라 달라져 회귀 기준이 아니며, fixture ranking metric, pair count, threshold outcome, fallback reason만 결정론적 회귀 기준입니다. 이 측정은 production model/corpus의 latency, 비용, 품질 주장이 아닙니다.
+
+### 검증 명령과 실제 결과
+
+```bash
+uv run pytest tests/unit/test_volume06_reranker.py -q
+# 39 passed in 0.12s
+uv run ruff check src/ai_platform/reranker examples/volume06 tests/unit/test_volume06_reranker.py
+# All checks passed!
+uv run mypy src/ai_platform/reranker examples/volume06
+# Success: no issues found in 3 source files
+uv run python examples/volume06/rerank_fixture.py
+# fixed-fixture candidate/top-k, threshold, adapter, no-answer rows completed
+uv run python scripts/validate_links.py
+# 링크 검증 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+uv run python scripts/validate_code_blocks.py
+# 코드 블록 검증 통과
+```
+
+### PRD 완료 조건
+
+- [x] Bi-Encoder와 실제 Cross-Encoder adapter의 경계 및 batch/timeout 정책을 구현·검증한다.
+- [x] candidate count, top-k, threshold별 품질·지연시간·비용 trade-off를 고정 evaluation set에서 측정한다.
+- [x] 다중 relevance judgment, no-answer/fallback, 실패 관측성을 구현·검증한다.
+- [x] 권 단위 체크리스트, 다음 Volume 인계, Volume-scoped 주요 용어를 완료한다.
+
+`VOLUME06_COMPLETE=true`이므로 새로운 작업 slice를 시작하지 않고 self-pause합니다.
 
 ## 2026-08-10 — Slice 05 완료
 
