@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 제한 후보·정규화 점수 재순위화 슬라이스 완료
+
+### 완료
+
+- `EvidenceReranker` Protocol, `RerankingConfig`, `RerankResult`, `RerankingIndex`를 추가했습니다. 재순위기는 이미 검색된 인용 가능한 로컬 `SearchHit`만 받고, 외부 모델·네트워크 클라이언트를 만들지 않습니다.
+- 후보 수는 1~20으로 제한하고, 재순위 결과는 전달한 후보의 중복 없는 청크 ID 및 유한한 0~1 관련성 점수만 반환하도록 검증합니다. 새 출처 ID, tuple 이외 반환, 과다 결과, 중복 결과는 거부합니다.
+- 최소 관련성 점수로 약한 근거를 제외하며, 동점은 기반 검색 순서를 유지합니다. 선택된 청크의 원래 출처 URI·문자 범위·매칭 용어는 그대로 보존해 인용 경계가 변하지 않습니다.
+- 로컬 `SampleEvidenceReranker` Mock을 예제의 Hybrid/RRF 질의 변형 뒤에 연결했습니다. 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+- 후보 제한·점수 재정렬·동점·최소 점수·인용 보존·비신뢰 재순위기 출력·점수 범위 계약을 포함해 Volume 05 단위 테스트를 70개로 확장했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 70 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 5 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 3 source files
+uv run python examples/volume05/local_rag.py
+# 배송·반품·PDF 교환 근거와 인용, 주차장 할인 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 로컬 검색 근거의 문서 수준 다양성 또는 결정론적 컨텍스트 예산 계약을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 로컬 Mock PDF 입력·페이지 인용 경계 슬라이스 완료
 
 ### 완료

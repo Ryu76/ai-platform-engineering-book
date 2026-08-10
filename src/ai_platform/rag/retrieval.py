@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from collections.abc import Iterable
@@ -123,6 +124,150 @@ class SearchableIndex(Protocol):
 
     def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
         """질문에 대한 인용 가능한 로컬 근거를 순위대로 반환한다."""
+
+
+@dataclass(frozen=True, slots=True)
+class RerankResult:
+    """주입된 재순위기가 후보 청크에 부여한 정규화 관련성 점수다."""
+
+    chunk_id: str
+    relevance_score: float
+
+    def __post_init__(self) -> None:
+        if not self.chunk_id.strip():
+            raise RagConfigurationError("rerank result chunk_id must not be empty")
+        if (
+            isinstance(self.relevance_score, bool)
+            or not isinstance(self.relevance_score, (int, float))
+            or not math.isfinite(self.relevance_score)
+            or not 0.0 <= self.relevance_score <= 1.0
+        ):
+            raise RagConfigurationError(
+                "rerank relevance_score must be a finite number between 0 and 1"
+            )
+
+
+class EvidenceReranker(Protocol):
+    """로컬 후보만 점수화하는 주입 가능한 재순위화 경계다."""
+
+    def rerank(
+        self, *, query: str, candidates: tuple[SearchHit, ...], top_k: int
+    ) -> tuple[RerankResult, ...]:
+        """전달된 후보 ID만 대상으로 0부터 1 사이의 관련성 점수를 반환한다."""
+
+
+@dataclass(frozen=True, slots=True)
+class RerankingConfig:
+    """재순위화로 노출할 후보 수와 최소 정규화 관련성 점수다."""
+
+    candidate_count: int = 10
+    minimum_relevance_score: float = 0.0
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.candidate_count, bool)
+            or not isinstance(self.candidate_count, int)
+            or not 1 <= self.candidate_count <= 20
+        ):
+            raise RagConfigurationError("candidate_count must be an integer between 1 and 20")
+        if (
+            isinstance(self.minimum_relevance_score, bool)
+            or not isinstance(self.minimum_relevance_score, (int, float))
+            or not math.isfinite(self.minimum_relevance_score)
+            or not 0.0 <= self.minimum_relevance_score <= 1.0
+        ):
+            raise RagConfigurationError(
+                "minimum_relevance_score must be a finite number between 0 and 1"
+            )
+
+
+class RerankingIndex:
+    """기존 로컬 근거의 제한된 후보만 주입된 재순위기에 전달한다.
+
+    재순위기는 네트워크 모델일 필요가 없으며, 이 경계는 Mock 구현도 같은 후보 ID·점수
+    계약으로 검증한다. 반환 ID는 검색 후보 안에 있어야 하고 점수는 0부터 1 사이여야
+    하므로 재순위기가 새 출처를 주입하거나 제공자별 임의 점수 범위를 섞을 수 없다.
+    """
+
+    def __init__(
+        self,
+        *,
+        index: SearchableIndex,
+        reranker: EvidenceReranker,
+        config: RerankingConfig | None = None,
+    ) -> None:
+        if not hasattr(index, "search"):
+            raise RagConfigurationError("index must provide a search method")
+        if not hasattr(reranker, "rerank"):
+            raise RagConfigurationError("reranker must provide a rerank method")
+        self._index = index
+        self._reranker = reranker
+        self._config = config or RerankingConfig()
+
+    def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
+        """제한된 로컬 후보를 점수 순으로 재정렬하고 원래 인용 메타데이터를 보존한다."""
+        _validate_search_input(query=query, top_k=top_k)
+        candidates = self._validated_candidates(
+            self._index.search(query, top_k=self._config.candidate_count)
+        )
+        if not candidates:
+            return ()
+        results = self._validated_results(
+            self._reranker.rerank(
+                query=query, candidates=candidates, top_k=self._config.candidate_count
+            ),
+            candidates=candidates,
+        )
+        candidates_by_id = {candidate.chunk.chunk_id: candidate for candidate in candidates}
+        original_rank = {
+            candidate.chunk.chunk_id: rank for rank, candidate in enumerate(candidates, start=1)
+        }
+        reranked_hits = [
+            SearchHit(
+                chunk=candidates_by_id[result.chunk_id].chunk,
+                score=float(result.relevance_score),
+                matched_terms=candidates_by_id[result.chunk_id].matched_terms,
+            )
+            for result in results
+            if result.relevance_score >= self._config.minimum_relevance_score
+        ]
+        reranked_hits.sort(key=lambda hit: (-hit.score, original_rank[hit.chunk.chunk_id]))
+        return tuple(reranked_hits[:top_k])
+
+    def _validated_candidates(self, candidates: tuple[SearchHit, ...]) -> tuple[SearchHit, ...]:
+        if not isinstance(candidates, tuple):
+            raise RagConfigurationError("index must return a tuple of SearchHit values")
+        if len(candidates) > self._config.candidate_count:
+            raise RagConfigurationError("index returned more candidates than requested")
+        candidate_ids: set[str] = set()
+        for candidate in candidates:
+            if not isinstance(candidate, SearchHit):
+                raise RagConfigurationError("index must return SearchHit values")
+            if candidate.chunk.chunk_id in candidate_ids:
+                raise RagConfigurationError("index must not return duplicate candidate chunk IDs")
+            candidate_ids.add(candidate.chunk.chunk_id)
+        return candidates
+
+    def _validated_results(
+        self, results: tuple[RerankResult, ...], *, candidates: tuple[SearchHit, ...]
+    ) -> tuple[RerankResult, ...]:
+        if not isinstance(results, tuple):
+            raise RagConfigurationError("reranker must return a tuple of RerankResult values")
+        if len(results) > len(candidates):
+            raise RagConfigurationError("reranker returned more results than supplied candidates")
+        candidate_ids = {candidate.chunk.chunk_id for candidate in candidates}
+        result_ids: set[str] = set()
+        for result in results:
+            if not isinstance(result, RerankResult):
+                raise RagConfigurationError("reranker must return RerankResult values")
+            if result.chunk_id in result_ids:
+                raise RagConfigurationError("reranker must not return duplicate chunk IDs")
+            if result.chunk_id not in candidate_ids:
+                raise RagConfigurationError(
+                    "rerank result must reference a supplied candidate chunk"
+                )
+            result_ids.add(result.chunk_id)
+        return results
 
 
 class QueryTransformer(Protocol):

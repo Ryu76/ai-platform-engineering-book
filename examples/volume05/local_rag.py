@@ -13,6 +13,8 @@ from ai_platform.rag import (
     LocalRagIndex,
     QueryTransformingIndex,
     RagPipeline,
+    RerankingIndex,
+    RerankResult,
     SearchHit,
 )
 
@@ -56,6 +58,19 @@ class SampleQueryTransformer:
         return self._QUERIES_BY_QUERY.get(query, (query,))
 
 
+class SampleEvidenceReranker:
+    """외부 모델 없이 현재 로컬 후보만 점수화하는 재순위화 Mock이다."""
+
+    def rerank(
+        self, *, query: str, candidates: tuple[SearchHit, ...], top_k: int
+    ) -> tuple[RerankResult, ...]:
+        del query
+        return tuple(
+            RerankResult(hit.chunk.chunk_id, 1.0 - (position * 0.1))
+            for position, hit in enumerate(candidates[:top_k])
+        )
+
+
 class SampleOnlyGenerator:
     """실습용 Mock 생성기: 실제 제공자 호출 대신 첫 번째 근거를 그대로 요약한다."""
 
@@ -75,7 +90,10 @@ def main() -> None:
     )
     sparse_index = LocalRagIndex(documents)
     hybrid_index = HybridRagIndex(sparse_index=sparse_index, dense_ranker=SampleDenseRanker())
-    index = QueryTransformingIndex(index=hybrid_index, transformer=SampleQueryTransformer())
+    transformed_index = QueryTransformingIndex(
+        index=hybrid_index, transformer=SampleQueryTransformer()
+    )
+    index = RerankingIndex(index=transformed_index, reranker=SampleEvidenceReranker())
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
 
     for query in (

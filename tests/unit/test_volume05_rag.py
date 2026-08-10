@@ -19,6 +19,9 @@ from ai_platform.rag import (
     QueryTransformingIndex,
     RagConfigurationError,
     RagPipeline,
+    RerankingConfig,
+    RerankingIndex,
+    RerankResult,
     SearchHit,
     SourceDocument,
 )
@@ -74,6 +77,20 @@ class RecordingQueryTransformer:
     def transform(self, *, query: str) -> tuple[str, ...]:
         self.calls.append(query)
         return self.queries  # type: ignore[return-value]
+
+
+class RecordingReranker:
+    """후보·제한 인자를 기록하고 고정된 재순위 결과를 반환하는 로컬 Mock이다."""
+
+    def __init__(self, results: tuple[RerankResult, ...] | object) -> None:
+        self.results = results
+        self.calls: list[tuple[str, tuple[str, ...], int]] = []
+
+    def rerank(
+        self, *, query: str, candidates: tuple[SearchHit, ...], top_k: int
+    ) -> tuple[RerankResult, ...]:
+        self.calls.append((query, tuple(hit.chunk.chunk_id for hit in candidates), top_k))
+        return self.results  # type: ignore[return-value]
 
 
 def test_markdown_loader_cleans_local_content_and_derives_safe_metadata(tmp_path: Path) -> None:
@@ -350,6 +367,68 @@ def test_hybrid_search_can_use_mock_dense_evidence_without_sparse_term_overlap()
     assert generator.calls[0][1][0].matched_terms == ()
 
 
+def test_reranking_index_rescores_only_limited_local_candidates_and_preserves_citations() -> None:
+    reranker = RecordingReranker((RerankResult("shipping#1", 0.2), RerankResult("returns#1", 0.9)))
+    index = RerankingIndex(
+        index=_index(), reranker=reranker, config=RerankingConfig(candidate_count=2)
+    )
+
+    hits = index.search("배송 상태", top_k=2)
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["returns#1", "shipping#1"]
+    assert [hit.score for hit in hits] == [0.9, 0.2]
+    assert hits[0].matched_terms == ("배송", "상태")
+    assert hits[0].citation(label=1).source_uri == "local://handbook/returns"
+    assert reranker.calls == [("배송 상태", ("shipping#1", "returns#1"), 2)]
+
+
+def test_reranking_index_applies_minimum_score_and_keeps_base_rank_for_ties() -> None:
+    reranker = RecordingReranker((RerankResult("returns#1", 0.5), RerankResult("shipping#1", 0.5)))
+    index = RerankingIndex(
+        index=_index(),
+        reranker=reranker,
+        config=RerankingConfig(candidate_count=2, minimum_relevance_score=0.5),
+    )
+
+    hits = index.search("배송 상태", top_k=2)
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["shipping#1", "returns#1"]
+
+
+@pytest.mark.parametrize(
+    "results, message",
+    [
+        ([RerankResult("shipping#1", 0.8)], "tuple of RerankResult"),
+        ((RerankResult("unknown#1", 0.8),), "supplied candidate"),
+        (
+            (RerankResult("shipping#1", 0.8), RerankResult("shipping#1", 0.7)),
+            "duplicate chunk IDs",
+        ),
+        (
+            (
+                RerankResult("shipping#1", 0.8),
+                RerankResult("returns#1", 0.7),
+                RerankResult("extra#1", 0.6),
+            ),
+            "more results than supplied",
+        ),
+    ],
+)
+def test_reranking_index_rejects_untrusted_mock_results(
+    results: tuple[RerankResult, ...] | list[RerankResult], message: str
+) -> None:
+    index = RerankingIndex(index=_index(), reranker=RecordingReranker(results))
+
+    with pytest.raises(RagConfigurationError, match=message):
+        index.search("배송 상태")
+
+
+@pytest.mark.parametrize("score", (-0.1, 1.1, float("nan"), float("inf"), True))
+def test_rerank_result_rejects_scores_outside_the_normalized_contract(score: float | bool) -> None:
+    with pytest.raises(RagConfigurationError, match="relevance_score"):
+        RerankResult("shipping#1", score)
+
+
 def test_query_transforming_index_fuses_original_and_mock_expansion_with_rrf() -> None:
     transformer = RecordingQueryTransformer(("배송 상태", "반품 신청"))
     index = QueryTransformingIndex(
@@ -479,6 +558,8 @@ def test_chunking_config_accepts_minimum_safe_size() -> None:
         lambda: PdfLoadingConfig(max_page_characters=500_001),
         lambda: QueryTransformationConfig(max_queries=0),
         lambda: QueryTransformationConfig(reciprocal_rank_k=False),
+        lambda: RerankingConfig(candidate_count=0),
+        lambda: RerankingConfig(minimum_relevance_score=1.1),
         lambda: LocalRagIndex([]),
         lambda: LocalRagIndex(
             [
