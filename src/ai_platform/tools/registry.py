@@ -75,11 +75,16 @@ class ToolRegistry:
 
     def execute(self, *, tool_name: str, arguments: Mapping[str, object]) -> ToolResult:
         """allowlist와 입력 Schema를 통과한 로컬 함수만 실행한다."""
+        tool = self.validate_request(tool_name=tool_name, arguments=arguments)
+        return ToolResult(tool_name=tool.name, output=tool.handler(arguments))
+
+    def validate_request(self, *, tool_name: str, arguments: Mapping[str, object]) -> ToolSpec:
+        """실행 없이 allowlist와 입력 Schema를 검사해 다른 경계가 재사용하게 한다."""
         tool = self._tools.get(tool_name)
         if tool is None:
             raise ToolNotAllowedError(f"tool is not allowlisted: {tool_name}")
         _validate_arguments(arguments, schema=tool.input_schema)
-        return ToolResult(tool_name=tool.name, output=tool.handler(arguments))
+        return tool
 
 
 def _validate_arguments(arguments: Mapping[str, object], *, schema: Mapping[str, object]) -> None:
