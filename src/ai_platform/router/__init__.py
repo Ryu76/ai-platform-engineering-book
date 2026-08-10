@@ -9,10 +9,20 @@ from ai_platform.router.base import (
     RoutingRequest,
     RoutingRequirements,
 )
+from ai_platform.router.keyword import (
+    KeywordRoute,
+    KeywordRouteDecision,
+    KeywordRouter,
+    NoConfidentKeywordRouteError,
+)
 from ai_platform.router.policy import PolicyRouter
 
 __all__ = [
     "NoEligibleRouteError",
+    "NoConfidentKeywordRouteError",
+    "KeywordRoute",
+    "KeywordRouteDecision",
+    "KeywordRouter",
     "PolicyRouter",
     "RouteDecision",
     "RouteTarget",

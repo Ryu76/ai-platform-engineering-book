@@ -34,3 +34,49 @@ uv run python examples/volume08/policy_router.py
 다음 슬라이스:
 
 - 고정 keyword fixture와 명시적 confidence threshold를 갖는 Rule/Keyword Router를 추가하고, 정책 Router 제약을 통과시키는 경로를 검증합니다.
+
+## 2026-08-10 — Tick 2: confidence threshold를 갖는 결정론적 Keyword Router
+
+완료한 범위:
+
+- 단일 Unicode token keyword, intent별 필수 capability, `Decimal` confidence를 검증하는 `KeywordRoute`를 추가했습니다.
+- 명시적 `minimum_confidence`를 적용하고 confidence → 일치 keyword 수 → intent 이름 순으로 rule을 결정론적으로 선택하는 `KeywordRouter`를 추가했습니다.
+- threshold 미달 또는 일치 rule 부재 시 fallback을 실행하지 않고 `NoConfidentKeywordRouteError`로 안전 실패하게 했습니다.
+- 선택된 intent capability를 기존 요청 capability에 합친 뒤 `PolicyRouter`에 전달하여 허용 대상·상태·비용·지연 시간 제약을 우회하지 못하게 했습니다.
+- 원문 없이 classifier 이름, intent, confidence, 일치 keyword와 정책 결정을 남기는 JSON 직렬화 가능 로그를 추가했습니다.
+- 고정 fixture 예제, 단위 테스트, `02-keyword-routing.md` 학습 장을 추가했습니다.
+
+검증 결과:
+
+```text
+uv run pytest tests/unit/test_volume08_policy_router.py tests/unit/test_volume08_keyword_router.py -q
+19 passed in 0.10s
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_policy_router.py tests/unit/test_volume08_keyword_router.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 4 source files
+
+uv run python examples/volume08/keyword_router.py
+{"classifier_confidence": "0.90", "classifier_name": "offline-keyword-intent-router", "confidence": "1", "estimated_cost": "0.003", "estimated_latency_ms": "80", "intent": "order_tracking", "matched_keywords": ["order", "tracking"], "policy_name": "offline-support-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-keyword-001", "target_kind": "agent", "target_name": "order-support-agent"}
+
+uv run pytest -q
+80 passed in 0.78s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+```
+
+남은 Volume 08 범위:
+
+- Semantic/LLM Router와 Intent 분류
+- fallback, retry, escalation
+- Agent·Tool·Model 다단계 라우팅과 장애 전환
+- Router 평가 dataset, routing accuracy 지표, API 및 나머지 학습 장
+
+다음 슬라이스:
+
+- 고정 평가 dataset으로 keyword Router의 routing accuracy와 threshold별 안전 실패를 측정하고, 외부 호출 없이 회귀 지표를 검증합니다.
