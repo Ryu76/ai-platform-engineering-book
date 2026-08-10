@@ -7,6 +7,7 @@
 
 1. [결정론적 Cross-Encoder Rerank와 품질 측정](01-deterministic-cross-encoder.md) — 고정 후보에서 retriever/reranker before·after 지표를 재현합니다.
 2. [고정 후보 수와 Top-k Sweep](02-local-candidate-top-k-sweep.md) — candidate count, output top-k, pair 비교 수와 local latency 계약을 함께 확인합니다.
+3. [다중 Relevance Judgment와 Threshold No-answer](03-graded-judgments-threshold-fallback.md) — ordinal graded nDCG와 fail-closed fallback 결정을 고정 fixture로 검증합니다.
 
 ## 로컬 실행
 

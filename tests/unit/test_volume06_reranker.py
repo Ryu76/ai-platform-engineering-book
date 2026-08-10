@@ -7,12 +7,16 @@ import pytest
 
 from ai_platform.reranker import (
     Candidate,
+    GradedRankingMetrics,
     LexicalCrossEncoder,
     RankingMetrics,
+    RelevanceJudgment,
     RerankerConfigurationError,
+    evaluate_graded_ranking,
     evaluate_ranking,
     mean_ranking_metrics,
     measure_rerank,
+    rerank_with_threshold,
 )
 
 
@@ -71,6 +75,62 @@ def test_evaluate_ranking_calculates_precision_recall_mrr_and_ndcg() -> None:
         reciprocal_rank=0.5,
         ndcg_at_k=pytest.approx(1.0 / math.log2(3)),
     )
+
+
+def test_evaluate_graded_ranking_rewards_stronger_relevance_at_higher_rank() -> None:
+    """같은 binary recall이라도 3등급 문서를 먼저 두면 graded nDCG가 높아야 한다."""
+    judgments = (
+        RelevanceJudgment("partial", 1),
+        RelevanceJudgment("best", 3),
+        RelevanceJudgment("noise", 0),
+    )
+
+    retriever = evaluate_graded_ranking(["partial", "best", "noise"], judgments, k=2)
+    reranked = evaluate_graded_ranking(["best", "partial", "noise"], judgments, k=2)
+
+    assert retriever == GradedRankingMetrics(
+        precision_at_k=0.5,
+        recall_at_k=1.0,
+        reciprocal_rank=0.5,
+        ndcg_at_k=pytest.approx((1 + 7 / math.log2(3)) / (7 + 1 / math.log2(3))),
+    )
+    assert reranked == GradedRankingMetrics(0.5, 1.0, 1.0, 1.0)
+
+
+def test_graded_ranking_rejects_unlabeled_or_duplicate_judgments() -> None:
+    """사람 label의 누락이나 중복은 0점으로 추정하지 않고 중단한다."""
+    with pytest.raises(RerankerConfigurationError, match="all have"):
+        evaluate_graded_ranking(["unlabeled"], (RelevanceJudgment("known", 0),), k=1)
+    with pytest.raises(RerankerConfigurationError, match="unique"):
+        evaluate_graded_ranking(
+            ["same"],
+            (RelevanceJudgment("same", 0), RelevanceJudgment("same", 1)),
+            k=1,
+        )
+
+
+def test_threshold_accepts_at_the_boundary_and_rejects_to_no_answer() -> None:
+    """threshold 통과 후보만 선택하고 약한 pair는 fallback으로 fail-closed한다."""
+    accepted = rerank_with_threshold(
+        "비밀번호 재설정 방법",
+        (Candidate("recovery", "비밀번호 재설정 방법", 0.1),),
+        min_score=303,
+    )
+    rejected = rerank_with_threshold(
+        "휴가 신청 방법",
+        (Candidate("incident", "장애 대응 절차", 0.9),),
+        min_score=1,
+    )
+
+    assert accepted.outcome == "accepted"
+    assert accepted.selected is not None
+    assert accepted.selected.candidate.candidate_id == "recovery"
+    assert accepted.top_score == 303
+    assert accepted.fallback_reason is None
+    assert rejected.outcome == "no_answer"
+    assert rejected.selected is None
+    assert rejected.top_score == 0
+    assert rejected.fallback_reason == "top_score_below_threshold"
 
 
 def test_mean_metrics_prove_rerank_improves_fixed_fixture_at_one() -> None:
@@ -186,6 +246,19 @@ def test_measure_rerank_rejects_clock_that_moves_backwards() -> None:
         ),
         (lambda: evaluate_ranking(["id"], set(), k=1), "must not be empty"),
         (lambda: evaluate_ranking(["id"], {"id"}, k=0), "positive"),
+        (lambda: RelevanceJudgment("id", -1), "relevance_grade"),
+        (
+            lambda: rerank_with_threshold(
+                "query", (Candidate("id", "query", 0.1),), min_score=-1
+            ),
+            "min_score",
+        ),
+        (
+            lambda: rerank_with_threshold(
+                "query", (Candidate("id", "query", 0.1),), min_score=True  # type: ignore[arg-type]
+            ),
+            "min_score",
+        ),
     ],
 )
 def test_invalid_contracts_fail_closed(factory: object, message: str) -> None:

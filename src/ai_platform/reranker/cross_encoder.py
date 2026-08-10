@@ -11,6 +11,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from math import isfinite, log2
 from time import perf_counter_ns
+from typing import Literal
 
 
 class RerankerConfigurationError(ValueError):
@@ -62,6 +63,32 @@ class RankingSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class RelevanceJudgment:
+    """사람이 후보 하나에 부여한 0 이상의 ordinal relevance grade다.
+
+    ``0``은 비관련, 큰 수는 더 강한 관련성을 뜻한다. grade는 점수가 아니라 사람이
+    검토한 평가 label이므로 reranker의 ``cross_encoder_score``와 섞어 쓰지 않는다.
+    """
+
+    candidate_id: str
+    relevance_grade: int
+
+    def __post_init__(self) -> None:
+        _require_identifier(self.candidate_id, name="candidate_id")
+        _require_non_negative_integer(self.relevance_grade, name="relevance_grade")
+
+
+@dataclass(frozen=True, slots=True)
+class GradedRankingMetrics:
+    """ordinal relevance judgment를 이용한 단일 질의의 top-k ranking metrics다."""
+
+    precision_at_k: float
+    recall_at_k: float
+    reciprocal_rank: float
+    ndcg_at_k: float
+
+
+@dataclass(frozen=True, slots=True)
 class RerankMeasurement:
     """한 번의 local rerank에서 비교한 후보 수와 경과 시간을 보존한다.
 
@@ -73,6 +100,22 @@ class RerankMeasurement:
     candidate_count: int
     pair_evaluations: int
     elapsed_ns: int
+
+
+@dataclass(frozen=True, slots=True)
+class RerankDecision:
+    """threshold를 적용한 결과와 no-answer fallback 여부를 보존한다.
+
+    ``ranked``는 관측과 디버깅을 위해 보존하지만, ``selected``가 ``None``이면 호출자는
+    그 후보를 답변 근거로 사용하지 않고 fallback을 수행해야 한다.
+    """
+
+    ranked: tuple[RerankedCandidate, ...]
+    selected: RerankedCandidate | None
+    min_score: int
+    top_score: int
+    outcome: Literal["accepted", "no_answer"]
+    fallback_reason: str | None
 
 
 class LexicalCrossEncoder:
@@ -140,6 +183,42 @@ def measure_rerank(
     )
 
 
+def rerank_with_threshold(
+    query: str,
+    candidates: Sequence[Candidate],
+    *,
+    min_score: int,
+    top_k: int | None = None,
+) -> RerankDecision:
+    """최상위 pair score가 threshold 미만이면 fail-closed no-answer를 반환한다.
+
+    threshold는 모든 후보를 score·정렬한 뒤 최상위 결과에 적용한다. 거부된 후보는
+    ``selected``로 승격되지 않으며, 호출자는 ``fallback_reason``을 구조화된 local
+    관측값으로 기록할 수 있다. 이 함수는 네트워크나 생성 모델 fallback을 호출하지
+    않는다.
+    """
+    _require_non_negative_integer(min_score, name="min_score")
+    ranked = LexicalCrossEncoder().rerank(query, candidates, top_k=top_k)
+    top_result = ranked[0]
+    if top_result.cross_encoder_score >= min_score:
+        return RerankDecision(
+            ranked=ranked,
+            selected=top_result,
+            min_score=min_score,
+            top_score=top_result.cross_encoder_score,
+            outcome="accepted",
+            fallback_reason=None,
+        )
+    return RerankDecision(
+        ranked=ranked,
+        selected=None,
+        min_score=min_score,
+        top_score=top_result.cross_encoder_score,
+        outcome="no_answer",
+        fallback_reason="top_score_below_threshold",
+    )
+
+
 def evaluate_ranking(
     ranked_ids: Sequence[str], relevant_ids: Collection[str], *, k: int
 ) -> RankingMetrics:
@@ -175,6 +254,54 @@ def evaluate_ranking(
         recall_at_k=relevant_count / len(prepared_relevant),
         reciprocal_rank=0.0 if first_relevant_rank is None else 1.0 / first_relevant_rank,
         ndcg_at_k=dcg / ideal_dcg,
+    )
+
+
+def evaluate_graded_ranking(
+    ranked_ids: Sequence[str], judgments: Sequence[RelevanceJudgment], *, k: int
+) -> GradedRankingMetrics:
+    """ordinal judgments로 binary metrics와 graded nDCG@k를 fail-closed 계산한다.
+
+    Precision, recall, MRR에서 grade가 2 이상인 문서는 직접 관련 문서다. nDCG는
+    ``2**grade - 1`` gain을 사용하므로 더 강한 관련 문서를 상위에 놓을수록 높다.
+    평가되는 모든 rank ID에는 명시적 judgment가 있어야 한다. 누락 label을 0으로
+    추측하면 품질 저하를 숨길 수 있으므로 거부한다.
+    """
+    _require_top_k(k)
+    prepared_ranked = _prepare_ranked_ids(ranked_ids)
+    prepared_judgments = _prepare_relevance_judgments(judgments)
+    grade_by_id = {
+        judgment.candidate_id: judgment.relevance_grade for judgment in prepared_judgments
+    }
+    unlabeled_ids = set(prepared_ranked).difference(grade_by_id)
+    if unlabeled_ids:
+        raise RerankerConfigurationError("ranked_ids must all have a relevance judgment")
+
+    top_ranked = prepared_ranked[:k]
+    relevant_ids = {identifier for identifier, grade in grade_by_id.items() if grade >= 2}
+    relevant_count = sum(identifier in relevant_ids for identifier in top_ranked)
+    first_relevant_rank = next(
+        (
+            position
+            for position, identifier in enumerate(prepared_ranked, start=1)
+            if identifier in relevant_ids
+        ),
+        None,
+    )
+    dcg = sum(
+        (2**grade_by_id[identifier] - 1) / log2(position + 1)
+        for position, identifier in enumerate(top_ranked, start=1)
+    )
+    ideal_grades = sorted(grade_by_id.values(), reverse=True)[:k]
+    ideal_dcg = sum(
+        (2**grade - 1) / log2(position + 1)
+        for position, grade in enumerate(ideal_grades, start=1)
+    )
+    return GradedRankingMetrics(
+        precision_at_k=relevant_count / k,
+        recall_at_k=0.0 if not relevant_ids else relevant_count / len(relevant_ids),
+        reciprocal_rank=0.0 if first_relevant_rank is None else 1.0 / first_relevant_rank,
+        ndcg_at_k=0.0 if ideal_dcg == 0.0 else dcg / ideal_dcg,
     )
 
 
@@ -259,6 +386,24 @@ def _prepare_relevant_ids(relevant_ids: Collection[str]) -> frozenset[str]:
     return prepared
 
 
+def _prepare_relevance_judgments(
+    judgments: Sequence[RelevanceJudgment],
+) -> tuple[RelevanceJudgment, ...]:
+    if isinstance(judgments, (str, bytes)) or not isinstance(judgments, Sequence):
+        raise RerankerConfigurationError(
+            "judgments must be a sequence of RelevanceJudgment instances"
+        )
+    prepared = tuple(judgments)
+    if not prepared:
+        raise RerankerConfigurationError("judgments must not be empty")
+    if not all(isinstance(judgment, RelevanceJudgment) for judgment in prepared):
+        raise RerankerConfigurationError("judgments must contain RelevanceJudgment instances")
+    identifiers = [judgment.candidate_id for judgment in prepared]
+    if len(set(identifiers)) != len(identifiers):
+        raise RerankerConfigurationError("judgment candidate_id values must be unique")
+    return prepared
+
+
 def _require_identifier(identifier: str, *, name: str) -> None:
     if not isinstance(identifier, str) or not identifier.strip():
         raise RerankerConfigurationError(f"{name} must be a non-empty string")
@@ -267,6 +412,11 @@ def _require_identifier(identifier: str, *, name: str) -> None:
 def _require_top_k(k: int) -> None:
     if isinstance(k, bool) or not isinstance(k, int) or k < 1:
         raise RerankerConfigurationError("k must be a positive integer")
+
+
+def _require_non_negative_integer(value: int, *, name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise RerankerConfigurationError(f"{name} must be a non-negative integer")
 
 
 def _require_finite_number(value: float, *, name: str) -> None:

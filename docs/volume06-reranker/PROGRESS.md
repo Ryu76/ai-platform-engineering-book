@@ -3,8 +3,48 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME06_COMPLETE` 미설정
-- 현재 slice: 02 — 결정론적 candidate-count/top-k sweep과 local latency 계약
+- 현재 slice: 03 — 다중 relevance judgment, threshold no-answer/fallback 계약
 - 범위: 외부 API, 모델 다운로드, GPU, 비밀값, 배포를 사용하지 않았습니다.
+
+## 2026-08-10 — Slice 03 완료
+
+### 추가한 결과물
+
+- `src/ai_platform/reranker/cross_encoder.py`
+  - 불변 `RelevanceJudgment`와 `evaluate_graded_ranking`을 추가했습니다.
+  - 0 이상 ordinal grade, label 중복, 평가 rank의 label 누락을 fail-closed로 검증합니다.
+  - grade 2 이상을 직접 관련 binary label로 쓰되 nDCG는 `2**grade - 1` gain으로 계산해 강한 관련 문서의 상위 배치를 측정합니다.
+  - `rerank_with_threshold`와 불변 `RerankDecision`을 추가했습니다. 최상위 score가 threshold 미만이면 후보를 선택하지 않고 `outcome=no_answer`, `fallback_reason=top_score_below_threshold`를 반환합니다.
+- `examples/volume06/rerank_fixture.py`
+  - 두 고정 한국어 candidate fixture에 0/1/3 다중 judgment를 추가하고, 기존 sweep에 retriever/reranker graded nDCG를 함께 출력합니다.
+  - 무관한 고정 후보를 threshold=1로 실행하는 no-answer fixture를 출력합니다.
+- `tests/unit/test_volume06_reranker.py`
+  - ordinal grade가 graded nDCG를 바꾸는 회귀, label 누락/중복 거부, threshold 경계 통과와 no-answer 거부, 음수/bool threshold 거부를 추가했습니다.
+- `docs/volume06-reranker/03-graded-judgments-threshold-fallback.md`
+  - grade 계약, local metric 해석, no-answer/fallback 관측 계약과 운영 평가 경계를 문서화했습니다.
+
+### 로컬 측정 결과
+
+`uv run python examples/volume06/rerank_fixture.py`의 실제 1회 실행에서 `candidate_count=2; top_k=1` 행은 pair 평가 4회, retriever/reranker graded nDCG `0.143/1.000`을 출력했습니다. 같은 실행의 무관한 고정 후보는 아래처럼 fail-closed되었습니다.
+
+```text
+threshold=1; outcome=no_answer; top_score=0; fallback_reason=top_score_below_threshold
+```
+
+품질 지표, pair 수, threshold decision은 고정 fixture에서 결정론적입니다. `elapsed_ns`만 실행 호스트 부하에 따라 달라집니다. 이 수치는 운영 모델·corpus의 품질, 비용, latency 주장이 아닙니다.
+
+### 검증 명령과 실제 결과
+
+```bash
+uv run pytest tests/unit/test_volume06_reranker.py -q
+# 25 passed in 0.13s
+uv run ruff check src/ai_platform/reranker examples/volume06 tests/unit/test_volume06_reranker.py
+# All checks passed!
+uv run mypy src/ai_platform/reranker examples/volume06
+# Success: no issues found in 3 source files
+uv run python examples/volume06/rerank_fixture.py
+# 6 sweep rows plus 1 deterministic no-answer decision completed
+```
 
 ## 2026-08-10 — Slice 02 완료
 
@@ -83,9 +123,9 @@ uv run python examples/volume06/rerank_fixture.py
 
 - [ ] Bi-Encoder와 실제 Cross-Encoder adapter의 경계 및 batch/timeout 정책을 구현·검증한다.
 - [ ] candidate count, top-k, threshold별 품질·지연시간·비용 trade-off를 고정 evaluation set에서 측정한다.
-- [ ] 다중 relevance judgment, no-answer/fallback, 실패 관측성을 구현·검증한다.
+- [x] 다중 relevance judgment, no-answer/fallback, 실패 관측성을 구현·검증한다.
 - [ ] 미니 프로젝트, 권 단위 체크리스트, 다음 Volume 인계를 완료한다.
 
 ## 다음 slice
 
-고정 fixture와 local adapter만 사용해 다중 relevance judgment 및 no-answer/fallback의 fail-closed 계약을 추가합니다.
+외부 모델 호출 없이 adapter 경계와 deterministic batch 상한·timeout fallback 정책을 추가합니다.
