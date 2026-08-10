@@ -1,13 +1,18 @@
 """고정 후보로 1차 검색 순위와 local rerank 품질을 비교한다."""
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ai_platform.reranker import (
+    BatchRerankPolicy,
     Candidate,
+    CrossEncoderModelAdapter,
     RelevanceJudgment,
     evaluate_graded_ranking,
     evaluate_ranking,
     mean_ranking_metrics,
     measure_rerank,
+    rerank_with_adapter,
     rerank_with_threshold,
 )
 
@@ -52,6 +57,76 @@ NO_ANSWER_FIXTURE = (
     "휴가 신청 방법",
     (Candidate("incident", "장애 대응 절차와 연락망입니다.", 0.9),),
 )
+
+
+class FixtureCrossEncoderModel:
+    """다운로드 모델 없이 adapter 경계를 실행하는 결정론적 pair model fixture다."""
+
+    def predict(
+        self, pairs: Sequence[tuple[str, str]], *, timeout_ns: int
+    ) -> tuple[float, ...]:
+        """고정 query-document pair에 재현 가능한 연속 score를 돌려준다."""
+        if timeout_ns < 1:
+            raise TimeoutError("fixture model received no time budget")
+        return tuple(self._score(query, text) for query, text in pairs)
+
+    @staticmethod
+    def _score(query: str, text: str) -> float:
+        if "비밀번호" in query:
+            if "잊었으면" in text:
+                return 0.95
+            if "정책" in text:
+                return 0.20
+            return 0.01
+        if "연락처" in query:
+            if "온콜" in text:
+                return 0.95
+            if "원칙" in text:
+                return 0.20
+        return 0.01
+
+
+def _print_adapter_measurement() -> None:
+    """동일 fixture로 batch adapter의 before/after ranking metrics를 local 측정한다."""
+    adapter = CrossEncoderModelAdapter("fixture-cross-encoder-v1", FixtureCrossEncoderModel())
+    policy = BatchRerankPolicy(max_batch_size=2, timeout_ns=1_000_000_000)
+    retriever_metrics = []
+    adapter_metrics = []
+    retriever_graded_ndcg = []
+    adapter_graded_ndcg = []
+    batch_count = 0
+    pair_evaluations = 0
+    elapsed_ns = 0
+    for query, judgments, candidates in FIXTURES:
+        relevant_ids = {
+            judgment.candidate_id for judgment in judgments if judgment.relevance_grade >= 2
+        }
+        result = rerank_with_adapter(query, candidates, adapter, policy)
+        if result.outcome != "reranked":
+            raise RuntimeError(f"fixture adapter unexpectedly fell back: {result.fallback_reason}")
+        retriever_ids = [candidate.candidate_id for candidate in candidates]
+        reranked_ids = [item.candidate.candidate_id for item in result.ranked]
+        retriever_metrics.append(evaluate_ranking(retriever_ids, relevant_ids, k=1))
+        adapter_metrics.append(evaluate_ranking(reranked_ids, relevant_ids, k=1))
+        retriever_graded_ndcg.append(
+            evaluate_graded_ranking(retriever_ids, judgments, k=1).ndcg_at_k
+        )
+        adapter_graded_ndcg.append(evaluate_graded_ranking(reranked_ids, judgments, k=1).ndcg_at_k)
+        batch_count += result.batch_count
+        pair_evaluations += result.pair_evaluations
+        elapsed_ns += result.elapsed_ns
+
+    retriever_summary = mean_ranking_metrics(retriever_metrics)
+    adapter_summary = mean_ranking_metrics(adapter_metrics)
+    fixture_count = len(FIXTURES)
+    print(
+        "adapter_candidate_count=3; top_k=1; "
+        f"batch_count={batch_count}; pair_evaluations={pair_evaluations}; elapsed_ns={elapsed_ns}; "
+        f"outcome=reranked; retriever_precision={retriever_summary.mean_precision_at_k:.3f}; "
+        f"adapter_precision={adapter_summary.mean_precision_at_k:.3f}; "
+        f"retriever_graded_ndcg={sum(retriever_graded_ndcg) / fixture_count:.3f}; "
+        f"adapter_graded_ndcg={sum(adapter_graded_ndcg) / fixture_count:.3f}"
+    )
 
 
 def main() -> None:
@@ -103,6 +178,7 @@ def main() -> None:
                 f"reranker_graded_ndcg={sum(reranker_graded_ndcg) / fixture_count:.3f}"
             )
 
+    _print_adapter_measurement()
     no_answer_query, no_answer_candidates = NO_ANSWER_FIXTURE
     decision = rerank_with_threshold(no_answer_query, no_answer_candidates, min_score=1)
     print(

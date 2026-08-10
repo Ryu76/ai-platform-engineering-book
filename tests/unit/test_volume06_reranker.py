@@ -6,7 +6,9 @@ import math
 import pytest
 
 from ai_platform.reranker import (
+    BatchRerankPolicy,
     Candidate,
+    CrossEncoderModelAdapter,
     GradedRankingMetrics,
     LexicalCrossEncoder,
     RankingMetrics,
@@ -16,6 +18,7 @@ from ai_platform.reranker import (
     evaluate_ranking,
     mean_ranking_metrics,
     measure_rerank,
+    rerank_with_adapter,
     rerank_with_threshold,
 )
 
@@ -225,6 +228,166 @@ def test_measure_rerank_rejects_clock_that_moves_backwards() -> None:
             (Candidate("id", "query", 0.1),),
             clock_ns=lambda: next(readings),
         )
+
+
+def test_adapter_batches_pairs_forwards_remaining_timeout_and_reranks() -> None:
+    """실제 model adapter는 입력 순서를 보존하고 batch마다 남은 budget만 넘겨야 한다."""
+
+    class RecordingModel:
+        def __init__(self) -> None:
+            self.calls: list[tuple[tuple[tuple[str, str], ...], int]] = []
+
+        def predict(
+            self, pairs: tuple[tuple[str, str], ...], *, timeout_ns: int
+        ) -> tuple[float, ...]:
+            self.calls.append((pairs, timeout_ns))
+            return tuple({"a": 0.1, "b": 0.9, "c": 0.3}[text] for _, text in pairs)
+
+    model = RecordingModel()
+    candidates = (
+        Candidate("a", "a", 0.9),
+        Candidate("b", "b", 0.8),
+        Candidate("c", "c", 0.7),
+    )
+    readings = iter((0, 0, 10, 10, 20, 20))
+
+    result = rerank_with_adapter(
+        "query",
+        candidates,
+        CrossEncoderModelAdapter("fixture-cross-encoder-v1", model),
+        BatchRerankPolicy(max_batch_size=2, timeout_ns=100),
+        clock_ns=lambda: next(readings),
+    )
+
+    assert [item.candidate.candidate_id for item in result.ranked] == ["b", "c", "a"]
+    assert [item.cross_encoder_score for item in result.ranked] == [0.9, 0.3, 0.1]
+    assert {item.rank_source for item in result.ranked} == {"cross_encoder"}
+    assert result.batch_count == 2
+    assert result.pair_evaluations == 3
+    assert result.elapsed_ns == 20
+    assert result.outcome == "reranked"
+    assert result.fallback_reason is None
+    assert model.calls == [
+        ((("query", "a"), ("query", "b")), 100),
+        ((("query", "c"),), 90),
+    ]
+
+
+def test_adapter_timeout_discards_partial_scores_and_returns_no_answer_by_default() -> None:
+    """deadline을 넘긴 batch의 그럴듯한 score는 answer evidence로 쓰지 않아야 한다."""
+
+    class SlowModel:
+        def predict(
+            self, pairs: tuple[tuple[str, str], ...], *, timeout_ns: int
+        ) -> tuple[float, ...]:
+            return tuple(0.99 for _ in pairs)
+
+    readings = iter((0, 0, 101))
+    result = rerank_with_adapter(
+        "query",
+        (Candidate("first", "first", 0.9), Candidate("second", "second", 0.8)),
+        CrossEncoderModelAdapter("slow-fixture", SlowModel()),
+        BatchRerankPolicy(max_batch_size=2, timeout_ns=100),
+        clock_ns=lambda: next(readings),
+    )
+
+    assert result.ranked == ()
+    assert result.batch_count == 1
+    assert result.pair_evaluations == 2
+    assert result.elapsed_ns == 101
+    assert result.outcome == "no_answer"
+    assert result.fallback_reason == "adapter_timeout"
+
+
+def test_adapter_error_can_use_explicit_retriever_fallback_with_source() -> None:
+    """승인된 retriever fallback도 Cross-Encoder score인 척 하지 않아야 한다."""
+
+    class BrokenModel:
+        def predict(
+            self, pairs: tuple[tuple[str, str], ...], *, timeout_ns: int
+        ) -> tuple[float, ...]:
+            raise RuntimeError("fixture model unavailable")
+
+    readings = iter((0, 0, 5))
+    result = rerank_with_adapter(
+        "query",
+        (Candidate("low", "low", 0.2), Candidate("high", "high", 0.8)),
+        CrossEncoderModelAdapter("broken-fixture", BrokenModel()),
+        BatchRerankPolicy(max_batch_size=2, timeout_ns=100),
+        fallback="retriever",
+        clock_ns=lambda: next(readings),
+    )
+
+    assert [item.candidate.candidate_id for item in result.ranked] == ["high", "low"]
+    assert [item.cross_encoder_score for item in result.ranked] == [None, None]
+    assert {item.rank_source for item in result.ranked} == {"retriever_fallback"}
+    assert result.batch_count == 1
+    assert result.pair_evaluations == 2
+    assert result.elapsed_ns == 5
+    assert result.outcome == "retriever_fallback"
+    assert result.fallback_reason == "adapter_error"
+
+
+def test_adapter_rejects_malformed_score_count_via_fail_closed_fallback() -> None:
+    """model이 batch cardinality를 깨면 남은 score를 정렬하지 않는다."""
+
+    class ShortResultModel:
+        def predict(
+            self, pairs: tuple[tuple[str, str], ...], *, timeout_ns: int
+        ) -> tuple[float, ...]:
+            return (0.5,)
+
+    readings = iter((0, 0, 2))
+    result = rerank_with_adapter(
+        "query",
+        (Candidate("first", "first", 0.9), Candidate("second", "second", 0.8)),
+        CrossEncoderModelAdapter("short-result-fixture", ShortResultModel()),
+        BatchRerankPolicy(max_batch_size=2, timeout_ns=100),
+        clock_ns=lambda: next(readings),
+    )
+
+    assert result.ranked == ()
+    assert result.outcome == "no_answer"
+    assert result.fallback_reason == "adapter_error"
+
+
+def test_adapter_rejects_non_finite_score_via_fail_closed_fallback() -> None:
+    """NaN/Infinity score는 ranking에 들어가기 전에 adapter error로 관측한다."""
+
+    class NonFiniteModel:
+        def predict(
+            self, pairs: tuple[tuple[str, str], ...], *, timeout_ns: int
+        ) -> tuple[float, ...]:
+            return (math.nan,)
+
+    readings = iter((0, 0, 2))
+    result = rerank_with_adapter(
+        "query",
+        (Candidate("only", "only", 0.9),),
+        CrossEncoderModelAdapter("non-finite-fixture", NonFiniteModel()),
+        BatchRerankPolicy(max_batch_size=1, timeout_ns=100),
+        clock_ns=lambda: next(readings),
+    )
+
+    assert result.ranked == ()
+    assert result.outcome == "no_answer"
+    assert result.fallback_reason == "adapter_error"
+
+
+@pytest.mark.parametrize(
+    ("factory", "message"),
+    [
+        (lambda: BatchRerankPolicy(max_batch_size=0, timeout_ns=1), "max_batch_size"),
+        (lambda: BatchRerankPolicy(max_batch_size=1, timeout_ns=False), "timeout_ns"),
+        (lambda: CrossEncoderModelAdapter("model", object()), "predict"),
+    ],
+)
+def test_adapter_policy_and_model_boundary_reject_invalid_contracts(
+    factory: object, message: str
+) -> None:
+    """batch 및 model adapter의 모호한 입력은 실행 전에 거부한다."""
+    with pytest.raises(RerankerConfigurationError, match=message):
+        factory()
 
 
 @pytest.mark.parametrize(

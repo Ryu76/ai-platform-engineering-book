@@ -3,8 +3,47 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME06_COMPLETE` 미설정
-- 현재 slice: 03 — 다중 relevance judgment, threshold no-answer/fallback 계약
+- 현재 slice: 04 — Cross-Encoder model adapter, batch deadline, timeout/error fallback 계약
 - 범위: 외부 API, 모델 다운로드, GPU, 비밀값, 배포를 사용하지 않았습니다.
+
+## 2026-08-10 — Slice 04 완료
+
+### 추가한 결과물
+
+- `src/ai_platform/reranker/cross_encoder.py`
+  - `CrossEncoderModel`/`CrossEncoderScorer` protocol과 `CrossEncoderModelAdapter`를 추가했습니다. model client는 입력 순서와 같은 수의 pair score만 반환하는 명시적 경계를 갖습니다.
+  - 불변 `BatchRerankPolicy(max_batch_size, timeout_ns)`와 `rerank_with_adapter`를 추가했습니다. 전체 rerank deadline에서 경과 시간을 빼서 각 batch에 남은 timeout budget만 전달합니다.
+  - `AdapterRerankResult`에 candidate/batch/pair 수, local elapsed, outcome, fallback reason을 기록합니다. timeout·adapter exception·score 개수/수치 오류는 성공한 이전 batch를 포함한 모든 partial Cross-Encoder score를 폐기합니다.
+  - 기본 `no_answer`는 빈 ranking을 반환합니다. 명시적 `retriever` fallback은 `cross_encoder_score=None`, `rank_source=retriever_fallback`으로 출처를 보존합니다.
+- `examples/volume06/rerank_fixture.py`
+  - 다운로드 없이 실행되는 `FixtureCrossEncoderModel`을 `CrossEncoderModelAdapter`로 감싸고, 두 고정 Korean fixture에서 batch/pair 수와 binary·graded ranking metric을 local 측정합니다.
+- `tests/unit/test_volume06_reranker.py`
+  - pair 순서, batch 분할, 100ns→90ns 남은 budget 전달, timeout 후 partial-score 폐기, 명시적 retriever fallback 출처, malformed/non-finite score fail-closed를 추가했습니다.
+- `docs/volume06-reranker/04-batched-cross-encoder-adapter-timeout.md`
+  - Bi/Cross-Encoder 경계, 전체 deadline batch 정책, sync adapter timeout 한계, fallback 관측과 운영 평가 경계를 문서화했습니다.
+
+### 로컬 측정 결과
+
+`uv run python examples/volume06/rerank_fixture.py`의 실제 1회 실행에서 adapter row는 아래와 같았습니다.
+
+```text
+adapter_candidate_count=3; top_k=1; batch_count=4; pair_evaluations=6; elapsed_ns=81200; outcome=reranked; retriever_precision=0.000; adapter_precision=1.000; retriever_graded_ndcg=0.143; adapter_graded_ndcg=1.000
+```
+
+두 query × 세 candidate를 `max_batch_size=2`로 실행했으므로 batch 4회와 pair 6회가 결정론적입니다. precision·graded nDCG도 fixture/model mapping에서 결정론적입니다. `elapsed_ns`는 host 부하에 따라 변하며 production model latency, 비용, 품질 주장이 아닙니다.
+
+### 검증 명령과 실제 결과
+
+```bash
+uv run pytest tests/unit/test_volume06_reranker.py -q
+# 33 passed in 0.16s
+uv run ruff check src/ai_platform/reranker examples/volume06 tests/unit/test_volume06_reranker.py
+# All checks passed!
+uv run mypy src/ai_platform/reranker examples/volume06
+# Success: no issues found in 3 source files
+uv run python examples/volume06/rerank_fixture.py
+# 6 lexical sweep rows, 1 adapter measurement row, 1 threshold no-answer decision completed
+```
 
 ## 2026-08-10 — Slice 03 완료
 
@@ -121,11 +160,11 @@ uv run python examples/volume06/rerank_fixture.py
 
 ## 남은 PRD 완료 조건
 
-- [ ] Bi-Encoder와 실제 Cross-Encoder adapter의 경계 및 batch/timeout 정책을 구현·검증한다.
+- [x] Bi-Encoder와 실제 Cross-Encoder adapter의 경계 및 batch/timeout 정책을 구현·검증한다.
 - [ ] candidate count, top-k, threshold별 품질·지연시간·비용 trade-off를 고정 evaluation set에서 측정한다.
 - [x] 다중 relevance judgment, no-answer/fallback, 실패 관측성을 구현·검증한다.
 - [ ] 미니 프로젝트, 권 단위 체크리스트, 다음 Volume 인계를 완료한다.
 
 ## 다음 slice
 
-외부 모델 호출 없이 adapter 경계와 deterministic batch 상한·timeout fallback 정책을 추가합니다.
+고정 fixture에서 threshold sweep별 acceptance/no-answer 비율과 quality·pair-work trade-off를 측정하고, Volume 06 미니 프로젝트의 최소 end-to-end contract를 추가합니다.

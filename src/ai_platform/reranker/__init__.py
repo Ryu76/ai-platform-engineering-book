@@ -1,7 +1,13 @@
 """Volume 06의 결정론적 local reranker 교육 도구."""
 
 from ai_platform.reranker.cross_encoder import (
+    AdapterRerankedCandidate,
+    AdapterRerankResult,
+    BatchRerankPolicy,
     Candidate,
+    CrossEncoderModel,
+    CrossEncoderModelAdapter,
+    CrossEncoderScorer,
     GradedRankingMetrics,
     LexicalCrossEncoder,
     RankingMetrics,
@@ -15,11 +21,18 @@ from ai_platform.reranker.cross_encoder import (
     evaluate_ranking,
     mean_ranking_metrics,
     measure_rerank,
+    rerank_with_adapter,
     rerank_with_threshold,
 )
 
 __all__ = [
+    "AdapterRerankedCandidate",
+    "AdapterRerankResult",
+    "BatchRerankPolicy",
     "Candidate",
+    "CrossEncoderModel",
+    "CrossEncoderModelAdapter",
+    "CrossEncoderScorer",
     "GradedRankingMetrics",
     "LexicalCrossEncoder",
     "RankingMetrics",
@@ -33,5 +46,6 @@ __all__ = [
     "evaluate_ranking",
     "mean_ranking_metrics",
     "measure_rerank",
+    "rerank_with_adapter",
     "rerank_with_threshold",
 ]

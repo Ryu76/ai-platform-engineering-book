@@ -11,7 +11,7 @@ from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass
 from math import isfinite, log2
 from time import perf_counter_ns
-from typing import Literal
+from typing import Literal, Protocol
 
 
 class RerankerConfigurationError(ValueError):
@@ -118,6 +118,93 @@ class RerankDecision:
     fallback_reason: str | None
 
 
+class CrossEncoderModel(Protocol):
+    """외부 또는 local Cross-Encoder 모델이 제공해야 하는 최소 경계다.
+
+    ``pairs``의 출력 순서는 입력 순서와 같아야 한다. 어댑터는 호출마다 남은 timeout
+    budget을 전달하므로, 실제 모델 client는 이 값을 모델 호출의 deadline으로 사용해야
+    한다. 이 protocol은 모델 라이브러리를 이 교육 모듈의 의존성으로 만들지 않으면서도
+    batch pair scoring 계약을 명시한다.
+    """
+
+    def predict(
+        self, pairs: Sequence[tuple[str, str]], *, timeout_ns: int
+    ) -> Sequence[float]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class CrossEncoderModelAdapter:
+    """실제 Cross-Encoder client를 candidate contract에 연결하는 얇은 adapter다.
+
+    모델 로딩, 네트워크 전송, retry는 이 경계 밖의 client가 담당한다. 이 adapter는
+    query와 candidate text를 순서 보존 pair로 만들고 timeout budget을 그대로 전달한다.
+    """
+
+    model_id: str
+    model: CrossEncoderModel
+
+    def __post_init__(self) -> None:
+        _require_identifier(self.model_id, name="model_id")
+        if not callable(getattr(self.model, "predict", None)):
+            raise RerankerConfigurationError("model must provide a callable predict method")
+
+    def score_pairs(
+        self, query: str, candidates: Sequence[Candidate], *, timeout_ns: int
+    ) -> Sequence[float]:
+        """입력 순서 그대로 ``(query, candidate.text)`` pair를 모델에 전달한다."""
+        _require_positive_integer(timeout_ns, name="timeout_ns")
+        return self.model.predict(
+            tuple((query, candidate.text) for candidate in candidates), timeout_ns=timeout_ns
+        )
+
+
+class CrossEncoderScorer(Protocol):
+    """batch rerank 실행기가 의존하는 adapter 측 경계다."""
+
+    def score_pairs(
+        self, query: str, candidates: Sequence[Candidate], *, timeout_ns: int
+    ) -> Sequence[float]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class BatchRerankPolicy:
+    """모든 batch가 공유하는 최대 크기와 전체 rerank deadline이다."""
+
+    max_batch_size: int
+    timeout_ns: int
+
+    def __post_init__(self) -> None:
+        _require_positive_integer(self.max_batch_size, name="max_batch_size")
+        _require_positive_integer(self.timeout_ns, name="timeout_ns")
+
+
+@dataclass(frozen=True, slots=True)
+class AdapterRerankedCandidate:
+    """adapter score 또는 명시적인 retriever fallback 출처를 가진 후보다."""
+
+    candidate: Candidate
+    cross_encoder_score: float | None
+    rank_source: Literal["cross_encoder", "retriever_fallback"]
+
+
+@dataclass(frozen=True, slots=True)
+class AdapterRerankResult:
+    """batched adapter rerank의 순위, 작업량, timeout/error 관측값이다.
+
+    timeout 또는 adapter error 뒤에는 일부 batch score를 사용하지 않는다. 기본
+    ``no_answer`` 정책은 빈 ranked 결과를 반환한다. 명시적으로 ``retriever`` fallback을
+    선택한 경우에만 원래 retriever score 순위가 반환되고 그 출처가 표시된다.
+    """
+
+    ranked: tuple[AdapterRerankedCandidate, ...]
+    candidate_count: int
+    batch_count: int
+    pair_evaluations: int
+    elapsed_ns: int
+    outcome: Literal["reranked", "no_answer", "retriever_fallback"]
+    fallback_reason: Literal["adapter_timeout", "adapter_error"] | None
+
+
 class LexicalCrossEncoder:
     """질의와 각 후보를 함께 비교하는 결정론적 교육용 reranker다.
 
@@ -216,6 +303,116 @@ def rerank_with_threshold(
         top_score=top_result.cross_encoder_score,
         outcome="no_answer",
         fallback_reason="top_score_below_threshold",
+    )
+
+
+def rerank_with_adapter(
+    query: str,
+    candidates: Sequence[Candidate],
+    adapter: CrossEncoderScorer,
+    policy: BatchRerankPolicy,
+    *,
+    fallback: Literal["no_answer", "retriever"] = "no_answer",
+    clock_ns: Callable[[], int] = perf_counter_ns,
+) -> AdapterRerankResult:
+    """batch Cross-Encoder adapter를 전체 deadline 아래 실행한다.
+
+    각 model call에는 전체 deadline에서 이미 사용한 시간을 뺀 budget을 넘긴다. timeout,
+    adapter exception, 또는 deadline 초과가 발생하면 이전 batch의 partial score를 폐기한다.
+    기본값은 후보를 선택하지 않는 ``no_answer``다. ``fallback="retriever"``는 호출자가
+    명시적으로 허용한 경우에만 retriever score 순위를 반환하며 출처를 표시한다.
+    """
+    _tokenize_query(query)
+    prepared_candidates = _prepare_candidates(candidates)
+    _require_scorer(adapter)
+    if not isinstance(policy, BatchRerankPolicy):
+        raise RerankerConfigurationError("policy must be a BatchRerankPolicy")
+    _require_fallback(fallback)
+    if not callable(clock_ns):
+        raise RerankerConfigurationError("clock_ns must be callable")
+
+    started_ns = _require_clock_reading(clock_ns(), name="clock_ns start")
+    deadline_ns = started_ns + policy.timeout_ns
+    scores: list[float] = []
+    batch_count = 0
+    pair_evaluations = 0
+    for offset in range(0, len(prepared_candidates), policy.max_batch_size):
+        current_ns = _require_clock_reading(clock_ns(), name="clock_ns before batch")
+        if current_ns < started_ns:
+            raise RerankerConfigurationError("clock_ns must not move backwards")
+        if current_ns >= deadline_ns:
+            return _adapter_fallback_result(
+                prepared_candidates,
+                fallback=fallback,
+                reason="adapter_timeout",
+                batch_count=batch_count,
+                pair_evaluations=pair_evaluations,
+                elapsed_ns=current_ns - started_ns,
+            )
+
+        batch = prepared_candidates[offset : offset + policy.max_batch_size]
+        batch_count += 1
+        pair_evaluations += len(batch)
+        try:
+            batch_scores = _prepare_adapter_scores(
+                adapter.score_pairs(query, batch, timeout_ns=deadline_ns - current_ns),
+                expected_count=len(batch),
+            )
+        except TimeoutError:
+            return _adapter_fallback_result(
+                prepared_candidates,
+                fallback=fallback,
+                reason="adapter_timeout",
+                batch_count=batch_count,
+                pair_evaluations=pair_evaluations,
+                elapsed_ns=_elapsed_since(started_ns, clock_ns),
+            )
+        except Exception:
+            return _adapter_fallback_result(
+                prepared_candidates,
+                fallback=fallback,
+                reason="adapter_error",
+                batch_count=batch_count,
+                pair_evaluations=pair_evaluations,
+                elapsed_ns=_elapsed_since(started_ns, clock_ns),
+            )
+
+        finished_batch_ns = _require_clock_reading(clock_ns(), name="clock_ns after batch")
+        if finished_batch_ns < started_ns:
+            raise RerankerConfigurationError("clock_ns must not move backwards")
+        if finished_batch_ns > deadline_ns:
+            return _adapter_fallback_result(
+                prepared_candidates,
+                fallback=fallback,
+                reason="adapter_timeout",
+                batch_count=batch_count,
+                pair_evaluations=pair_evaluations,
+                elapsed_ns=finished_batch_ns - started_ns,
+            )
+        scores.extend(batch_scores)
+
+    reranked = tuple(
+        sorted(
+            (
+                AdapterRerankedCandidate(candidate, score, "cross_encoder")
+                for candidate, score in zip(prepared_candidates, scores, strict=True)
+            ),
+            key=lambda result: (
+                -result.cross_encoder_score
+                if result.cross_encoder_score is not None
+                else float("inf"),
+                result.candidate.candidate_id,
+            ),
+        )
+    )
+    return AdapterRerankResult(
+        ranked=reranked,
+        candidate_count=len(prepared_candidates),
+        batch_count=batch_count,
+        pair_evaluations=pair_evaluations,
+        elapsed_ns=_elapsed_since(started_ns, clock_ns),
+        outcome="reranked",
+        fallback_reason=None,
     )
 
 
@@ -321,6 +518,76 @@ def mean_ranking_metrics(metrics: Sequence[RankingMetrics]) -> RankingSummary:
     )
 
 
+def _adapter_fallback_result(
+    candidates: tuple[Candidate, ...],
+    *,
+    fallback: Literal["no_answer", "retriever"],
+    reason: Literal["adapter_timeout", "adapter_error"],
+    batch_count: int,
+    pair_evaluations: int,
+    elapsed_ns: int,
+) -> AdapterRerankResult:
+    """partial Cross-Encoder score를 버리고 명시된 fallback 결과만 만든다."""
+    if fallback == "no_answer":
+        return AdapterRerankResult(
+            ranked=(),
+            candidate_count=len(candidates),
+            batch_count=batch_count,
+            pair_evaluations=pair_evaluations,
+            elapsed_ns=elapsed_ns,
+            outcome="no_answer",
+            fallback_reason=reason,
+        )
+    return AdapterRerankResult(
+        ranked=tuple(
+            AdapterRerankedCandidate(candidate, None, "retriever_fallback")
+            for candidate in sorted(
+                candidates,
+                key=lambda candidate: (
+                    -candidate.retriever_score,
+                    candidate.candidate_id,
+                ),
+            )
+        ),
+        candidate_count=len(candidates),
+        batch_count=batch_count,
+        pair_evaluations=pair_evaluations,
+        elapsed_ns=elapsed_ns,
+        outcome="retriever_fallback",
+        fallback_reason=reason,
+    )
+
+
+def _prepare_adapter_scores(scores: Sequence[float], *, expected_count: int) -> tuple[float, ...]:
+    """adapter output의 cardinality와 수치 계약을 fail-closed로 검증한다."""
+    if isinstance(scores, (str, bytes)) or not isinstance(scores, Sequence):
+        raise RerankerConfigurationError("adapter scores must be a sequence of finite numbers")
+    prepared = tuple(scores)
+    if len(prepared) != expected_count:
+        raise RerankerConfigurationError("adapter scores must match the submitted batch size")
+    for score in prepared:
+        _require_finite_number(score, name="adapter score")
+    return tuple(float(score) for score in prepared)
+
+
+def _require_scorer(adapter: CrossEncoderScorer) -> None:
+    if not callable(getattr(adapter, "score_pairs", None)):
+        raise RerankerConfigurationError("adapter must provide a callable score_pairs method")
+
+
+def _require_fallback(fallback: str) -> None:
+    if fallback not in {"no_answer", "retriever"}:
+        raise RerankerConfigurationError("fallback must be 'no_answer' or 'retriever'")
+
+
+def _elapsed_since(started_ns: int, clock_ns: Callable[[], int]) -> int:
+    """deadline 종료/오류 시에도 local monotonic elapsed를 검증해 계산한다."""
+    current_ns = _require_clock_reading(clock_ns(), name="clock_ns elapsed")
+    if current_ns < started_ns:
+        raise RerankerConfigurationError("clock_ns must not move backwards")
+    return current_ns - started_ns
+
+
 def _score_pair(query_terms: tuple[str, ...], candidate_text: str) -> int:
     """coverage를 우선하고 반복 일치를 보조 신호로 쓰는 재현 가능한 pair 점수다."""
     match_counts = [_term_match_count(term, candidate_text) for term in query_terms]
@@ -417,6 +684,11 @@ def _require_top_k(k: int) -> None:
 def _require_non_negative_integer(value: int, *, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise RerankerConfigurationError(f"{name} must be a non-negative integer")
+
+
+def _require_positive_integer(value: int, *, name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise RerankerConfigurationError(f"{name} must be a positive integer")
 
 
 def _require_finite_number(value: float, *, name: str) -> None:
