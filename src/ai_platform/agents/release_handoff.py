@@ -19,6 +19,7 @@ from ai_platform.agents.workflow import (
     HumanApproval,
     ReviewDecision,
     WorkflowConfigurationError,
+    validate_agent_boundary,
 )
 
 
@@ -60,6 +61,14 @@ class ApprovalGatedReleaseHandoffWorkflow:
         max_review_cycles: int = 2,
     ) -> None:
         self._validate_positive_integer("max_review_cycles", max_review_cycles)
+        for role, agent in (
+            ("planner", planner),
+            ("developer", developer),
+            ("reviewer", reviewer),
+            ("qa", qa),
+            ("devops", devops),
+        ):
+            validate_agent_boundary(role, agent)
         self._planner = planner
         self._developer = developer
         self._reviewer = reviewer

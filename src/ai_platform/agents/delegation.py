@@ -157,12 +157,27 @@ class ApprovalGatedDelegationWorkflow:
     ) -> None:
         self._validate_positive_integer("max_tasks", max_tasks)
         self._validate_positive_integer("max_worker_attempts", max_worker_attempts)
-        if not allowed_assignees or any(not role.strip() for role in allowed_assignees):
+        if not isinstance(workers, Mapping):
+            raise WorkflowConfigurationError("workers must be a mapping of assignees to workers")
+        if not isinstance(allowed_assignees, frozenset) or not allowed_assignees:
+            raise WorkflowConfigurationError(
+                "allowed_assignees must be a non-empty immutable frozenset"
+            )
+        if any(not isinstance(role, str) or not role.strip() for role in allowed_assignees):
             raise WorkflowConfigurationError("allowed_assignees must contain non-empty roles")
         if set(workers) != set(allowed_assignees):
             raise WorkflowConfigurationError(
                 "workers must contain exactly one worker for each allowed assignee"
             )
+        if not callable(getattr(coordinator, "propose", None)):
+            raise WorkflowConfigurationError(
+                "coordinator must provide a callable propose(context) method"
+            )
+        for assignee, worker in workers.items():
+            if not callable(getattr(worker, "act", None)):
+                raise WorkflowConfigurationError(
+                    f"worker for {assignee} must provide a callable act(context) method"
+                )
         self._coordinator = coordinator
         self._workers = dict(workers)
         self._allowed_assignees = frozenset(allowed_assignees)

@@ -10,6 +10,7 @@ Planner, Researcher, Developer, Reviewer, QA 역할의 메시지·상태·도구
 2. [승인 게이트가 있는 유한 위임](02-approved-bounded-delegation.md) — 검토 가능한 manifest, 담당자 allow-list, Worker 재시도 상한
 3. [유한 충돌 해결과 사람 승인](03-bounded-conflict-resolution.md) — exact consensus, 충돌 round 상한, 완료 승인 게이트
 4. [승인 게이트가 있는 로컬 Release Handoff](04-approved-release-handoff.md) — role별 immutable 결과 공유, DevOps handoff, QA/DevOps 승인 게이트
+5. [구성 단계 Agent 경계 검증](05-agent-boundary-configuration.md) — 호출 가능한 역할 계약, immutable assignee allow-list, 실행 전 fail-closed
 
 ## 진행 상태
 

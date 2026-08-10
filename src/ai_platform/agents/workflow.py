@@ -72,6 +72,14 @@ class Agent(Protocol):
         """Return one response for the supplied, immutable workflow context."""
 
 
+def validate_agent_boundary(name: str, agent: object) -> None:
+    """Reject a role without a callable local agent boundary during configuration."""
+    if not callable(getattr(agent, "act", None)):
+        raise WorkflowConfigurationError(
+            f"{name} must provide a callable act(context) method"
+        )
+
+
 class DeterministicMockAgent:
     """Offline mock agent that consumes a fixed response script in call order.
 
@@ -125,6 +133,14 @@ class BoundedReviewWorkflow:
             raise WorkflowConfigurationError("max_review_cycles must be a positive integer")
         if max_review_cycles < 1:
             raise WorkflowConfigurationError("max_review_cycles must be a positive integer")
+        for role, agent in (
+            ("planner", planner),
+            ("researcher", researcher),
+            ("developer", developer),
+            ("reviewer", reviewer),
+            ("qa", qa),
+        ):
+            validate_agent_boundary(role, agent)
         self._planner = planner
         self._researcher = researcher
         self._developer = developer

@@ -110,12 +110,19 @@ class BoundedConflictResolutionWorkflow:
     ) -> None:
         self._validate_positive_integer("max_agents", max_agents)
         self._validate_positive_integer("max_rounds", max_rounds)
+        if not isinstance(agents, Mapping):
+            raise WorkflowConfigurationError("agents must be a mapping of roles to agents")
         if len(agents) < 2 or len(agents) > max_agents:
             raise WorkflowConfigurationError(
                 "agents must contain at least two roles and not exceed max_agents"
             )
-        if any(not role.strip() for role in agents):
+        if any(not isinstance(role, str) or not role.strip() for role in agents):
             raise WorkflowConfigurationError("agent roles must not be empty")
+        for role, agent in agents.items():
+            if not callable(getattr(agent, "propose", None)):
+                raise WorkflowConfigurationError(
+                    f"agent for {role} must provide a callable propose(context) method"
+                )
         self._agents = dict(agents)
         self._max_rounds = max_rounds
 

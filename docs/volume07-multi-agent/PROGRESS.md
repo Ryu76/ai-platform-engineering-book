@@ -1,5 +1,13 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 08: 구성 단계 Agent 경계 검증
+
+- `src/ai_platform/agents/workflow.py`와 `release_handoff.py`는 모든 named role에 호출 가능한 `act(context)` 경계가 있는지 생성 시 검사한다. 잘못된 역할은 첫 Agent 호출 전에 `WorkflowConfigurationError`로 fail-closed한다.
+- `src/ai_platform/agents/delegation.py`는 Coordinator의 `propose(context)`, Worker의 `act(context)`, `workers` mapping, immutable non-empty `frozenset` assignee allow-list를 구성 시 검증한다.
+- `src/ai_platform/agents/conflict.py`는 role-to-agent mapping과 모든 `propose(context)` 경계를 실행 전에 검증한다.
+- `tests/volume07/test_agent_boundary_configuration.py`는 네 workflow의 non-callable boundary와 mutable allow-list가 어떤 Agent 호출보다 먼저 거절되며, 정상 Deterministic Mock은 approval 대기까지 계속 동작함을 고정한다.
+- `docs/volume07-multi-agent/05-agent-boundary-configuration.md`에 구성·실행 protocol 검증의 분리와 fail-closed 이유를 기록했다.
+
 ## 2026-08-11 — Slice 07: 충돌 해결 입력·제안 경계 강화
 
 - `src/ai_platform/agents/conflict.py`에서 objective를 비어 있지 않은 문자열로 제한해 잘못된 요청이 첫 Conflict Agent 호출 전에 종료되도록 했다.
