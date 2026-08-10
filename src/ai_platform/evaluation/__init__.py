@@ -11,7 +11,9 @@ from ai_platform.evaluation.answer_metrics import (
 )
 from ai_platform.evaluation.datasets import (
     FIXED_ANSWER_CASES,
+    FIXED_BASELINE_EVALUATION_INPUT,
     FIXED_BASELINE_SNAPSHOT,
+    FIXED_CANDIDATE_EVALUATION_INPUT,
     FIXED_CANDIDATE_RECORDED_USAGE,
     FIXED_CANDIDATE_RECORDED_WORKFLOWS,
     FIXED_CANDIDATE_RETRIEVAL_RESULTS_AT_3,
@@ -33,6 +35,13 @@ from ai_platform.evaluation.golden_dataset import (
     GoldenDatasetError,
     GoldenDatasetSummary,
     summarize_golden_dataset,
+)
+from ai_platform.evaluation.offline_pipeline import (
+    OfflineEvaluationError,
+    OfflineEvaluationInput,
+    OfflineEvaluationRun,
+    format_offline_evaluation_report,
+    run_offline_evaluation,
 )
 from ai_platform.evaluation.regression_report import (
     EvaluationSnapshot,
@@ -78,7 +87,9 @@ __all__ = [
     "AnswerMetrics",
     "EvaluationSnapshot",
     "FIXED_ANSWER_CASES",
+    "FIXED_BASELINE_EVALUATION_INPUT",
     "FIXED_BASELINE_SNAPSHOT",
+    "FIXED_CANDIDATE_EVALUATION_INPUT",
     "FIXED_CANDIDATE_RECORDED_USAGE",
     "FIXED_CANDIDATE_RECORDED_WORKFLOWS",
     "FIXED_CANDIDATE_RETRIEVAL_RESULTS_AT_3",
@@ -98,6 +109,9 @@ __all__ = [
     "GoldenDatasetError",
     "GoldenDatasetSummary",
     "MetricValue",
+    "OfflineEvaluationError",
+    "OfflineEvaluationInput",
+    "OfflineEvaluationRun",
     "RecordedAnswer",
     "RecordedUsage",
     "RecordedWorkflow",
@@ -127,5 +141,7 @@ __all__ = [
     "evaluate_usage_cases",
     "evaluate_workflow_cases",
     "evaluate_workflows",
+    "format_offline_evaluation_report",
+    "run_offline_evaluation",
     "summarize_golden_dataset",
 ]

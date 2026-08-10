@@ -3,28 +3,22 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from ai_platform.evaluation.answer_metrics import (
-    AnswerCase,
-    RecordedAnswer,
-    evaluate_answers,
-)
+from ai_platform.evaluation.answer_metrics import AnswerCase, RecordedAnswer
 from ai_platform.evaluation.golden_dataset import GoldenCase, GoldenDataset
-from ai_platform.evaluation.regression_report import (
-    EvaluationSnapshot,
-    MetricValue,
-    RegressionPolicy,
+from ai_platform.evaluation.offline_pipeline import (
+    OfflineEvaluationInput,
+    run_offline_evaluation,
 )
-from ai_platform.evaluation.retrieval_metrics import RetrievalCase, evaluate_retrieval
+from ai_platform.evaluation.regression_report import RegressionPolicy
+from ai_platform.evaluation.retrieval_metrics import RetrievalCase
 from ai_platform.evaluation.usage_metrics import (
     RecordedUsage,
     TokenPricing,
     UsageCase,
-    evaluate_usage,
 )
 from ai_platform.evaluation.workflow_metrics import (
     RecordedWorkflow,
     WorkflowCase,
-    evaluate_workflows,
 )
 
 FIXED_GOLDEN_DATASET = GoldenDataset(
@@ -288,59 +282,51 @@ FIXED_CANDIDATE_RECORDED_USAGE: Mapping[str, RecordedUsage] = {
 
 
 _FIXED_CASE_IDS = tuple(case.case_id for case in FIXED_GOLDEN_DATASET.cases)
-_FIXED_BASELINE_RETRIEVAL = evaluate_retrieval(
-    FIXED_RETRIEVAL_CASES, FIXED_RETRIEVAL_RESULTS_AT_3, k=3
-)
-_FIXED_CANDIDATE_RETRIEVAL = evaluate_retrieval(
-    FIXED_RETRIEVAL_CASES, FIXED_CANDIDATE_RETRIEVAL_RESULTS_AT_3, k=3
-)
-_FIXED_BASELINE_ANSWERS = evaluate_answers(FIXED_ANSWER_CASES, FIXED_RECORDED_ANSWERS)
-_FIXED_CANDIDATE_ANSWERS = evaluate_answers(FIXED_ANSWER_CASES, FIXED_RECORDED_ANSWERS)
-_FIXED_BASELINE_WORKFLOWS = evaluate_workflows(FIXED_WORKFLOW_CASES, FIXED_RECORDED_WORKFLOWS)
-_FIXED_CANDIDATE_WORKFLOWS = evaluate_workflows(
-    FIXED_WORKFLOW_CASES, FIXED_CANDIDATE_RECORDED_WORKFLOWS
-)
-_FIXED_BASELINE_USAGE = evaluate_usage(
-    FIXED_USAGE_CASES, FIXED_RECORDED_USAGE, FIXED_TOKEN_PRICING
-)
-_FIXED_CANDIDATE_USAGE = evaluate_usage(
-    FIXED_USAGE_CASES, FIXED_CANDIDATE_RECORDED_USAGE, FIXED_TOKEN_PRICING
-)
 
-FIXED_BASELINE_SNAPSHOT = EvaluationSnapshot(
+FIXED_BASELINE_EVALUATION_INPUT = OfflineEvaluationInput(
     dataset_id=FIXED_GOLDEN_DATASET.dataset_id,
     dataset_version=FIXED_GOLDEN_DATASET.version,
     case_ids=_FIXED_CASE_IDS,
-    metrics=(
-        MetricValue("retrieval.recall_at_3", _FIXED_BASELINE_RETRIEVAL.recall_at_k),
-        MetricValue("answer.answer_accuracy", _FIXED_BASELINE_ANSWERS.answer_accuracy),
-        MetricValue(
-            "workflow.agent_task_success_rate",
-            _FIXED_BASELINE_WORKFLOWS.agent_task_success_rate,
-        ),
-        MetricValue("usage.p95_latency_ms", _FIXED_BASELINE_USAGE.p95_latency_ms),
-        MetricValue("usage.total_cost_micro_usd", _FIXED_BASELINE_USAGE.total_cost_micro_usd),
-    ),
+    retrieval_cases=FIXED_RETRIEVAL_CASES,
+    ranked_document_ids_by_case=FIXED_RETRIEVAL_RESULTS_AT_3,
+    answer_cases=FIXED_ANSWER_CASES,
+    recorded_answers_by_case=FIXED_RECORDED_ANSWERS,
+    workflow_cases=FIXED_WORKFLOW_CASES,
+    recorded_workflows_by_case=FIXED_RECORDED_WORKFLOWS,
+    usage_cases=FIXED_USAGE_CASES,
+    recorded_usage_by_case=FIXED_RECORDED_USAGE,
+    token_pricing=FIXED_TOKEN_PRICING,
 )
-"""현재 고정 기록에서 계산한 기준선 스냅샷; 모든 수치는 순수 함수 결과다."""
+"""한 골든 계약의 모든 기준선 입력을 묶은 순수 오프라인 파이프라인 입력이다."""
 
 
-FIXED_CANDIDATE_SNAPSHOT = EvaluationSnapshot(
+FIXED_CANDIDATE_EVALUATION_INPUT = OfflineEvaluationInput(
     dataset_id=FIXED_GOLDEN_DATASET.dataset_id,
     dataset_version=FIXED_GOLDEN_DATASET.version,
     case_ids=_FIXED_CASE_IDS,
-    metrics=(
-        MetricValue("retrieval.recall_at_3", _FIXED_CANDIDATE_RETRIEVAL.recall_at_k),
-        MetricValue("answer.answer_accuracy", _FIXED_CANDIDATE_ANSWERS.answer_accuracy),
-        MetricValue(
-            "workflow.agent_task_success_rate",
-            _FIXED_CANDIDATE_WORKFLOWS.agent_task_success_rate,
-        ),
-        MetricValue("usage.p95_latency_ms", _FIXED_CANDIDATE_USAGE.p95_latency_ms),
-        MetricValue("usage.total_cost_micro_usd", _FIXED_CANDIDATE_USAGE.total_cost_micro_usd),
-    ),
+    retrieval_cases=FIXED_RETRIEVAL_CASES,
+    ranked_document_ids_by_case=FIXED_CANDIDATE_RETRIEVAL_RESULTS_AT_3,
+    answer_cases=FIXED_ANSWER_CASES,
+    recorded_answers_by_case=FIXED_RECORDED_ANSWERS,
+    workflow_cases=FIXED_WORKFLOW_CASES,
+    recorded_workflows_by_case=FIXED_CANDIDATE_RECORDED_WORKFLOWS,
+    usage_cases=FIXED_USAGE_CASES,
+    recorded_usage_by_case=FIXED_CANDIDATE_RECORDED_USAGE,
+    token_pricing=FIXED_TOKEN_PRICING,
 )
-"""동일한 다섯 사례에서 계산한 고정 후보 스냅샷; 회귀 거부 예제로 사용한다."""
+"""같은 골든 계약에서 검색 회귀와 workflow·사용량 개선을 기록한 후보 입력이다."""
+
+
+FIXED_BASELINE_SNAPSHOT = run_offline_evaluation(
+    FIXED_BASELINE_EVALUATION_INPUT
+).regression_snapshot()
+"""전체 기준선 파이프라인 결과에서 추출한 현재 회귀 게이트 스냅샷이다."""
+
+
+FIXED_CANDIDATE_SNAPSHOT = run_offline_evaluation(
+    FIXED_CANDIDATE_EVALUATION_INPUT
+).regression_snapshot()
+"""전체 후보 파이프라인 결과에서 추출한 회귀 거부 예제 스냅샷이다."""
 
 
 FIXED_REGRESSION_POLICIES: tuple[RegressionPolicy, ...] = (

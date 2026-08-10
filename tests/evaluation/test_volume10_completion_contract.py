@@ -177,3 +177,27 @@ def test_volume10_seventh_chapter_connects_regression_report_to_verified_artifac
     )
     assert all(artifact.is_file() for artifact in expected_artifacts)
     assert "](07-regression-report.md)" in readme
+
+
+def test_volume10_eighth_chapter_connects_offline_pipeline_to_verified_artifacts() -> None:
+    """미니 프로젝트 장은 전체 고정 평가와 회귀 거부를 한 실행 경로로 제공해야 한다."""
+    chapter = (VOLUME / "08-offline-evaluation-pipeline.md").read_text(encoding="utf-8")
+    readme = (VOLUME / "README.md").read_text(encoding="utf-8")
+    expected_artifacts = (
+        ROOT / "src" / "ai_platform" / "evaluation" / "offline_pipeline.py",
+        ROOT / "src" / "ai_platform" / "evaluation" / "datasets.py",
+        ROOT / "examples" / "volume10" / "offline_evaluation_pipeline.py",
+        ROOT / "tests" / "evaluation" / "test_offline_pipeline.py",
+    )
+
+    assert all(section in chapter for section in REQUIRED_SECTIONS)
+    assert "uv run python examples/volume10/offline_evaluation_pipeline.py" in chapter
+    assert "uv run pytest tests/evaluation/test_offline_pipeline.py -q" in chapter
+    assert "Retrieval cases: 4" in chapter
+    assert "Regression decision: REJECT" in chapter
+    assert (
+        "LLM API · Agent 도구 · Vector DB · 네트워크 · 라이브 시계 · 난수 "
+        "── 사용하지 않음" in chapter
+    )
+    assert all(artifact.is_file() for artifact in expected_artifacts)
+    assert "](08-offline-evaluation-pipeline.md)" in readme
