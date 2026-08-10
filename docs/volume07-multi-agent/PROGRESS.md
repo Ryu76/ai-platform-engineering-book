@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 05: 검토 워크플로 입력·응답 경계 강화
+
+- `src/ai_platform/agents/workflow.py`에서 task가 비어 있지 않은 문자열인지 확인하고, Planner·Researcher·Developer·Reviewer·QA의 모든 출력이 `AgentResponse` 및 비어 있지 않은 `content` 계약을 만족하는지 다음 역할 호출 전에 검사하도록 했다.
+- 잘못된 task는 어떤 역할도 호출하지 않으며, 초기 역할의 빈 응답은 Researcher·Developer·Reviewer·QA로 진행하지 않고 `AgentProtocolError`로 fail-closed한다.
+- `tests/volume07/test_bounded_review_workflow.py`에 이 두 경계를 고정하고, `docs/volume07-multi-agent/01-bounded-review-workflow.md`에 검증 규칙을 기록했다.
+
 ## 2026-08-10 — Slice 01: 유한 검토와 사람 승인 게이트
 
 - `src/ai_platform/agents/workflow.py`에 Planner, Researcher, Developer, Reviewer, QA용 결정론적 Mock 경계와 감사 메시지 모델을 추가했다.

@@ -7,6 +7,7 @@ Planner, Researcher, Developer, Reviewer, QA를 하나의 자동 권한으로 �
 ## 안전 경계
 
 - `DeterministicMockAgent`는 고정된 응답만 반환합니다. 네트워크, API 키, 라이브 도구 호출이 없습니다.
+- 모든 역할의 응답은 다음 역할에 전달되기 전에 `AgentResponse` 타입과 비어 있지 않은 `content`를 검사합니다. 잘못된 입력·응답은 후속 역할을 호출하지 않고 fail-closed로 거절합니다.
 - `max_review_cycles`는 양의 정수여야 합니다. Reviewer가 계속 `revise`를 반환해도 무한 반복하지 않습니다.
 - Reviewer의 `approve`는 배포나 QA 승인이 아닙니다. 기본 실행은 `awaiting_human_approval`에서 멈춥니다.
 - 사람 승인은 코드 안의 암묵적 기본값이 아닙니다. `HumanApproval.APPROVED` 또는 예제의 `--approve`가 있어야 QA가 실행됩니다.
@@ -40,7 +41,7 @@ uv run python examples/volume07/offline_review_workflow.py --approve
 uv run pytest tests/volume07/test_bounded_review_workflow.py -q
 ```
 
-테스트는 승인 대기, 명시 승인 후 QA, 재작업 한도, 사람 거절의 fail-closed 동작, Reviewer 결정 누락을 네트워크 없이 검증합니다.
+테스트는 승인 대기, 명시 승인 후 QA, 재작업 한도, 사람 거절, 잘못된 task/역할 응답, Reviewer 결정 누락의 fail-closed 동작을 네트워크 없이 검증합니다.
 
 ## 코드 읽기 순서
 

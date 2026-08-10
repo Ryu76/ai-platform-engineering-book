@@ -159,6 +159,45 @@ def test_invalid_configuration_and_missing_reviewer_decision_fail_closed() -> No
         flow.run(task="write an offline example")
 
 
+def test_invalid_task_and_early_agent_output_stop_before_later_roles() -> None:
+    flow, planner, researcher, developer, reviewer, qa = workflow(
+        review_responses=(AgentResponse("approved", ReviewDecision.APPROVE),)
+    )
+
+    with pytest.raises(WorkflowConfigurationError, match="non-empty string"):
+        flow.run(task=object())  # type: ignore[arg-type]
+    assert [agent.calls for agent in (planner, researcher, developer, reviewer, qa)] == [
+        [],
+        [],
+        [],
+        [],
+        [],
+    ]
+
+    invalid_planner = mock("planner", AgentResponse("   "))
+    valid_researcher = mock("researcher", AgentResponse("evidence"))
+    valid_developer = mock("developer", AgentResponse("draft"))
+    valid_reviewer = mock("reviewer", AgentResponse("approved", ReviewDecision.APPROVE))
+    valid_qa = mock("qa", AgentResponse("qa passed"))
+    invalid_output_flow = BoundedReviewWorkflow(
+        planner=invalid_planner,
+        researcher=valid_researcher,
+        developer=valid_developer,
+        reviewer=valid_reviewer,
+        qa=valid_qa,
+    )
+
+    with pytest.raises(AgentProtocolError, match="content must be a non-empty string"):
+        invalid_output_flow.run(task="write an offline example")
+    assert len(invalid_planner.calls) == 1
+    assert [
+        valid_researcher.calls,
+        valid_developer.calls,
+        valid_reviewer.calls,
+        valid_qa.calls,
+    ] == [[], [], [], []]
+
+
 def test_mock_script_exhaustion_prevents_unbounded_fallback_work() -> None:
     agent = mock("developer", AgentResponse("one draft"))
     context = AgentContext(task="offline", iteration=1, messages=())

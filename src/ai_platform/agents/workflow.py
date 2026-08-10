@@ -140,8 +140,8 @@ class BoundedReviewWorkflow:
         A rejected request fails closed before any agent is called. A pending request stops
         after reviewer approval and preserves the messages needed by a human approver.
         """
-        if not task.strip():
-            raise WorkflowConfigurationError("task must not be empty")
+        if not isinstance(task, str) or not task.strip():
+            raise WorkflowConfigurationError("task must be a non-empty string")
         if not isinstance(human_approval, HumanApproval):
             raise WorkflowConfigurationError("human_approval must be a HumanApproval value")
         if human_approval is HumanApproval.REJECTED:
@@ -154,6 +154,7 @@ class BoundedReviewWorkflow:
         for cycle in range(1, self._max_review_cycles + 1):
             self._append(messages, "developer", self._developer, task, cycle)
             reviewer_response = self._call(self._reviewer, task, cycle, messages)
+            self._validate_response(reviewer_response)
             messages.append(AgentMessage("reviewer", reviewer_response.content, cycle))
 
             if reviewer_response.review is ReviewDecision.REVISE:
@@ -184,4 +185,13 @@ class BoundedReviewWorkflow:
         self, messages: list[AgentMessage], role: str, agent: Agent, task: str, iteration: int
     ) -> None:
         response = self._call(agent, task, iteration, messages)
+        self._validate_response(response)
         messages.append(AgentMessage(role, response.content, iteration))
+
+    @staticmethod
+    def _validate_response(response: object) -> None:
+        """Reject malformed local agent output before it reaches another role."""
+        if not isinstance(response, AgentResponse):
+            raise AgentProtocolError("agent response must be an AgentResponse")
+        if not isinstance(response.content, str) or not response.content.strip():
+            raise AgentProtocolError("agent response content must be a non-empty string")
