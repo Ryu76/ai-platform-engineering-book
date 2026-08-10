@@ -10,7 +10,7 @@ LLM의 토큰·메시지·컨텍스트·생성 파라미터와 API 호출 구조
 4. [환경 설정](04-environment-setup.md)
 5. [안전한 최초 호출](05-first-call.md)
 6. [System Prompt와 생성 파라미터](06-system-prompt-and-parameters.md)
-7. Streaming
+7. [Streaming](07-streaming.md)
 8. 오류 처리
 9. 비용·사용량
 10. CLI 챗봇

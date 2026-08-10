@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Protocol, cast
 from urllib.error import HTTPError, URLError
@@ -100,6 +100,16 @@ class LlmResponse:
 
 
 @dataclass(frozen=True, slots=True)
+class StreamChunk:
+    """스트리밍 응답에서 수신한 텍스트 조각과 종료 정보를 나타낸다."""
+
+    delta: str
+    model: str
+    finish_reason: str | None
+    usage: TokenUsage | None
+
+
+@dataclass(frozen=True, slots=True)
 class HttpResponse:
     """전송 계층이 반환하는 HTTP 상태와 JSON 객체다."""
 
@@ -119,6 +129,24 @@ class JsonTransport(Protocol):
         timeout_seconds: float,
     ) -> HttpResponse:
         """JSON POST 요청을 전송하고 HTTP 응답을 반환한다."""
+
+
+class StreamTransport(Protocol):
+    """테스트에서 네트워크 없이 대체할 수 있는 스트리밍 전송 경계다."""
+
+    def post_stream(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        payload: Mapping[str, object],
+        timeout_seconds: float,
+    ) -> Iterator[HttpResponse]:
+        """SSE 이벤트마다 HTTP 상태와 JSON 객체를 순서대로 반환한다."""
+
+
+class LlmTransport(JsonTransport, StreamTransport, Protocol):
+    """일반 완료와 스트리밍을 함께 지원하는 LLM 전송 경계다."""
 
 
 class UrllibJsonTransport:
@@ -153,6 +181,41 @@ class UrllibJsonTransport:
         except URLError as error:
             raise LlmNetworkError("LLM provider could not be reached") from error
 
+    def post_stream(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        payload: Mapping[str, object],
+        timeout_seconds: float,
+    ) -> Iterator[HttpResponse]:
+        """OpenAI 호환 SSE 응답을 JSON 이벤트 단위로 순차 변환한다."""
+        request = Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=dict(headers),
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=timeout_seconds) as raw_response:  # noqa: S310
+                for raw_line in raw_response:
+                    event = _sse_data(raw_line)
+                    if event is None:
+                        continue
+                    if event == "[DONE]":
+                        return
+                    yield HttpResponse(
+                        status_code=raw_response.status,
+                        payload=_decode_json_mapping(event.encode("utf-8")),
+                    )
+        except HTTPError as error:
+            yield HttpResponse(
+                status_code=error.code,
+                payload=_decode_json_or_empty(error.read()),
+            )
+        except URLError as error:
+            raise LlmNetworkError("LLM provider could not be reached") from error
+
 
 class LlmClient:
     """명시적 `complete` 호출에서만 원격 LLM API를 사용하는 클라이언트다."""
@@ -164,7 +227,7 @@ class LlmClient:
         api_key: str | None,
         base_url: str = "https://api.openai.com/v1",
         timeout_seconds: float = 30.0,
-        transport: JsonTransport | None = None,
+        transport: LlmTransport | None = None,
     ) -> None:
         """설정을 검증하고 선택적으로 테스트용 전송 계층을 주입한다."""
         if not model.strip():
@@ -213,6 +276,39 @@ class LlmClient:
             raise LlmRemoteError(_remote_error_message(response))
         return _parse_completion(response.payload, requested_model=self._model)
 
+    def stream(
+        self,
+        messages: list[ChatMessage],
+        *,
+        generation: GenerationParameters | None = None,
+    ) -> Iterator[StreamChunk]:
+        """텍스트 조각을 순서대로 반환하며 호출자에게 출력 시점을 맡긴다."""
+        if not messages:
+            raise LlmConfigurationError("at least one message is required")
+
+        payload: dict[str, object] = {
+            "model": self._model,
+            "messages": [
+                {"role": message.role, "content": message.content} for message in messages
+            ],
+            "stream": True,
+        }
+        if generation is not None:
+            payload.update(generation.as_payload())
+
+        for response in self._transport.post_stream(
+            url=f"{self._base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self._api_key}",
+                "Content-Type": "application/json",
+            },
+            payload=payload,
+            timeout_seconds=self._timeout_seconds,
+        ):
+            if response.status_code < 200 or response.status_code >= 300:
+                raise LlmRemoteError(_remote_error_message(response))
+            yield _parse_stream_chunk(response.payload, requested_model=self._model)
+
 
 def _decode_json_mapping(body: bytes) -> Mapping[str, object]:
     """HTTP 본문이 JSON 객체인지 확인해 반환한다."""
@@ -231,6 +327,17 @@ def _decode_json_or_empty(body: bytes) -> Mapping[str, object]:
         return _decode_json_mapping(body)
     except LlmResponseError:
         return {}
+
+
+def _sse_data(raw_line: bytes) -> str | None:
+    """SSE의 단일 ``data:`` 행에서 내용만 추출하고 다른 제어 행은 무시한다."""
+    try:
+        line = raw_line.decode("utf-8").strip()
+    except UnicodeDecodeError as error:
+        raise LlmResponseError("LLM provider returned invalid UTF-8 stream data") from error
+    if not line.startswith("data:"):
+        return None
+    return line.removeprefix("data:").strip()
 
 
 def _parse_completion(payload: Mapping[str, object], *, requested_model: str) -> LlmResponse:
@@ -259,6 +366,43 @@ def _parse_completion(payload: Mapping[str, object], *, requested_model: str) ->
             input_tokens=_nonnegative_int(usage_mapping.get("prompt_tokens")),
             output_tokens=_nonnegative_int(usage_mapping.get("completion_tokens")),
         ),
+    )
+
+
+def _parse_stream_chunk(payload: Mapping[str, object], *, requested_model: str) -> StreamChunk:
+    """OpenAI 호환 스트림 이벤트에서 텍스트 delta와 선택적 사용량을 추출한다."""
+    response_model = payload.get("model")
+    model = response_model if isinstance(response_model, str) else requested_model
+    usage = _parse_optional_usage(payload.get("usage"))
+    choices = payload.get("choices")
+    if not isinstance(choices, list):
+        raise LlmResponseError("LLM stream response does not contain choices")
+    if not choices:
+        if usage is None:
+            raise LlmResponseError("LLM stream response has neither choices nor usage")
+        return StreamChunk(delta="", model=model, finish_reason=None, usage=usage)
+    first_choice = choices[0]
+    if not isinstance(first_choice, Mapping):
+        raise LlmResponseError("LLM stream response choice has an invalid shape")
+    delta = first_choice.get("delta")
+    if not isinstance(delta, Mapping):
+        raise LlmResponseError("LLM stream response choice does not contain a delta")
+    content = delta.get("content", "")
+    if not isinstance(content, str):
+        raise LlmResponseError("LLM stream response delta does not contain text content")
+    finish_reason = first_choice.get("finish_reason")
+    if finish_reason is not None and not isinstance(finish_reason, str):
+        raise LlmResponseError("LLM stream response has an invalid finish reason")
+    return StreamChunk(delta=content, model=model, finish_reason=finish_reason, usage=usage)
+
+
+def _parse_optional_usage(value: object) -> TokenUsage | None:
+    """스트림 마지막 이벤트의 선택적 사용량을 읽는다."""
+    if not isinstance(value, Mapping):
+        return None
+    return TokenUsage(
+        input_tokens=_nonnegative_int(value.get("prompt_tokens")),
+        output_tokens=_nonnegative_int(value.get("completion_tokens")),
     )
 
 

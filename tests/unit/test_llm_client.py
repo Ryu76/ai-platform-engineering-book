@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 
 import pytest
 
@@ -12,6 +12,7 @@ from ai_platform.llm.client import (
     LlmConfigurationError,
     LlmRemoteError,
     LlmResponseError,
+    _sse_data,
 )
 
 
@@ -38,6 +39,38 @@ class RecordingTransport:
         self.payload = payload
         self.timeout_seconds = timeout_seconds
         return self.response
+
+    def post_stream(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        payload: Mapping[str, object],
+        timeout_seconds: float,
+    ) -> Iterator[HttpResponse]:
+        raise AssertionError("streaming was not expected in this test")
+
+
+class RecordingStreamTransport(RecordingTransport):
+    """순서가 있는 Mock 스트림 이벤트와 요청을 기록한다."""
+
+    def __init__(self, responses: list[HttpResponse]) -> None:
+        super().__init__(HttpResponse(status_code=200, payload={}))
+        self.responses = responses
+
+    def post_stream(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        payload: Mapping[str, object],
+        timeout_seconds: float,
+    ) -> Iterator[HttpResponse]:
+        self.url = url
+        self.headers = headers
+        self.payload = payload
+        self.timeout_seconds = timeout_seconds
+        yield from self.responses
 
 
 def test_client_sends_openai_compatible_request_and_parses_response() -> None:
@@ -184,3 +217,75 @@ def test_generation_parameters_reject_empty_or_too_many_stop_sequences() -> None
         GenerationParameters(stop_sequences=("",))
     with pytest.raises(LlmConfigurationError, match="at most four"):
         GenerationParameters(stop_sequences=("a", "b", "c", "d", "e"))
+
+
+def test_client_streams_deltas_and_final_usage_without_network() -> None:
+    transport = RecordingStreamTransport(
+        [
+            HttpResponse(
+                status_code=200,
+                payload={
+                    "model": "offline-test-model",
+                    "choices": [{"delta": {"content": "안녕"}, "finish_reason": None}],
+                },
+            ),
+            HttpResponse(
+                status_code=200,
+                payload={"choices": [{"delta": {"content": "하세요."}, "finish_reason": "stop"}]},
+            ),
+            HttpResponse(
+                status_code=200,
+                payload={"choices": [], "usage": {"prompt_tokens": 4, "completion_tokens": 3}},
+            ),
+        ]
+    )
+    client = LlmClient(model="offline-test-model", api_key="unit-test-token", transport=transport)
+
+    chunks = list(
+        client.stream(
+            [ChatMessage(role="user", content="인사하세요.")],
+            generation=GenerationParameters(temperature=0.2),
+        )
+    )
+
+    assert "".join(chunk.delta for chunk in chunks) == "안녕하세요."
+    assert chunks[1].finish_reason == "stop"
+    assert chunks[2].usage is not None
+    assert chunks[2].usage.input_tokens == 4
+    assert transport.payload["stream"] is True
+    assert transport.payload["temperature"] == 0.2
+
+
+def test_client_stream_rejects_malformed_event() -> None:
+    transport = RecordingStreamTransport([HttpResponse(status_code=200, payload={"choices": []})])
+    client = LlmClient(model="offline-test-model", api_key="unit-test-token", transport=transport)
+
+    with pytest.raises(LlmResponseError, match="neither choices nor usage"):
+        list(client.stream([ChatMessage(role="user", content="형식을 검사합니다.")]))
+
+
+def test_client_stream_surfaces_provider_error() -> None:
+    transport = RecordingStreamTransport(
+        [HttpResponse(status_code=503, payload={"error": {"message": "temporarily unavailable"}})]
+    )
+    client = LlmClient(model="offline-test-model", api_key="unit-test-token", transport=transport)
+
+    with pytest.raises(LlmRemoteError, match=r"\(503\): temporarily unavailable"):
+        list(client.stream([ChatMessage(role="user", content="상태를 알려 주세요.")]))
+
+
+@pytest.mark.parametrize(
+    ("raw_line", "expected"),
+    [
+        (b"event: message\n", None),
+        (b"data: {\"choices\": []}\n", '{"choices": []}'),
+        (b"data: [DONE]\r\n", "[DONE]"),
+    ],
+)
+def test_sse_data_extracts_only_data_rows(raw_line: bytes, expected: str | None) -> None:
+    assert _sse_data(raw_line) == expected
+
+
+def test_sse_data_rejects_invalid_utf8() -> None:
+    with pytest.raises(LlmResponseError, match="invalid UTF-8"):
+        _sse_data(b"data: \xff")
