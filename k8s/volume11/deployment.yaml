@@ -8,6 +8,14 @@ metadata:
     app.kubernetes.io/part-of: ai-platform-example
 spec:
   replicas: 2
+  # This is a documentation-only rollout contract. Rendering it does not create a revision.
+  revisionHistoryLimit: 2
+  progressDeadlineSeconds: 120
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: ai-platform-api

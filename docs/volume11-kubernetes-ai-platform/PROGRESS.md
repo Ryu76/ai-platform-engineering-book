@@ -2,6 +2,37 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 08: Rolling Update·Rollback revision 계약의 오프라인 경계
+
+### 완료한 범위
+
+- 기본 `k8s/volume11/deployment.yaml`에 로컬 렌더링용 Deployment update 계약을 추가했습니다.
+  - 기존 비실행용 `example.invalid/ai-platform-api:0.1.0` 이미지와 2개 replica는 유지했습니다.
+  - `RollingUpdate` 전략에 `maxUnavailable: 0`, `maxSurge: 1`, `progressDeadlineSeconds: 120`, `revisionHistoryLimit: 2`만 선언했습니다.
+  - restart annotation, Secret·토큰·암호·registry·cluster 주소, 실제 이미지 변경은 포함하지 않았습니다.
+- [Rolling Update와 Rollback: Deployment revision 경계 읽기](08-rolling-update-rollback-boundary.md) 장을 작성했습니다.
+  - Deployment strategy, revision 보존과 진행 deadline의 서로 다른 책임, readiness·capacity·migration·SLO가 YAML만으로 보장되지 않는 이유를 설명합니다.
+  - `kubectl kustomize` 로컬 렌더링과 오프라인 테스트만 안내하며 `apply`, image 변경, rollout, `kubectl rollout undo`, cluster 연결을 명시적으로 제외합니다.
+- Volume README와 통합 테스트를 갱신해 새 장 링크, example 이미지, Rolling Update 범위, revision/progress 경계와 비밀값·restart annotation 부재를 검사합니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `kubectl kustomize k8s/volume11` + Deployment update 경계 검사 | 통과 — Deployment 1개에 `RollingUpdate`, unavailable 0, surge 1, revision 2, deadline 120만 로컬 렌더링; HPA·Pod·ReplicaSet·revision·cluster 연결·리소스 생성 없음 |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 21 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 11 source files 문제 없음, 전체 82 passed |
+
+### 남은 범위
+
+- 로그·메트릭·추적, 장애 대응과 비용 관리 장 작성하기
+- Volume 미니 프로젝트, 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 값과 로컬·메모리 기반 코드만 사용해 구조화된 request correlation logging과 관측 경계를 추가하고, 실제 telemetry backend, endpoint, credential, cluster 연결 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 07: HPA CPU 확장 계약의 오프라인 경계
 
 ### 완료한 범위

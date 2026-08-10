@@ -209,6 +209,22 @@ def test_hpa_uses_a_non_base_example_target_and_is_excluded_from_base_apply_set(
     assert "- autoscaling/" not in base_kustomization
 
 
+def test_deployment_declares_a_render_only_rolling_update_and_revision_boundary() -> None:
+    """The base example documents update behavior without a runnable image revision."""
+    deployment = (ROOT / "k8s/volume11/deployment.yaml").read_text(encoding="utf-8")
+
+    assert "image: example.invalid/ai-platform-api:0.1.0" in deployment
+    assert "revisionHistoryLimit: 2" in deployment
+    assert "progressDeadlineSeconds: 120" in deployment
+    assert "type: RollingUpdate" in deployment
+    assert "maxUnavailable: 0" in deployment
+    assert "maxSurge: 1" in deployment
+    assert "kubectl.kubernetes.io/restartedAt" not in deployment
+    assert "TOKEN" not in deployment
+    assert "PASSWORD" not in deployment
+    assert "secretKeyRef:" not in deployment
+
+
 def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification() -> None:
     """The chapters document exact local files, commands, and deployment boundaries."""
     health_chapter = (VOLUME / "01-health-probes.md").read_text(encoding="utf-8")
@@ -228,6 +244,9 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         encoding="utf-8"
     )
     hpa_chapter = (VOLUME / "07-hpa-cpu-scaling-boundary.md").read_text(encoding="utf-8")
+    rollout_chapter = (VOLUME / "08-rolling-update-rollback-boundary.md").read_text(
+        encoding="utf-8"
+    )
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
@@ -237,6 +256,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "](05-job-cronjob-completion-retry.md)" in readme
     assert "](06-pvc-lifecycle-access-retention.md)" in readme
     assert "](07-hpa-cpu-scaling-boundary.md)" in readme
+    assert "](08-rolling-update-rollback-boundary.md)" in readme
     combined_chapters = (
         health_chapter
         + dependency_chapter
@@ -245,6 +265,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         + batch_chapter
         + pvc_chapter
         + hpa_chapter
+        + rollout_chapter
     )
     for relative_path in (
         "src/ai_platform/api/health.py",
@@ -284,6 +305,17 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "HorizontalPodAutoscaler" in hpa_chapter
     assert "averageUtilization: 70" in hpa_chapter
     assert "ai-platform-api-example" in hpa_chapter
+    assert "kubectl kustomize k8s/volume11" in rollout_chapter
+    assert "RollingUpdate" in rollout_chapter
+    assert "revisionHistoryLimit: 2" in rollout_chapter
+    assert "maxUnavailable: 0" in rollout_chapter
+    assert "maxSurge: 1" in rollout_chapter
+    assert "kubectl rollout undo" in rollout_chapter
+    expected_boundary = (
+        "실제 이미지 교체, rollout 실행, rollback 실행, "
+        "클러스터 적용을 하지 않습니다"
+    )
+    assert expected_boundary in rollout_chapter
     assert "클러스터에 적용하거나 배포하지 않습니다" in (
         health_chapter + dependency_chapter + ingress_chapter
     )
