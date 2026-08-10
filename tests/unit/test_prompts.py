@@ -2,7 +2,13 @@
 
 import pytest
 
-from ai_platform.prompts import PromptConfigurationError, PromptSections
+from ai_platform.prompts import (
+    PromptConfigurationError,
+    PromptExample,
+    PromptSections,
+    ShotMode,
+    ShotPrompt,
+)
 
 
 def template() -> PromptSections:
@@ -67,3 +73,69 @@ def test_render_uses_explicit_default_when_no_constraints_exist() -> None:
     rendered = PromptSections("지시", "문맥", "형식").render("입력")
 
     assert "[CONSTRAINTS]\n- 추가 제약 조건 없음" in rendered
+
+
+def test_zero_shot_has_no_demonstration_examples() -> None:
+    rendered = ShotPrompt(template(), ShotMode.ZERO).render("결제 오류가 발생했습니다.")
+
+    assert "[DEMONSTRATIONS]\n- 제공하지 않음 (zero-shot)" in rendered
+    assert rendered.index("[DEMONSTRATIONS]") < rendered.index("[UNTRUSTED USER INPUT]")
+
+
+def test_one_shot_keeps_a_service_example_separate_from_new_input() -> None:
+    prompt = ShotPrompt(
+        template(),
+        ShotMode.ONE,
+        (
+            PromptExample(
+                "청구서를 받고 싶어요.",
+                '{"category": "billing"}',
+            ),
+        ),
+    )
+
+    rendered = prompt.render("비밀번호를 재설정할 수 없어요.")
+
+    assert "[EXAMPLE 1]" in rendered
+    assert "<example_input>\n청구서를 받고 싶어요.\n</example_input>" in rendered
+    assert '<expected_output>\n{"category": "billing"}\n</expected_output>' in rendered
+    assert "<user_input>\n비밀번호를 재설정할 수 없어요.\n</user_input>" in rendered
+
+
+def test_few_shot_preserves_example_order() -> None:
+    prompt = ShotPrompt(
+        template(),
+        ShotMode.FEW,
+        (
+            PromptExample("영수증이 필요해요.", '{"category": "billing"}'),
+            PromptExample("앱이 멈췄어요.", '{"category": "technical"}'),
+        ),
+    )
+
+    rendered = prompt.render("결제가 두 번 되었어요.")
+
+    assert rendered.index("[EXAMPLE 1]") < rendered.index("[EXAMPLE 2]")
+    assert rendered.index("[EXAMPLE 2]") < rendered.index("[UNTRUSTED USER INPUT]")
+
+
+@pytest.mark.parametrize(
+    ("mode", "examples", "message"),
+    [
+        (ShotMode.ZERO, (PromptExample("입력", "출력"),), "zero-shot"),
+        (ShotMode.ONE, (), "one-shot"),
+        (ShotMode.FEW, (PromptExample("입력", "출력"),), "few-shot"),
+    ],
+)
+def test_shot_prompt_rejects_mismatched_example_counts(
+    mode: ShotMode, examples: tuple[PromptExample, ...], message: str
+) -> None:
+    with pytest.raises(PromptConfigurationError, match=message):
+        ShotPrompt(template(), mode, examples)
+
+
+@pytest.mark.parametrize("input_data, expected_output", [(" ", "출력"), ("입력", " ")])
+def test_example_rejects_blank_input_or_expected_output(
+    input_data: str, expected_output: str
+) -> None:
+    with pytest.raises(PromptConfigurationError, match="example"):
+        PromptExample(input_data, expected_output)

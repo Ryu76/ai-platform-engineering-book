@@ -12,10 +12,11 @@
 | 슬라이스 | 문서·코드·테스트 | 검증 상태 |
 |---|---|---|
 | 01. Prompt 구성 요소와 첫 템플릿 | `01-prompt-components.md`, `src/ai_platform/prompts/prompt_templates.py`, `examples/volume02/prompt_template_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 전체 검사 및 70개 테스트 통과 |
+| 02. Zero-shot·One-shot·Few-shot | `02-zero-one-few-shot.md`, `src/ai_platform/prompts/shot_prompts.py`, `examples/volume02/shot_prompt_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 전체 검사와 오프라인 데모 통과 |
 
 ## 남은 PRD 요구사항
 
-- Zero-shot, One-shot, Few-shot 및 역할 Prompt 학습·예제
+- 역할 Prompt 학습·예제
 - Structured Output, JSON 출력과 검증
 - ReAct 개념 및 Chain of Thought를 직접 노출하지 않는 구조적 추론 설계
 - Prompt Injection 방어와 입력 검증
@@ -29,3 +30,8 @@
 |---|---|---|
 | 2026-08-10 | `bash scripts/run_all_tests.sh` | Ruff 통과, mypy(9개 소스) 통과, 문서·링크·코드 블록·비밀값 검사 통과, pytest 70 passed |
 | 2026-08-10 | `uv run python examples/volume02/prompt_template_demo.py` | 네트워크·API 키 없이 Prompt 다섯 섹션을 렌더링함 |
+| 2026-08-10 | `uv run ruff check src/ai_platform/prompts examples/volume02/shot_prompt_demo.py tests/unit/test_prompts.py` | 통과 |
+| 2026-08-10 | `uv run mypy src/ai_platform/prompts` | 3개 소스, 오류 없음 |
+| 2026-08-10 | `uv run pytest tests/unit/test_prompts.py -q` | 17 passed |
+| 2026-08-10 | `uv run python examples/volume02/shot_prompt_demo.py` | zero-shot·one-shot·few-shot Prompt를 외부 호출 없이 렌더링함 |
+| 2026-08-10 | `bash scripts/run_all_tests.sh` | Ruff 통과, mypy(10개 소스) 통과, 문서·링크·코드 블록·비밀값 검사 통과, pytest 78 passed |
