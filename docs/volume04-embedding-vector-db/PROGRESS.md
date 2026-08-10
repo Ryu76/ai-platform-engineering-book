@@ -135,6 +135,43 @@ uv run python examples/volume04/reindex_lifecycle.py
 - [ ] 권 단위 완료 체크리스트를 작성·검증한다.
 - [ ] 다음 권(RAG) 인계 결과물을 정리한다.
 
+## 2026-08-10 — Slice 05 완료
+
+### 추가한 결과물
+
+- `05-vector-db-migration-contracts.md`
+  - 결정적 local mock이 보존해야 할 collection/table, dimension, cosine metric, stable ID, payload, filter, delete·reindex 계약을 명시
+  - Qdrant, pgvector, Chroma의 역할과 database별 검증 포인트를 비교
+  - score direction, ANN 동점 정렬, no-answer threshold 재평가, tenant·ACL filter의 이행 함정을 정리
+  - 허가된 이후의 local Qdrant Docker integration에서 실행할 schema·fixture·lifecycle parity 순서를 정의
+- `README.md`
+  - 05장 상태와 이행 계약 결과물을 반영
+
+### 범위 확인
+
+- 외부 API, 모델 다운로드, Docker, Qdrant, PostgreSQL, Chroma, 비밀값을 사용하지 않았습니다.
+- root `docker-compose.yml` 또는 `scripts/index_documents.py`는 cron의 허용 경로 밖이므로 만들거나 수정하지 않았습니다.
+- 실제 database API field는 pinned client와 공식 문서를 확인하는 후속 local integration에서만 확정합니다.
+
+### 검증 결과
+
+```bash
+# 실행 위치: 저장소 루트
+uv run pytest tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py -q
+# 31 passed in 0.17s
+uv run ruff check src/ai_platform/embeddings examples/volume04 tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py
+# All checks passed!
+uv run mypy src/ai_platform/embeddings
+# Success: no issues found in 5 source files
+uv run python examples/volume04/embedding_similarity.py
+uv run python examples/volume04/vector_store_search.py
+uv run python examples/volume04/retrieval_quality.py
+uv run python examples/volume04/reindex_lifecycle.py
+# 각 예제가 네트워크 없이 기대한 결정적 검색·품질·삭제·재색인 결과를 출력
+```
+
+또한 Python으로 05장의 `## 1.`부터 `## 14.`까지의 14개 섹션, README의 장 링크, 이 진행 기록의 Slice 05 항목을 검증했습니다. `uv`는 이 호스트의 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고만 있었고, uv가 프로젝트 환경으로 검증을 완료했습니다.
+
 ## 다음 slice
 
-Qdrant, pgvector, Chroma의 역할과 local mock에서 실제 vector DB로 이행할 때의 계약 차이를 문서화합니다. 이 cron의 제한에 따라 외부 서비스 실행·Docker Compose·live API는 사용하지 않습니다.
+Volume 04 전체 완료 체크리스트와 Volume 05 RAG 인계 계약을 문서화하고, 기존 결정적 local mock의 결과물·테스트·운영상 미검증 항목을 한 곳에서 검증 가능하게 정리합니다. Qdrant Docker Compose와 실제 service 검증은 이 cron의 제한 때문에 실행하지 않습니다.

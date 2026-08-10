@@ -21,7 +21,7 @@
 | [02](02-local-collection-payload-search.md) | 결정적 로컬 collection·payload·검색 | 완료 |
 | [03](03-retrieval-quality-no-answer.md) | 검색 품질 측정과 no-answer gate | 완료 |
 | [04](04-reindex-lifecycle-mini-project.md) | 결정적 local mock 삭제·재색인 미니 프로젝트 | 완료 |
-| 05 | Qdrant collection·payload 저장과 검색 | 예정 |
+| [05](05-vector-db-migration-contracts.md) | Local mock에서 Qdrant·pgvector·Chroma로 이행하는 계약 | 완료 |
 | 06 | Qdrant 운영 이행과 lifecycle 검증 | 예정 |
 
 진행 기록과 남은 완료 조건은 [PROGRESS.md](PROGRESS.md)에서 확인합니다.
@@ -50,7 +50,8 @@ uv run pytest tests/unit/test_volume04_reindex_lifecycle.py -q
 - `src/ai_platform/embeddings/reindex_lifecycle.py`: 삭제, stable ID 재색인, version metadata를 검증하는 local lifecycle
 - `examples/volume04/`: 네트워크 없는 실행 예제
 - `tests/unit/test_volume04_*.py`: Volume 04 전용 단위 테스트
-- `docker-compose.yml`, `scripts/index_documents.py`: Qdrant 실습 slice에서 추가 예정
+- `05-vector-db-migration-contracts.md`: local mock과 Qdrant·pgvector·Chroma 사이의 schema, filter, score, lifecycle 이행 계약
+- Qdrant Docker Compose와 실제 index script: 명시적으로 허가된 local integration slice에서만 추가·검증 예정
 
 ## 다음 권으로의 인계
 
