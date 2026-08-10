@@ -16,13 +16,18 @@ class SampleOnlyGenerator:
 
 
 def main() -> None:
-    """저장소의 샘플 텍스트만 인덱싱하고 두 질문의 결과를 출력한다."""
+    """명시한 샘플 Markdown 문서만 인덱싱하고 세 질문의 결과를 출력한다."""
     sample_root = Path(__file__).with_name("sample_data")
-    document = LocalMarkdownLoader(root=sample_root).load(Path("handbook.md"))
-    index = LocalRagIndex([document])
+    loader = LocalMarkdownLoader(root=sample_root)
+    documents = loader.load_many((Path("handbook.md"), Path("returns.md")))
+    index = LocalRagIndex(documents)
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
 
-    for query in ("배송 상태는 어떻게 확인하나요?", "주차장 할인 정책이 있나요?"):
+    for query in (
+        "배송 상태는 어떻게 확인하나요?",
+        "반품 요청은 어떻게 접수하나요?",
+        "주차장 할인 정책이 있나요?",
+    ):
         answer = pipeline.answer(query)
         print(f"질문: {query}")
         print(f"답변: {answer.text}")

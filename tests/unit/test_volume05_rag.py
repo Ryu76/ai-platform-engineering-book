@@ -56,6 +56,42 @@ def test_markdown_loader_uses_clean_filename_when_document_has_no_title(tmp_path
     assert document.content == "반품 조건입니다."
 
 
+def test_markdown_loader_loads_explicit_documents_in_deterministic_order(tmp_path: Path) -> None:
+    root = tmp_path / "knowledge"
+    nested = root / "guides"
+    nested.mkdir(parents=True)
+    (root / "shipping.md").write_text("# 배송\n배송 상태를 확인합니다.", encoding="utf-8")
+    (nested / "returns.md").write_text("# 반품\n반품을 접수합니다.", encoding="utf-8")
+
+    documents = LocalMarkdownLoader(root=root).load_many(
+        (Path("shipping.md"), Path("guides/returns.md"))
+    )
+
+    assert [document.document_id for document in documents] == [
+        "local:guides/returns.md",
+        "local:shipping.md",
+    ]
+    assert [document.title for document in documents] == ["반품", "배송"]
+
+
+@pytest.mark.parametrize(
+    "paths, message",
+    [
+        ((), "at least one Markdown path"),
+        ((Path("guide.md"), Path("folder/../guide.md")), "must not resolve"),
+    ],
+)
+def test_markdown_loader_rejects_empty_or_duplicate_document_batch(
+    tmp_path: Path, paths: tuple[Path, ...], message: str
+) -> None:
+    root = tmp_path / "knowledge"
+    root.mkdir()
+    (root / "guide.md").write_text("# 안내\n안전한 문서입니다.", encoding="utf-8")
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalMarkdownLoader(root=root).load_many(paths)
+
+
 @pytest.mark.parametrize(
     "relative_path, content, message",
     [

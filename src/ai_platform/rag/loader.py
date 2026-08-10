@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from urllib.parse import quote
 
@@ -62,6 +63,28 @@ class LocalMarkdownLoader:
             ),
             content=content,
         )
+
+    def load_many(self, relative_paths: Iterable[Path]) -> tuple[SourceDocument, ...]:
+        """명시한 Markdown 파일들을 중복 없이 문서 ID 순서로 읽는다.
+
+        디렉터리를 재귀적으로 탐색하지 않는다. 호출자가 허용할 파일을 명시해야 하므로
+        실습 루트에 임시 파일이 추가되어도 의도하지 않은 문서가 색인되지 않는다. 입력
+        순서와 관계없이 문서 ID 순으로 반환해 이후 색인과 검색의 순서를 재현할 수 있다.
+        """
+        try:
+            paths = tuple(relative_paths)
+        except TypeError as error:
+            raise RagConfigurationError(
+                "relative_paths must be an iterable of pathlib.Path values"
+            ) from error
+        if not paths:
+            raise RagConfigurationError("at least one Markdown path is required")
+
+        documents = tuple(self.load(relative_path) for relative_path in paths)
+        identifiers = [document.document_id for document in documents]
+        if len(set(identifiers)) != len(identifiers):
+            raise RagConfigurationError("Markdown paths must not resolve to the same document")
+        return tuple(sorted(documents, key=lambda document: document.document_id))
 
 
 def clean_markdown(markdown: str) -> str:
