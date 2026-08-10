@@ -2,6 +2,41 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 05: Job/CronJob 완료·재시도·중복 실행의 오프라인 경계
+
+### 완료한 범위
+
+- `k8s/volume11/batch/`에 기본 API Kustomize 집합과 분리된 `batch/v1` Job/CronJob 로컬 렌더링 집합을 추가했습니다.
+  - Job은 `completions: 1`, `parallelism: 1`, `backoffLimit: 2`, `activeDeadlineSeconds: 120`, `restartPolicy: Never`, `ttlSecondsAfterFinished: 300`으로 완료·재시도·시간·정리 경계를 선언합니다.
+  - CronJob은 예시 schedule을 읽을 수 있으나 `suspend: true`로 새 Job 생성을 막고, `concurrencyPolicy: Forbid`, 이력 제한, Job template의 재시도·시간 상한을 선언합니다.
+  - 두 Manifest는 `example.invalid/ai-platform-maintenance:0.1.0` 자리표시자 이미지와 출력 전용 명령만 사용하며 Secret 참조, 환경 변수, 토큰, 암호, 연결 주소를 포함하지 않습니다.
+  - 기본 `k8s/volume11/kustomization.yaml`에는 배치 리소스를 포함하지 않아 기존 API 집합의 로컬 렌더링과 분리합니다.
+- [Job과 CronJob: 완료·재시도·중복 실행 경계](05-job-cronjob-completion-retry.md) 장을 작성했습니다.
+  - Deployment와 Job 수명 주기, 재시도가 멱등성을 보장하지 않는 이유, suspend·동시성·보존 경계, 운영 승인 전 검토 항목을 설명합니다.
+  - `kubectl kustomize`의 로컬 렌더링과 오프라인 테스트만 안내하며 `apply`, `create`, 실제 이미지, 클러스터 연결, 예약 활성화를 명시적으로 제외합니다.
+- Volume README와 통합 테스트를 갱신해 새 장 링크, 별도 batch Kustomize 집합, placeholder 이미지, Job 완료·재시도 경계, CronJob suspend·중복 방지, Secret·인증 값 부재를 검사합니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `kubectl kustomize k8s/volume11/batch` 및 `kubectl kustomize k8s/volume11` 경계 검사 | 통과 — batch 출력에 Job·CronJob만, 기본 출력에는 Job·CronJob 없음; 모두 로컬 렌더링이며 클러스터 연결·리소스 생성 없음 |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 18 passed |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 11 source files 문제 없음, 전체 79 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- PVC, HPA와 Rolling Update/Rollback 예제 작성하기
+- 로그·메트릭·추적, 장애 대응과 비용 관리 장 작성하기
+- Volume 미니 프로젝트, 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 이미지와 비밀 없는 Manifest만 사용해 PVC의 수명 주기·접근 모드·보존 경계를 로컬 렌더링·오프라인 테스트로 추가합니다. 실제 StorageClass, PVC 바인딩, 클러스터 적용은 하지 않습니다.
+
+
 ## 2026-08-10 — Slice 04: Ingress HTTP 경계와 Service backend의 오프라인 검증
 
 ### 완료한 범위

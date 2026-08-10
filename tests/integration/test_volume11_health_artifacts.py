@@ -117,6 +117,38 @@ def test_ingress_uses_example_http_boundary_and_the_clusterip_service_port() -> 
     assert "PASSWORD" not in ingress
 
 
+def test_batch_manifests_are_placeholder_only_and_excluded_from_the_base_apply_set() -> None:
+    """Job examples bound retries and schedules without becoming runnable base resources."""
+    job = (ROOT / "k8s/volume11/batch/job.yaml").read_text(encoding="utf-8")
+    cronjob = (ROOT / "k8s/volume11/batch/cronjob.yaml").read_text(encoding="utf-8")
+    kustomization = (ROOT / "k8s/volume11/kustomization.yaml").read_text(encoding="utf-8")
+
+    for manifest, kind in ((job, "Job"), (cronjob, "CronJob")):
+        assert "apiVersion: batch/v1" in manifest
+        assert f"kind: {kind}" in manifest
+        assert "image: example.invalid/ai-platform-maintenance:0.1.0" in manifest
+        assert "restartPolicy: Never" in manifest
+        assert "readOnlyRootFilesystem: true" in manifest
+        assert "TOKEN" not in manifest
+        assert "PASSWORD" not in manifest
+        assert "secretKeyRef:" not in manifest
+        assert "envFrom:" not in manifest
+
+    assert "completions: 1" in job
+    assert "parallelism: 1" in job
+    assert "backoffLimit: 2" in job
+    assert "activeDeadlineSeconds: 120" in job
+    assert "ttlSecondsAfterFinished: 300" in job
+    assert 'schedule: "0 3 * * *"' in cronjob
+    assert "suspend: true" in cronjob
+    assert "concurrencyPolicy: Forbid" in cronjob
+    assert "successfulJobsHistoryLimit: 1" in cronjob
+    assert "failedJobsHistoryLimit: 1" in cronjob
+    assert "backoffLimit: 1" in cronjob
+    assert "- job.yaml" not in kustomization
+    assert "- cronjob.yaml" not in kustomization
+
+
 def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification() -> None:
     """The chapters document exact local files, commands, and deployment boundaries."""
     health_chapter = (VOLUME / "01-health-probes.md").read_text(encoding="utf-8")
@@ -129,13 +161,19 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     ingress_chapter = (VOLUME / "04-ingress-http-boundary.md").read_text(
         encoding="utf-8"
     )
+    batch_chapter = (VOLUME / "05-job-cronjob-completion-retry.md").read_text(
+        encoding="utf-8"
+    )
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
     assert "](02-configmap-dependency-readiness.md)" in readme
     assert "](03-compose-dependency-topology.md)" in readme
     assert "](04-ingress-http-boundary.md)" in readme
-    combined_chapters = health_chapter + dependency_chapter + compose_chapter + ingress_chapter
+    assert "](05-job-cronjob-completion-retry.md)" in readme
+    combined_chapters = (
+        health_chapter + dependency_chapter + compose_chapter + ingress_chapter + batch_chapter
+    )
     for relative_path in (
         "src/ai_platform/api/health.py",
         "src/ai_platform/api/dependencies.py",
@@ -146,6 +184,8 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         "k8s/volume11/deployment.yaml",
         "k8s/volume11/ingress.yaml",
         "k8s/volume11/secret.example.yaml",
+        "k8s/volume11/batch/job.yaml",
+        "k8s/volume11/batch/cronjob.yaml",
     ):
         assert relative_path in combined_chapters
     expected_command = (
@@ -160,6 +200,9 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     )
     assert expected_compose_command in compose_chapter
     assert "kubectl kustomize k8s/volume11" in ingress_chapter
+    expected_batch_command = "kubectl kustomize k8s/volume11/batch"
+    assert expected_batch_command in batch_chapter
+    assert "suspend: true" in batch_chapter
     assert "클러스터에 적용하거나 배포하지 않습니다" in (
         health_chapter + dependency_chapter + ingress_chapter
     )

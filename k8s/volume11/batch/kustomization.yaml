@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Local render-only batch lesson. It is intentionally separate from ../kustomization.yaml.
+resources:
+  - job.yaml
+  - cronjob.yaml
