@@ -54,3 +54,31 @@ def test_volume01_completion_checklist_preserves_artifacts_and_volume02_handoff(
     assert "Volume 02" in checklist
     for term in ("토큰(Token)", "토크나이저(Tokenizer)", "컨텍스트 윈도우(Context Window)"):
         assert term in glossary
+
+
+def test_volume01_learning_objectives_is_a_self_contained_safe_entry_chapter() -> None:
+    """첫 장은 PRD의 장 구조와 실제 오프라인 실행 경로를 함께 제공해야 한다."""
+    objectives = (VOLUME / "01-learning-objectives.md").read_text(encoding="utf-8")
+
+    required_sections = (
+        "## 1. 학습 목표",
+        "## 2. 왜 필요한가",
+        "## 3. 핵심 개념",
+        "## 4. 동작 구조",
+        "## 5. 실습 환경",
+        "## 6. 단계별 실습",
+        "## 7. 코드 설명",
+        "## 8. 정상 실행 결과",
+        "## 9. 오류 해결",
+        "## 10. 응용 실습",
+        "## 11. 실무 적용",
+        "## 12. 과제",
+        "## 13. 완료 체크리스트",
+        "## 14. 핵심 정리",
+    )
+
+    assert all(section in objectives for section in required_sections)
+    assert "examples/volume01/chat_cli.py --offline-demo" in objectives
+    assert "tests/unit/test_llm_client.py tests/unit/test_chat.py -q" in objectives
+    assert "네트워크와 API 키를 사용하지 않습니다" in objectives
+    assert "](02-why-it-matters.md)" in objectives
