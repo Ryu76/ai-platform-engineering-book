@@ -18,10 +18,11 @@
 | 05. Prompt Injection 방어와 입력 검증 | `05-prompt-injection-input-validation.md`, `src/ai_platform/prompts/injection_defense.py`, `examples/volume02/injection_defense_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 오프라인 데모, 신뢰 경계·위험 신호·실패 닫힘 입력 검사, 단위·전체 검사 통과 |
 | 06. Prompt Versioning·Template·결과 비교 | `06-prompt-versioning-comparison.md`, `src/ai_platform/prompts/prompt_runner.py`, `examples/volume02/prompt_version_comparison_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 오프라인 버전 메타데이터 렌더링, 고정 JSON 기록의 스키마·기대 분류 비교, 일대일 case ID 실패 닫힘 검사, 전체 검사 통과 |
 | 07a. Prompt 테스트 데이터 | `07-prompt-test-data.md`, `src/ai_platform/prompts/prompt_test_data.py`, `examples/volume02/prompt_test_data_demo.py`, `tests/unit/test_prompts.py` | 2026-08-10 고정 fixture의 ID·기대값·목적·태그와 중복 실패 닫힘, 기존 버전 비교용 순서 보존 변환을 오프라인으로 검증함 |
+| 08. 오프라인 Prompt 회귀 검토 미니 프로젝트 | `08-mini-project-offline-prompt-regression.md`, `src/ai_platform/prompts/prompt_mini_project.py`, `examples/volume02/prompt_mini_project_demo.py`, `tests/unit/test_prompts.py` | 2026-08-11 같은 검토 fixture에 대한 버전별 고정 기록 비교, 원문 없는 실패 ID 보고, 전 케이스 통과 시에만 사람 검토 후보 표시를 오프라인으로 구현함 |
 
 ## 남은 PRD 요구사항
 
-- 07장의 미니 프로젝트, 과제, 권 단위 학습자 체크리스트
+- 권 단위 과제, 학습자 체크리스트
 - 전체 Volume 재실행, 문서·링크·비밀값 검증, 다음 Volume 인계 목록
 
 ## 검증 기록
@@ -46,3 +47,6 @@
 | 2026-08-10 | `uv run python examples/volume02/prompt_test_data_demo.py` | 세 개의 교육용 고정 fixture와 순서 보존 비교 case ID를 API 키·네트워크·LLM·Tool 호출 없이 출력함 |
 | 2026-08-10 | `uv run ruff check src/ai_platform/prompts examples/volume02/prompt_test_data_demo.py tests/unit/test_prompts.py` / `uv run mypy src/ai_platform/prompts` / `uv run pytest tests/unit/test_prompts.py -q` | Ruff 통과, mypy(8개 소스) 통과, Prompt 단위 테스트 52 passed |
 | 2026-08-10 | `bash scripts/run_all_tests.sh` | Ruff 통과, mypy(15개 소스) 통과, 문서·링크·코드 블록·비밀값 검사 통과, pytest 113 passed |
+| 2026-08-11 | `uv run python examples/volume02/prompt_mini_project_demo.py` | v1 고정 기록의 JSON·기대값 실패 ID와 v2의 3/3 사람 검토 후보 상태를 API 키·네트워크·LLM·Tool 호출 없이 출력함 |
+| 2026-08-11 | `uv run ruff check src/ai_platform/prompts examples/volume02/prompt_mini_project_demo.py tests/unit/test_prompts.py` / `uv run mypy src/ai_platform/prompts` / `uv run pytest tests/unit/test_prompts.py -q` | Ruff 통과, mypy(9개 소스) 통과, Prompt 단위 테스트 55 passed |
+| 2026-08-11 | `bash scripts/run_all_tests.sh` | Ruff 통과, mypy(16개 소스) 통과, 문서·링크·코드 블록·비밀값 검사 통과, pytest 116 passed |

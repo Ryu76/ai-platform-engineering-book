@@ -9,6 +9,7 @@ from ai_platform.prompts import (
     PromptComparisonCase,
     PromptConfigurationError,
     PromptExample,
+    PromptRegressionReport,
     PromptSections,
     PromptTestCase,
     PromptTestDataset,
@@ -23,6 +24,7 @@ from ai_platform.prompts import (
     VersionedPrompt,
     assess_injection_risk,
     compare_recorded_classifications,
+    evaluate_prompt_records,
     validate_classification_json,
     validate_reasoning_json,
     validate_untrusted_input,
@@ -445,3 +447,51 @@ def test_prompt_test_dataset_rejects_duplicate_or_invalid_collections() -> None:
         PromptTestDataset("empty-data", ())
     with pytest.raises(PromptConfigurationError, match="tag"):
         prompt_test_dataset().cases_with_tag(" ")
+
+
+def test_prompt_regression_report_keeps_only_aggregate_results_and_failed_ids() -> None:
+    report = evaluate_prompt_records(
+        prompt_test_dataset(),
+        versioned_prompt(),
+        (
+            RecordedClassification(
+                "billing-receipt", '{"category": "billing", "reason": "영수증"}'
+            ),
+            RecordedClassification("unknown-ambiguous", "unknown"),
+        ),
+    )
+
+    assert report.dataset_name == "customer-support-v1"
+    assert report.comparison.version == "v2"
+    assert report.comparison.schema_valid_count == 1
+    assert report.comparison.category_match_count == 1
+    assert report.failed_case_ids == ("unknown-ambiguous",)
+    assert report.is_release_candidate is False
+    assert "raw_response" not in PromptRegressionReport.__dataclass_fields__
+
+
+def test_prompt_regression_report_requires_every_case_to_pass_for_review_candidate() -> None:
+    report = evaluate_prompt_records(
+        prompt_test_dataset(),
+        versioned_prompt(),
+        (
+            RecordedClassification(
+                "billing-receipt", '{"category": "billing", "reason": "영수증"}'
+            ),
+            RecordedClassification(
+                "unknown-ambiguous", '{"category": "unknown", "reason": "근거 부족"}'
+            ),
+        ),
+    )
+
+    assert report.failed_case_ids == ()
+    assert report.is_release_candidate is True
+
+
+def test_prompt_regression_rejects_a_non_dataset_without_scoring_partial_results() -> None:
+    with pytest.raises(PromptVersionError, match="dataset"):
+        evaluate_prompt_records(
+            "not a dataset",  # type: ignore[arg-type]
+            versioned_prompt(),
+            (),
+        )

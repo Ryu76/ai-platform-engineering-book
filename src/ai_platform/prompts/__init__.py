@@ -8,6 +8,10 @@ from ai_platform.prompts.injection_defense import (
     assess_injection_risk,
     validate_untrusted_input,
 )
+from ai_platform.prompts.prompt_mini_project import (
+    PromptRegressionReport,
+    evaluate_prompt_records,
+)
 from ai_platform.prompts.prompt_runner import (
     PromptCaseComparison,
     PromptComparisonCase,
@@ -43,6 +47,7 @@ __all__ = [
     "PromptConfigurationError",
     "PromptExample",
     "PromptSections",
+    "PromptRegressionReport",
     "PromptTestCase",
     "PromptTestDataset",
     "PromptVersionComparison",
@@ -59,6 +64,7 @@ __all__ = [
     "VersionedPrompt",
     "assess_injection_risk",
     "compare_recorded_classifications",
+    "evaluate_prompt_records",
     "validate_classification_json",
     "validate_reasoning_json",
     "validate_untrusted_input",
