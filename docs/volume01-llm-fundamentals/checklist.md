@@ -54,7 +54,7 @@ LLM Client ──► Streaming · 오류 처리 · 사용량
 - [x] 미니 프로젝트와 기본·응용·심화 과제가 있다.
 - [x] [용어집](../glossary.md)에 Volume 01 주요 용어가 있다.
 - [x] 다음 권의 [Volume 02. Prompt Engineering](../volume02-prompt-engineering/README.md)으로 인계할 안전 경계를 명시했다.
-- [ ] 각 장의 전체 Definition of Done과 권 단위 재실행 결과는 별도 출고 감사에서 확인한다.
+- [x] 각 장의 전체 Definition of Done과 권 단위 재실행 결과를 출고 감사에서 확인했다. `bash scripts/run_all_tests.sh`는 Ruff, mypy, 문서·링크·코드 블록·비밀값 검사 및 전체 pytest `88 passed`를 모두 통과했다.
 
 > [!WARNING]
 > 마지막 항목이 완료되기 전에는 이 체크리스트의 제작 검수 결과만으로 Volume 01 전체 완료를 선언하지 않습니다. `--offline-demo` 없는 기본 모드는 설정이 있으면 실제 제공자로 입력을 전송할 수 있으므로, 이 권의 CI와 반복 검증에는 사용하지 않습니다.
