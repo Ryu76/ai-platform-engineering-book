@@ -15,7 +15,7 @@ LLM의 토큰·메시지·컨텍스트·생성 파라미터와 API 호출 구조
 9. [토큰 사용량과 비용 추정](09-usage-and-cost.md)
 10. [안전한 CLI 챗봇](10-cli-chatbot.md)
 11. [미니 프로젝트: 오프라인 검증 가능한 안전한 CLI 챗봇](11-mini-project.md)
-12. 과제
+12. [과제: 외부 전송 없이 LLM 실행 경계 점검하기](12-exercises.md)
 13. 핵심 정리
 
 [상세 작업 계획](detailed-plan.md)
