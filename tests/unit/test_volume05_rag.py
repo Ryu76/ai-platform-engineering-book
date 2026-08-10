@@ -13,6 +13,8 @@ from ai_platform.rag import (
     HybridSearchConfig,
     LocalMarkdownLoader,
     LocalRagIndex,
+    QueryTransformationConfig,
+    QueryTransformingIndex,
     RagConfigurationError,
     RagPipeline,
     SearchHit,
@@ -46,6 +48,18 @@ class RecordingGenerator:
     def generate(self, *, query: str, contexts: tuple[SearchHit, ...]) -> str:
         self.calls.append((query, contexts))
         return self.response
+
+
+class RecordingQueryTransformer:
+    """질의 변형 호출을 기록하고 외부 모델 없이 고정 결과를 반환한다."""
+
+    def __init__(self, queries: tuple[str, ...] | object) -> None:
+        self.queries = queries
+        self.calls: list[str] = []
+
+    def transform(self, *, query: str) -> tuple[str, ...]:
+        self.calls.append(query)
+        return self.queries  # type: ignore[return-value]
 
 
 def test_markdown_loader_cleans_local_content_and_derives_safe_metadata(tmp_path: Path) -> None:
@@ -240,6 +254,63 @@ def test_hybrid_search_can_use_mock_dense_evidence_without_sparse_term_overlap()
     assert generator.calls[0][1][0].matched_terms == ()
 
 
+def test_query_transforming_index_fuses_original_and_mock_expansion_with_rrf() -> None:
+    transformer = RecordingQueryTransformer(("배송 상태", "반품 신청"))
+    index = QueryTransformingIndex(
+        index=_index(),
+        transformer=transformer,
+        config=QueryTransformationConfig(max_queries=2, reciprocal_rank_k=10),
+    )
+
+    hits = index.search("배송 상태", top_k=2)
+
+    assert [hit.chunk.document_id for hit in hits] == ["returns", "shipping"]
+    assert [hit.score for hit in hits] == [
+        pytest.approx(1 / 11 + 1 / 12),
+        pytest.approx(1 / 11),
+    ]
+    assert hits[0].matched_terms == ("반품", "배송", "상태", "신청")
+    assert transformer.calls == ["배송 상태"]
+
+
+def test_query_transforming_index_preserves_original_user_question_for_generation() -> None:
+    transformer = RecordingQueryTransformer(("언제 도착해요?", "배송"))
+    generator = RecordingGenerator()
+    pipeline = RagPipeline(
+        index=QueryTransformingIndex(index=_index(), transformer=transformer), generator=generator
+    )
+
+    answer = pipeline.answer("언제 도착해요?", top_k=1)
+
+    assert answer.no_answer is False
+    assert answer.citations[0].chunk_id == "shipping#1"
+    assert generator.calls[0][0] == "언제 도착해요?"
+
+
+@pytest.mark.parametrize(
+    "queries, message",
+    [
+        ((), "at least the original"),
+        (("다른 질문",), "preserve the original"),
+        (("배송", " 배송 "), "duplicate queries"),
+        (("배송", ""), "non-empty string"),
+        (("배송", "상태", "반품"), "more queries than configured"),
+        (["배송"], "tuple of strings"),
+    ],
+)
+def test_query_transforming_index_rejects_untrusted_transformer_output(
+    queries: tuple[str, ...] | list[str], message: str
+) -> None:
+    index = QueryTransformingIndex(
+        index=_index(),
+        transformer=RecordingQueryTransformer(queries),
+        config=QueryTransformationConfig(max_queries=2),
+    )
+
+    with pytest.raises(RagConfigurationError, match=message):
+        index.search("배송")
+
+
 @pytest.mark.parametrize(
     "candidate_ids, message",
     [
@@ -307,6 +378,8 @@ def test_chunking_config_accepts_minimum_safe_size() -> None:
         lambda: HybridSearchConfig(sparse_candidate_count=0),
         lambda: HybridSearchConfig(dense_candidate_count=True),
         lambda: HybridSearchConfig(reciprocal_rank_k=0),
+        lambda: QueryTransformationConfig(max_queries=0),
+        lambda: QueryTransformationConfig(reciprocal_rank_k=False),
         lambda: LocalRagIndex([]),
         lambda: LocalRagIndex(
             [

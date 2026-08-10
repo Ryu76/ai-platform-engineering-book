@@ -10,6 +10,7 @@ from ai_platform.rag import (
     HybridRagIndex,
     LocalMarkdownLoader,
     LocalRagIndex,
+    QueryTransformingIndex,
     RagPipeline,
     SearchHit,
 )
@@ -33,6 +34,18 @@ class SampleDenseRanker:
         return (DenseCandidate(candidate_id),)[:top_k]
 
 
+class SampleQueryTransformer:
+    """외부 모델 없이 원 질문을 보존한 로컬 검색 확장 Mock이다."""
+
+    _QUERIES_BY_QUERY = {
+        "언제 도착하나요?": ("언제 도착하나요?", "배송 도착"),
+        "반품 요청은 어떻게 접수하나요?": ("반품 요청은 어떻게 접수하나요?", "반품 접수"),
+    }
+
+    def transform(self, *, query: str) -> tuple[str, ...]:
+        return self._QUERIES_BY_QUERY.get(query, (query,))
+
+
 class SampleOnlyGenerator:
     """실습용 Mock 생성기: 실제 제공자 호출 대신 첫 번째 근거를 그대로 요약한다."""
 
@@ -47,7 +60,8 @@ def main() -> None:
     loader = LocalMarkdownLoader(root=sample_root)
     documents = loader.load_many((Path("handbook.md"), Path("returns.md")))
     sparse_index = LocalRagIndex(documents)
-    index = HybridRagIndex(sparse_index=sparse_index, dense_ranker=SampleDenseRanker())
+    hybrid_index = HybridRagIndex(sparse_index=sparse_index, dense_ranker=SampleDenseRanker())
+    index = QueryTransformingIndex(index=hybrid_index, transformer=SampleQueryTransformer())
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
 
     for query in (

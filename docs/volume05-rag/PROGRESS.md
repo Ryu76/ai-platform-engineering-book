@@ -1,5 +1,44 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-10 — 로컬 Mock Query Transformation·RRF 검색 슬라이스 완료
+
+### 완료
+
+- `QueryTransformer` Protocol, `QueryTransformationConfig`, `QueryTransformingIndex`를 추가했습니다. 변형기는 원 질문을 첫 번째로 보존한 `tuple`만 반환할 수 있고, 빈 값·정규화 중복·과다 확장·원 질문 누락을 즉시 거부합니다.
+- 각 원/확장 질문의 검색 결과는 제공자 점수 크기를 섞지 않고 Reciprocal Rank Fusion(RRF) 순위로 결합합니다. 결합된 근거는 기존 청크·인용 경계를 유지하며 생성기에는 항상 사용자의 원 질문을 전달합니다.
+- 예제를 고정 로컬 확장 규칙 `SampleQueryTransformer`와 기존 Mock dense 랭커 조합으로 확장했습니다. 네트워크, 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+- RRF 점수·용어 병합, 원 질문 보존, 신뢰할 수 없는 변형기 출력 거부, 설정 검증을 포함해 Volume 05 단위 테스트를 42개로 확장했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-10에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 42 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 5 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 3 source files
+uv run python examples/volume05/local_rag.py
+# 도착 예정·반품 근거와 인용, 주차장 할인 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 외부 라이브 서비스 없이 PDF 입력을 파싱·검증하는 경계, 또는 로컬 검색 근거의 재순위화 계약을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-10 — Mock dense 후보와 RRF 하이브리드 검색 슬라이스 완료
 
 ### 완료

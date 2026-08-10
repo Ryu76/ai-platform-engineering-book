@@ -125,6 +125,39 @@ class SearchableIndex(Protocol):
         """질문에 대한 인용 가능한 로컬 근거를 순위대로 반환한다."""
 
 
+class QueryTransformer(Protocol):
+    """원 질문을 보존한 결정론적 질의 변형 경계다.
+
+    구현체는 원 질문을 첫 원소로 포함한 ``tuple``을 반환한다. 이 경계는 외부 모델을
+    만들지 않으며, 예제와 테스트에서는 로컬 규칙 또는 Mock 구현체를 주입한다.
+    """
+
+    def transform(self, *, query: str) -> tuple[str, ...]:
+        """원 질문과 최대 개수 안의 중복 없는 대체 검색 질문을 반환한다."""
+
+
+@dataclass(frozen=True, slots=True)
+class QueryTransformationConfig:
+    """로컬 질의 변형 수와 RRF 결합을 제한하는 설정이다."""
+
+    max_queries: int = 3
+    reciprocal_rank_k: int = 60
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.max_queries, bool)
+            or not isinstance(self.max_queries, int)
+            or not 1 <= self.max_queries <= 5
+        ):
+            raise RagConfigurationError("max_queries must be an integer between 1 and 5")
+        if (
+            isinstance(self.reciprocal_rank_k, bool)
+            or not isinstance(self.reciprocal_rank_k, int)
+            or self.reciprocal_rank_k < 1
+        ):
+            raise RagConfigurationError("reciprocal_rank_k must be a positive integer")
+
+
 @dataclass(frozen=True, slots=True)
 class DenseCandidate:
     """Mock 또는 로컬 dense 랭커가 순위대로 반환하는 청크 식별자다.
@@ -301,6 +334,81 @@ class HybridRagIndex:
             seen_chunk_ids.add(candidate.chunk_id)
             chunks.append(self._chunks_by_id[candidate.chunk_id])
         return tuple(chunks)
+
+
+class QueryTransformingIndex:
+    """원 질문과 로컬 Mock 변형 질문의 검색 순위를 RRF로 결합한다.
+
+    변형기는 원 질문을 첫 번째로 그대로 반환해야 한다. 따라서 확장 질문이 부정확해도
+    원 질문 검색 경로가 사라지지 않으며, 이 클래스는 변형기·검색 결과의 점수 척도를
+    섞지 않고 순위만 사용한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        index: SearchableIndex,
+        transformer: QueryTransformer,
+        config: QueryTransformationConfig | None = None,
+    ) -> None:
+        if not hasattr(index, "search"):
+            raise RagConfigurationError("index must provide a search method")
+        if not hasattr(transformer, "transform"):
+            raise RagConfigurationError("transformer must provide a transform method")
+        self._index = index
+        self._transformer = transformer
+        self._config = config or QueryTransformationConfig()
+
+    def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
+        """각 검증된 질의의 결과 순위를 RRF로 결합해 인용 가능한 근거를 반환한다."""
+        _validate_search_input(query=query, top_k=top_k)
+        transformed_queries = self._validated_queries(query)
+
+        scores: dict[str, float] = {}
+        hits_by_chunk_id: dict[str, SearchHit] = {}
+        matched_terms: dict[str, set[str]] = {}
+        for transformed_query in transformed_queries:
+            for rank, hit in enumerate(self._index.search(transformed_query, top_k=top_k), start=1):
+                chunk_id = hit.chunk.chunk_id
+                scores[chunk_id] = scores.get(chunk_id, 0.0) + 1 / (
+                    self._config.reciprocal_rank_k + rank
+                )
+                hits_by_chunk_id[chunk_id] = hit
+                matched_terms.setdefault(chunk_id, set()).update(hit.matched_terms)
+
+        fused_hits = [
+            SearchHit(
+                chunk=hits_by_chunk_id[chunk_id].chunk,
+                score=score,
+                matched_terms=tuple(sorted(matched_terms[chunk_id])),
+            )
+            for chunk_id, score in scores.items()
+        ]
+        fused_hits.sort(key=lambda hit: (-hit.score, hit.chunk.document_id, hit.chunk.start_offset))
+        return tuple(fused_hits[:top_k])
+
+    def _validated_queries(self, query: str) -> tuple[str, ...]:
+        transformed_queries = self._transformer.transform(query=query)
+        if not isinstance(transformed_queries, tuple):
+            raise RagConfigurationError("query transformer must return a tuple of strings")
+        if not transformed_queries:
+            raise RagConfigurationError("query transformer must return at least the original query")
+        if len(transformed_queries) > self._config.max_queries:
+            raise RagConfigurationError("query transformer returned more queries than configured")
+        if transformed_queries[0] != query:
+            raise RagConfigurationError("query transformer must preserve the original query first")
+
+        normalized_queries: set[str] = set()
+        for transformed_query in transformed_queries:
+            if not isinstance(transformed_query, str) or not transformed_query.strip():
+                raise RagConfigurationError(
+                    "query transformer must return non-empty string queries"
+                )
+            normalized_query = " ".join(transformed_query.split()).casefold()
+            if normalized_query in normalized_queries:
+                raise RagConfigurationError("query transformer must not return duplicate queries")
+            normalized_queries.add(normalized_query)
+        return transformed_queries
 
 
 class RagPipeline:
