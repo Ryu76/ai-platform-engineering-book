@@ -64,3 +64,23 @@ def test_volume10_second_chapter_connects_versioned_labels_to_verified_artifacts
     assert "네트워크, 시계, 난수에 의존하지 않습니다" in chapter
     assert all(artifact.is_file() for artifact in expected_artifacts)
     assert "](02-golden-dataset.md)" in readme
+
+
+def test_volume10_third_chapter_connects_failure_analysis_to_verified_artifacts() -> None:
+    """검색 품질 장은 사례별 실패 분석과 결정론적 실행 경로를 제공해야 한다."""
+    chapter = (VOLUME / "03-retrieval-quality.md").read_text(encoding="utf-8")
+    readme = (VOLUME / "README.md").read_text(encoding="utf-8")
+    expected_artifacts = (
+        ROOT / "src" / "ai_platform" / "evaluation" / "retrieval_metrics.py",
+        ROOT / "examples" / "volume10" / "retrieval_failure_analysis.py",
+        ROOT / "tests" / "evaluation" / "test_retrieval_metrics.py",
+    )
+
+    assert all(section in chapter for section in REQUIRED_SECTIONS)
+    assert "uv run python examples/volume10/retrieval_failure_analysis.py" in chapter
+    assert "uv run pytest tests/evaluation/test_retrieval_metrics.py -q" in chapter
+    assert "benefits-enrollment" in chapter
+    assert "first_rank=none" in chapter
+    assert "네트워크, 시계, 난수, 라이브 모델 상태에 의존하지 않습니다" in chapter
+    assert all(artifact.is_file() for artifact in expected_artifacts)
+    assert "](03-retrieval-quality.md)" in readme

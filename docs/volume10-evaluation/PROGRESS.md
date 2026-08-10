@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 11 — Volume 10 Evaluation**
-- 이번 슬라이스: **버전 관리되는 고정 골든 데이터셋과 no-answer 라벨 계약**
+- 이번 슬라이스: **고정 검색 결과의 사례별 품질·실패 분석과 Recall·Precision·Hit Rate·MRR·NDCG 해석**
 - 완료 선언: 아직 하지 않음. Volume 10의 답변·인용·환각 평가, Router·Agent 평가, Latency·Token·Cost, 회귀 리포트, 미니 프로젝트, 전체 체크리스트가 남아 있습니다.
 
 ## 이번 슬라이스 (2026-08-10)
@@ -95,12 +95,51 @@ $ uv run python scripts/validate_code_blocks.py && uv run python scripts/validat
 문서 검증 통과: Volume 11개
 ```
 
+### 검색 품질·실패 분석 슬라이스 (2026-08-10)
+
+- `docs/volume10-evaluation/03-retrieval-quality.md`
+  - PRD 장 구조의 14개 섹션으로 Recall·Precision·Hit Rate·MRR·NDCG의 역할, `k` 트레이드오프, 완전 누락과 늦은 정답의 원인 분리를 작성했습니다.
+  - `benefits-enrollment`의 Top-3 누락, `expense-receipt`의 2위 정답, `incident-response`의 복수 정답 회수를 고정 출력으로 해석합니다.
+- `src/ai_platform/evaluation/retrieval_metrics.py`
+  - 평균 점수와 동일한 입력 계약을 공유하는 `RetrievalCaseMetrics` 및 `evaluate_retrieval_cases()`를 추가했습니다.
+  - 문자열 하나를 문서 ID 시퀀스로 오해해 문자 단위로 계산하는 입력을 거부합니다.
+- `examples/volume10/retrieval_failure_analysis.py`
+  - 네 개의 양성 사례를 고정 순서로 출력해 회수된 정답 ID, 첫 정답 순위, 사례별 Recall·Precision·MRR·NDCG를 외부 호출 없이 보여 줍니다.
+- `tests/evaluation/test_retrieval_metrics.py`, `tests/evaluation/test_volume10_completion_contract.py`
+  - 사례별 순서·누락·복수 회수, 잘못된 문자열 입력, 세 번째 장의 14개 필수 섹션과 실제 산출물 연결을 검증합니다.
+- `docs/volume10-evaluation/README.md`
+  - 세 번째 장과 사례별 실패 분석 실행 경로를 추가했습니다.
+
+#### 검증 기록
+
+```text
+$ uv run python examples/volume10/retrieval_failure_analysis.py
+Cutoff: 3
+access-reset: retrieved=identity-access; first_rank=1; Recall@3=1.000000; Precision@3=0.333333; MRR=1.000000; NDCG@3=1.000000
+expense-receipt: retrieved=finance-expense; first_rank=2; Recall@3=1.000000; Precision@3=0.333333; MRR=0.500000; NDCG@3=0.630930
+incident-response: retrieved=operations-runbook, security-incident; first_rank=1; Recall@3=1.000000; Precision@3=0.666667; MRR=1.000000; NDCG@3=1.000000
+benefits-enrollment: retrieved=none; first_rank=none; Recall@3=0.000000; Precision@3=0.000000; MRR=0.000000; NDCG@3=0.000000
+
+$ uv run pytest tests/evaluation -q
+19 passed
+
+$ uv run ruff check src/ai_platform/evaluation tests/evaluation examples/volume10
+All checks passed!
+
+$ uv run mypy src/ai_platform/evaluation
+Success: no issues found in 4 source files
+
+$ uv run python scripts/validate_code_blocks.py && uv run python scripts/validate_docs.py
+코드 블록 검증 통과
+문서 검증 통과: Volume 11개
+```
+
 ## 알려진 차단 사항
 
-- Volume 10은 두 장, 버전 관리되는 골든 데이터셋, 검색 평가 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
+- Volume 10은 세 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석 기준선만 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
 - `abstain` no-answer 사례는 고정·검증됐지만, 답변 보류 정확도·환각·인용 평가는 후속 장에서 별도 결정론적 지표로 구현해야 합니다.
 - 고정 Top-3 순위는 평가 계산을 설명하기 위한 기록된 입력입니다. 실제 Retriever에 연결하는 통합 평가와 데이터셋 변경 승인 정책은 후속 장에서 구현합니다.
 
 ## 다음 작업
 
-- 고정 골든 데이터셋을 기준으로 Recall·Precision·Hit Rate·MRR·NDCG의 트레이드오프와 실패 사례 해석을 다루는 세 번째 장을 작성합니다.
+- 고정 골든 데이터셋과 no-answer 사례를 기준으로 답변 정확도·환각·인용 평가를 위한 결정론적 계약을 작성합니다.

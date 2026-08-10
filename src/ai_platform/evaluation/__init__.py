@@ -14,9 +14,11 @@ from ai_platform.evaluation.golden_dataset import (
 )
 from ai_platform.evaluation.retrieval_metrics import (
     RetrievalCase,
+    RetrievalCaseMetrics,
     RetrievalEvaluationError,
     RetrievalMetrics,
     evaluate_retrieval,
+    evaluate_retrieval_cases,
 )
 
 __all__ = [
@@ -28,8 +30,10 @@ __all__ = [
     "GoldenDatasetError",
     "GoldenDatasetSummary",
     "RetrievalCase",
+    "RetrievalCaseMetrics",
     "RetrievalEvaluationError",
     "RetrievalMetrics",
     "evaluate_retrieval",
+    "evaluate_retrieval_cases",
     "summarize_golden_dataset",
 ]
