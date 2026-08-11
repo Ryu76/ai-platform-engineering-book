@@ -19,12 +19,11 @@ from ai_platform.rag import (
     LocalRagApi,
     LocalRagIndex,
     LocalRetrievalEvaluationSetLoader,
+    LocalRetrievalRegressionBaselineLoader,
     QueryTransformingIndex,
     RagPipeline,
     RerankingIndex,
     RerankResult,
-    RetrievalEvaluationBaseline,
-    RetrievalEvaluationBaselineCase,
     RetrievalEvaluationConfig,
     RetrievalEvaluator,
     RetrievalRegressionChecker,
@@ -127,21 +126,12 @@ def main() -> None:
     evaluation_report = RetrievalEvaluator(
         index=index, config=RetrievalEvaluationConfig(top_k=1)
     ).evaluate(evaluation_cases)
-    baseline = RetrievalEvaluationBaseline(
-        top_k=1,
-        cases=tuple(
-            RetrievalEvaluationBaselineCase(
-                case_id=case.case_id,
-                query=case.query,
-                expected_chunk_ids=case.expected_chunk_ids,
-            )
-            for case in evaluation_cases
-        ),
-        recall_at_k=1.0,
-        hit_rate=1.0,
-        mean_reciprocal_rank=1.0,
+    regression_file = LocalRetrievalRegressionBaselineLoader(root=sample_root).load(
+        Path("retrieval-regression-baseline.json")
     )
-    regression = RetrievalRegressionChecker(baseline=baseline).evaluate(evaluation_report)
+    regression = RetrievalRegressionChecker(
+        baseline=regression_file.baseline, policy=regression_file.policy
+    ).evaluate(evaluation_report)
     if not regression.passed:
         raise RuntimeError("sample RAG retrieval quality regressed from its fixed baseline")
     print(

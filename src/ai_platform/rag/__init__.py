@@ -11,6 +11,7 @@ from ai_platform.rag.api import (
 )
 from ai_platform.rag.evaluation import (
     LocalRetrievalEvaluationSetLoader,
+    LocalRetrievalRegressionBaselineLoader,
     RetrievalEvaluationBaseline,
     RetrievalEvaluationBaselineCase,
     RetrievalEvaluationCase,
@@ -19,6 +20,8 @@ from ai_platform.rag.evaluation import (
     RetrievalEvaluationResult,
     RetrievalEvaluationSetLoadingConfig,
     RetrievalEvaluator,
+    RetrievalRegressionBaselineFile,
+    RetrievalRegressionBaselineLoadingConfig,
     RetrievalRegressionChecker,
     RetrievalRegressionDecision,
     RetrievalRegressionMetricResult,
@@ -74,6 +77,7 @@ __all__ = [
     "RagQueryRequest",
     "RagRequestError",
     "LocalRetrievalEvaluationSetLoader",
+    "LocalRetrievalRegressionBaselineLoader",
     "RetrievalEvaluationBaseline",
     "RetrievalEvaluationBaselineCase",
     "RetrievalEvaluationCase",
@@ -83,6 +87,8 @@ __all__ = [
     "RetrievalEvaluator",
     "RetrievalEvaluationSetLoadingConfig",
     "RetrievalRegressionChecker",
+    "RetrievalRegressionBaselineFile",
+    "RetrievalRegressionBaselineLoadingConfig",
     "RetrievalRegressionDecision",
     "RetrievalRegressionMetricResult",
     "RetrievalRegressionPolicy",

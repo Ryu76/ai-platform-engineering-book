@@ -22,6 +22,7 @@ from ai_platform.rag import (
     LocalRagApi,
     LocalRagIndex,
     LocalRetrievalEvaluationSetLoader,
+    LocalRetrievalRegressionBaselineLoader,
     PdfLoadingConfig,
     QueryTransformationConfig,
     QueryTransformingIndex,
@@ -37,6 +38,7 @@ from ai_platform.rag import (
     RetrievalEvaluationConfig,
     RetrievalEvaluationSetLoadingConfig,
     RetrievalEvaluator,
+    RetrievalRegressionBaselineLoadingConfig,
     RetrievalRegressionChecker,
     RetrievalRegressionPolicy,
     SearchHit,
@@ -1171,6 +1173,8 @@ def test_local_evaluation_set_loader_rejects_duplicate_or_excess_cases(tmp_path:
         lambda: RetrievalEvaluationConfig(max_cases=True),
         lambda: RetrievalEvaluationSetLoadingConfig(max_file_bytes=0),
         lambda: RetrievalEvaluationSetLoadingConfig(max_cases=True),
+        lambda: RetrievalRegressionBaselineLoadingConfig(max_file_bytes=0),
+        lambda: RetrievalRegressionBaselineLoadingConfig(max_cases=True),
     ],
 )
 def test_retrieval_evaluation_rejects_invalid_contract_values(
@@ -1178,6 +1182,126 @@ def test_retrieval_evaluation_rejects_invalid_contract_values(
 ) -> None:
     with pytest.raises(RagConfigurationError):
         factory()
+
+
+def test_local_regression_baseline_loader_reads_explicit_baseline_and_policy(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "evaluation"
+    root.mkdir()
+    (root / "baseline.json").write_text(
+        """{
+  "baseline": {
+    "top_k": 1,
+    "cases": [
+      {"case_id":"shipping","query":"배송","expected_chunk_ids":["shipping#1"]}
+    ],
+    "recall_at_k": 1.0,
+    "hit_rate": 1.0,
+    "mean_reciprocal_rank": 1.0
+  },
+  "policy": {
+    "maximum_recall_at_k_drop": 0.1,
+    "maximum_hit_rate_drop": 0.2,
+    "maximum_mean_reciprocal_rank_drop": 0.3
+  }
+}""",
+        encoding="utf-8",
+    )
+
+    loaded = LocalRetrievalRegressionBaselineLoader(root=root).load(Path("baseline.json"))
+    report = RetrievalEvaluator(
+        index=RecordingSearchIndex(
+            (_hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),)
+        ),
+        config=RetrievalEvaluationConfig(top_k=1),
+    ).evaluate((RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),))
+
+    assert loaded.baseline.cases == (
+        RetrievalEvaluationBaselineCase("shipping", "배송", ("shipping#1",)),
+    )
+    assert loaded.policy.maximum_recall_at_k_drop == 0.1
+    assert loaded.policy.maximum_hit_rate_drop == 0.2
+    assert loaded.policy.maximum_mean_reciprocal_rank_drop == 0.3
+    assert (
+        RetrievalRegressionChecker(baseline=loaded.baseline, policy=loaded.policy)
+        .evaluate(report)
+        .passed
+        is True
+    )
+
+
+@pytest.mark.parametrize(
+    "relative_path, content, config, message",
+    [
+        (Path("notes.txt"), b"{}", None, "only JSON regression baseline files"),
+        (Path("../outside.json"), b"", None, "must stay within root"),
+        (Path("empty.json"), b"", None, "must not be empty"),
+        (
+            Path("large.json"),
+            b"{}",
+            RetrievalRegressionBaselineLoadingConfig(max_file_bytes=1),
+            "size limit",
+        ),
+        (Path("legacy.json"), b"\xff", None, "UTF-8"),
+        (Path("duplicate.json"), b'{"baseline":{},"baseline":{},"policy":{}}', None, "valid JSON"),
+    ],
+)
+def test_local_regression_baseline_loader_rejects_unsafe_or_invalid_files(
+    tmp_path: Path,
+    relative_path: Path,
+    content: bytes,
+    config: RetrievalRegressionBaselineLoadingConfig | None,
+    message: str,
+) -> None:
+    root = tmp_path / "evaluation"
+    root.mkdir()
+    if relative_path.parts[0] != "..":
+        (root / relative_path).write_bytes(content)
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalRetrievalRegressionBaselineLoader(root=root, config=config).load(relative_path)
+
+
+@pytest.mark.parametrize(
+    "content, config, message",
+    [
+        (b"[]", None, "root must be an object"),
+        (b'{"baseline":{}}', None, "only baseline and policy"),
+        (
+            b'{"baseline":{"top_k":1,"cases":[],"recall_at_k":1.0,"hit_rate":1.0,"mean_reciprocal_rank":1.0},"policy":{"maximum_recall_at_k_drop":0.0,"maximum_hit_rate_drop":0.0,"maximum_mean_reciprocal_rank_drop":0.0}}',
+            None,
+            "cases must be a non-empty array",
+        ),
+        (
+            b'{"baseline":{"top_k":1,"cases":[{"case_id":"shipping","expected_chunk_ids":["shipping#1"]}],"recall_at_k":1.0,"hit_rate":1.0,"mean_reciprocal_rank":1.0},"policy":{"maximum_recall_at_k_drop":0.0,"maximum_hit_rate_drop":0.0,"maximum_mean_reciprocal_rank_drop":0.0}}',
+            None,
+            "cases must contain only",
+        ),
+        (
+            b'{"baseline":{"top_k":1,"cases":[{"case_id":"shipping","query":"shipping","expected_chunk_ids":["shipping#1"]}],"recall_at_k":1.0,"hit_rate":1.0,"mean_reciprocal_rank":1.0},"policy":{"maximum_recall_at_k_drop":1.1,"maximum_hit_rate_drop":0.0,"maximum_mean_reciprocal_rank_drop":0.0}}',
+            None,
+            "maximum_recall_at_k_drop",
+        ),
+        (
+            b'{"baseline":{"top_k":1,"cases":[{"case_id":"shipping","query":"shipping","expected_chunk_ids":["shipping#1"]},{"case_id":"returns","query":"returns","expected_chunk_ids":["returns#1"]}],"recall_at_k":1.0,"hit_rate":1.0,"mean_reciprocal_rank":1.0},"policy":{"maximum_recall_at_k_drop":0.0,"maximum_hit_rate_drop":0.0,"maximum_mean_reciprocal_rank_drop":0.0}}',
+            RetrievalRegressionBaselineLoadingConfig(max_cases=1),
+            "more cases than configured",
+        ),
+    ],
+)
+def test_local_regression_baseline_loader_rejects_invalid_json_schema(
+    tmp_path: Path,
+    content: bytes,
+    config: RetrievalRegressionBaselineLoadingConfig | None,
+    message: str,
+) -> None:
+    root = tmp_path / "evaluation"
+    root.mkdir()
+    (root / "baseline.json").write_bytes(content)
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalRetrievalRegressionBaselineLoader(root=root, config=config).load(Path("baseline.json"))
 
 
 def test_retrieval_regression_checker_compares_compatible_reports_with_metric_budgets() -> None:

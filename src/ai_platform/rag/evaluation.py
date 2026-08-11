@@ -463,6 +463,174 @@ class RetrievalRegressionPolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class RetrievalRegressionBaselineLoadingConfig:
+    """명시한 로컬 기준선·정책 JSON 파일의 크기와 사례 수 제한이다."""
+
+    max_file_bytes: int = 100_000
+    max_cases: int = 100
+
+    def __post_init__(self) -> None:
+        for field_name, value, maximum in (
+            ("max_file_bytes", self.max_file_bytes, 1_000_000),
+            ("max_cases", self.max_cases, 1_000),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise RagConfigurationError(
+                    f"regression baseline {field_name} must be an integer between 1 and {maximum}"
+                )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionBaselineFile:
+    """로컬 파일에서 함께 검증한 기준선과 회귀 정책이다."""
+
+    baseline: RetrievalEvaluationBaseline
+    policy: RetrievalRegressionPolicy
+
+
+class LocalRetrievalRegressionBaselineLoader:
+    """허용된 로컬 루트 아래의 고정 기준선·정책 JSON 하나만 읽는다.
+
+    이 경계는 자동 탐색·검색·생성·네트워크·제공자 SDK를 사용하지 않는다. 호출자가
+    명시한 파일을 UTF-8 및 엄격한 JSON 스키마로 검증하여, 서로 다른 사례나 모호한
+    정책을 이전 검색 품질 기준선으로 기록하지 못하게 한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        root: Path,
+        config: RetrievalRegressionBaselineLoadingConfig | None = None,
+    ) -> None:
+        if not isinstance(root, Path):
+            raise RagConfigurationError("regression baseline root must be a pathlib.Path")
+        if not root.is_dir():
+            raise RagConfigurationError("regression baseline root must be an existing directory")
+        self._root = root.resolve()
+        self._config = config or RetrievalRegressionBaselineLoadingConfig()
+
+    def load(self, relative_path: Path) -> RetrievalRegressionBaselineFile:
+        """엄격히 검증한 고정 기준선과 회귀 정책을 반환한다."""
+        candidate = self._resolve_path(relative_path)
+        try:
+            raw_bytes = candidate.read_bytes()
+        except OSError as error:
+            raise RagConfigurationError("regression baseline file could not be read") from error
+        if not raw_bytes:
+            raise RagConfigurationError("regression baseline file must not be empty")
+        if len(raw_bytes) > self._config.max_file_bytes:
+            raise RagConfigurationError(
+                "regression baseline file exceeds the configured size limit"
+            )
+        try:
+            payload = json.loads(
+                raw_bytes.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_json_keys,
+                parse_constant=_reject_nonstandard_json_constant,
+            )
+        except UnicodeDecodeError as error:
+            raise RagConfigurationError("regression baseline file must be UTF-8 encoded") from error
+        except (json.JSONDecodeError, ValueError) as error:
+            raise RagConfigurationError(
+                "regression baseline file must contain valid JSON"
+            ) from error
+        return self._validated_file(payload)
+
+    def _resolve_path(self, relative_path: Path) -> Path:
+        if not isinstance(relative_path, Path):
+            raise RagConfigurationError("regression baseline relative_path must be a pathlib.Path")
+        if relative_path.is_absolute() or not relative_path.parts:
+            raise RagConfigurationError(
+                "regression baseline relative_path must be a non-empty relative path"
+            )
+        if relative_path.suffix.casefold() != ".json":
+            raise RagConfigurationError("only JSON regression baseline files (.json) are supported")
+        candidate = (self._root / relative_path).resolve()
+        if not candidate.is_relative_to(self._root):
+            raise RagConfigurationError("regression baseline relative_path must stay within root")
+        if not candidate.is_file():
+            raise RagConfigurationError("regression baseline file does not exist")
+        return candidate
+
+    def _validated_file(self, payload: object) -> RetrievalRegressionBaselineFile:
+        if not isinstance(payload, dict):
+            raise RagConfigurationError("regression baseline JSON root must be an object")
+        if set(payload) != {"baseline", "policy"}:
+            raise RagConfigurationError(
+                "regression baseline JSON root must contain only baseline and policy"
+            )
+        baseline = self._baseline_from_json(payload["baseline"])
+        policy = self._policy_from_json(payload["policy"])
+        return RetrievalRegressionBaselineFile(baseline=baseline, policy=policy)
+
+    def _baseline_from_json(self, raw_baseline: object) -> RetrievalEvaluationBaseline:
+        if not isinstance(raw_baseline, dict):
+            raise RagConfigurationError("regression baseline must be an object")
+        required_fields = {
+            "top_k",
+            "cases",
+            "recall_at_k",
+            "hit_rate",
+            "mean_reciprocal_rank",
+        }
+        if set(raw_baseline) != required_fields:
+            raise RagConfigurationError(
+                "regression baseline contains unsupported or missing fields"
+            )
+        raw_cases = raw_baseline["cases"]
+        if not isinstance(raw_cases, list) or not raw_cases:
+            raise RagConfigurationError("regression baseline cases must be a non-empty array")
+        if len(raw_cases) > self._config.max_cases:
+            raise RagConfigurationError("regression baseline contains more cases than configured")
+        cases = tuple(self._baseline_case_from_json(raw_case) for raw_case in raw_cases)
+        return RetrievalEvaluationBaseline(
+            top_k=raw_baseline["top_k"],
+            cases=cases,
+            recall_at_k=raw_baseline["recall_at_k"],
+            hit_rate=raw_baseline["hit_rate"],
+            mean_reciprocal_rank=raw_baseline["mean_reciprocal_rank"],
+        )
+
+    @staticmethod
+    def _baseline_case_from_json(raw_case: object) -> RetrievalEvaluationBaselineCase:
+        if not isinstance(raw_case, dict):
+            raise RagConfigurationError("regression baseline cases must be objects")
+        if set(raw_case) != {"case_id", "query", "expected_chunk_ids"}:
+            raise RagConfigurationError(
+                "regression baseline cases must contain only case_id, query, and expected_chunk_ids"
+            )
+        expected_chunk_ids = raw_case["expected_chunk_ids"]
+        if not isinstance(expected_chunk_ids, list):
+            raise RagConfigurationError("regression baseline expected_chunk_ids must be an array")
+        if not all(isinstance(chunk_id, str) for chunk_id in expected_chunk_ids):
+            raise RagConfigurationError(
+                "regression baseline expected_chunk_ids must contain strings"
+            )
+        return RetrievalEvaluationBaselineCase(
+            case_id=raw_case["case_id"],
+            query=raw_case["query"],
+            expected_chunk_ids=tuple(expected_chunk_ids),
+        )
+
+    @staticmethod
+    def _policy_from_json(raw_policy: object) -> RetrievalRegressionPolicy:
+        if not isinstance(raw_policy, dict):
+            raise RagConfigurationError("regression policy must be an object")
+        required_fields = {
+            "maximum_recall_at_k_drop",
+            "maximum_hit_rate_drop",
+            "maximum_mean_reciprocal_rank_drop",
+        }
+        if set(raw_policy) != required_fields:
+            raise RagConfigurationError("regression policy contains unsupported or missing fields")
+        return RetrievalRegressionPolicy(
+            maximum_recall_at_k_drop=raw_policy["maximum_recall_at_k_drop"],
+            maximum_hit_rate_drop=raw_policy["maximum_hit_rate_drop"],
+            maximum_mean_reciprocal_rank_drop=raw_policy["maximum_mean_reciprocal_rank_drop"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RetrievalRegressionMetricResult:
     """한 집계 지표의 기준선·현재 값·허용 하락 폭을 기록한다."""
 
