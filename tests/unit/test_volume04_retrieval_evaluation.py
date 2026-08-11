@@ -56,6 +56,21 @@ def test_mean_retrieval_metrics_reports_mean_and_hit_rate() -> None:
     assert summary.hit_rate_at_k == pytest.approx(0.5)
 
 
+@pytest.mark.parametrize("metrics", [[], (), "not-a-metric-batch", b"not-a-metric-batch", None])
+def test_mean_retrieval_metrics_rejects_empty_or_non_sequence_inputs(metrics: object) -> None:
+    """평균은 비어 있거나 sequence가 아닌 입력을 조용히 집계하면 안 된다."""
+    with pytest.raises(RetrievalEvaluationError, match="non-empty sequence"):
+        mean_retrieval_metrics(metrics)  # type: ignore[arg-type]
+
+
+def test_mean_retrieval_metrics_rejects_one_shot_generator() -> None:
+    """일회성 iterator는 길이 검증과 재현 가능한 집계를 우회하면 안 된다."""
+    metrics = (evaluate_ranking(["relevant"], {"relevant"}, k=1) for _ in range(1))
+
+    with pytest.raises(RetrievalEvaluationError, match="non-empty sequence"):
+        mean_retrieval_metrics(metrics)  # type: ignore[arg-type]
+
+
 def test_local_search_results_can_be_evaluated_by_stable_point_id() -> None:
     """로컬 mock 검색 결과를 정답 ID와 비교해 end-to-end 품질을 확인한다."""
     model = DeterministicEmbeddingModel(dimensions=256)

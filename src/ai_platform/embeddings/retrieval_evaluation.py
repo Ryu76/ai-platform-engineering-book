@@ -84,8 +84,14 @@ def evaluate_ranking(
 
 def mean_retrieval_metrics(metrics: Sequence[RetrievalMetrics]) -> RetrievalSummary:
     """여러 질의의 지표를 산술 평균과 hit rate로 요약한다."""
-    if not metrics:
-        raise RetrievalEvaluationError("metrics must not be empty")
+    if (
+        isinstance(metrics, (str, bytes))
+        or not isinstance(metrics, Sequence)
+        or not metrics
+    ):
+        raise RetrievalEvaluationError(
+            "metrics must be a non-empty sequence of RetrievalMetrics instances"
+        )
     if not all(isinstance(metric, RetrievalMetrics) for metric in metrics):
         raise RetrievalEvaluationError("metrics must contain RetrievalMetrics instances")
 
