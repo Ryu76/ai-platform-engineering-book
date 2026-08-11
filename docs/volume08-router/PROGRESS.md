@@ -757,3 +757,46 @@ PRD DoD 상태:
 - 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
 - PRD Volume DoD의 공유 `docs/glossary.md` 핵심 용어 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
 - 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-11 — Tick 18: 경로별 audit 값 타입 경계
+
+완료한 범위:
+
+- aggregate audit report의 고정 경로별 field schema 검사 뒤, 각 값의 타입도 fail closed 하게 검증하도록 강화했습니다. 모든 non-API decision field는 비어 있지 않은 문자열이고, keyword·fallback·escalation 순서 field는 비어 있지 않은 문자열 `list`, retry·escalation count는 부울이 아닌 0 이상의 정수여야 합니다.
+- API 경로는 부울을 제외한 `100`~`599` 정수 HTTP status code, 비어 있지 않은 `outcome`, 비어 있지 않은 문자열 중첩 decision field를 요구합니다. 따라서 strict JSON으로 직렬화 가능한 값이라도 record 계약과 다른 숫자·tuple·부울·빈 목록·빈 문자열은 export 전에 거부됩니다.
+- 고정 fixture 회귀 테스트로 숫자 `confidence`, tuple keyword 목록, 부울 fallback count·API status code, 빈 escalation 목록·API outcome을 결정론적으로 거부함을 검증했습니다.
+- 미니 프로젝트 학습 장과 학습자 체크리스트에 route별 값 타입, 오류 해결, 완료 조건을 반영했습니다. live Agent·Tool·Model·LLM·embedding·HTTP API·네트워크 호출은 하지 않았습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+34 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 13 source files
+
+uv run pytest tests/unit/test_volume08_*.py -q
+87 passed in 0.58s
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 canonical strict JSON audit report 출력; 경로별 schema·값 타입·원문 비노출 검사를 통과, 외부 호출 없음
+
+uv run pytest -q
+148 passed in 1.24s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
+- PRD Volume DoD의 공유 `docs/glossary.md` 핵심 용어 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
+- 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.

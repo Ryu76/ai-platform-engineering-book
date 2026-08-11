@@ -163,6 +163,29 @@ def test_mini_project_report_rejects_malformed_nested_api_audit_schema() -> None
         )
 
 
+def test_mini_project_report_rejects_wrong_route_specific_audit_value_types() -> None:
+    report = build_router_mini_project().run()
+    request_texts = _mini_project_request_texts()
+
+    invalid_reports = (
+        {**report, "policy": {**report["policy"], "confidence": 1}},
+        {**report, "keyword": {**report["keyword"], "matched_keywords": ("order",)}},
+        {**report, "fallback": {**report["fallback"], "fallback_count": True}},
+        {**report, "escalation": {**report["escalation"], "attempted_stage_names": []}},
+        {**report, "api": {**report["api"], "status_code": True}},
+        {
+            **report,
+            "api": {
+                **report["api"],
+                "body": {**report["api"]["body"], "outcome": ""},
+            },
+        },
+    )
+    for invalid_report in invalid_reports:
+        with pytest.raises(UnsafeRouterAuditRecordError, match="route value types"):
+            validate_router_audit_report(invalid_report, sensitive_values_by_route=request_texts)
+
+
 def test_audit_report_serializer_revalidates_and_emits_canonical_strict_json() -> None:
     report = build_router_mini_project().run()
     request_texts = _mini_project_request_texts()

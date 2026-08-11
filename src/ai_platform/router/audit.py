@@ -96,6 +96,11 @@ _ROUTER_AUDIT_REPORT_RECORD_FIELDS: Final = {
 
 _API_AUDIT_BODY_FIELDS: Final = frozenset({"decision", "outcome"})
 
+_LIST_OF_STRING_AUDIT_FIELDS: Final = frozenset(
+    {"attempted_policy_names", "attempted_stage_names", "matched_keywords"}
+)
+_NONNEGATIVE_INTEGER_AUDIT_FIELDS: Final = frozenset({"escalation_count", "fallback_count"})
+
 
 def validate_router_audit_record(
     record: Mapping[str, object], *, sensitive_values: Iterable[str] = ()
@@ -185,14 +190,43 @@ def _validate_report_names(values: Mapping[str, object], description: str) -> No
 
 
 def _validate_report_record_shape(route_name: str, record: Mapping[str, object]) -> None:
-    """고정 경로별 audit record가 다른 Router의 field를 섞지 않게 한다."""
+    """고정 경로별 audit record가 다른 Router의 field·값 타입을 섞지 않게 한다."""
     _validate_expected_fields(
         record,
         _ROUTER_AUDIT_REPORT_RECORD_FIELDS[route_name],
         "router audit report record",
     )
     if route_name != "api":
+        _validate_non_api_record_value_types(route_name, record)
         return
+    _validate_api_record_value_types(record)
+
+
+def _validate_non_api_record_value_types(route_name: str, record: Mapping[str, object]) -> None:
+    """각 Router 결정의 문자열·목록·counter 계약을 엄격하게 확인한다."""
+    expected_fields = _ROUTER_AUDIT_REPORT_RECORD_FIELDS[route_name]
+    string_fields = (
+        expected_fields - _LIST_OF_STRING_AUDIT_FIELDS - _NONNEGATIVE_INTEGER_AUDIT_FIELDS
+    )
+    for field_name in string_fields:
+        _validate_nonempty_string(record[field_name])
+    for field_name in expected_fields & _LIST_OF_STRING_AUDIT_FIELDS:
+        _validate_list_of_nonempty_strings(record[field_name])
+    for field_name in expected_fields & _NONNEGATIVE_INTEGER_AUDIT_FIELDS:
+        _validate_nonnegative_integer(record[field_name])
+
+
+def _validate_api_record_value_types(record: Mapping[str, object]) -> None:
+    """API 경로의 HTTP 상태·body·중첩 decision 값 타입을 확인한다."""
+    status_code = record["status_code"]
+    if (
+        isinstance(status_code, bool)
+        or not isinstance(status_code, int)
+        or not 100 <= status_code <= 599
+    ):
+        raise UnsafeRouterAuditRecordError(
+            "router audit report record does not match configured route value types"
+        )
     body = record["body"]
     if not isinstance(body, Mapping):
         raise UnsafeRouterAuditRecordError(
@@ -205,6 +239,9 @@ def _validate_report_record_shape(route_name: str, record: Mapping[str, object])
             "router audit report record does not match configured route schema"
         )
     _validate_expected_fields(decision, _DECISION_AUDIT_FIELDS, "router API audit decision")
+    _validate_nonempty_string(body["outcome"])
+    for field_name in _DECISION_AUDIT_FIELDS:
+        _validate_nonempty_string(decision[field_name])
 
 
 def _validate_expected_fields(
@@ -213,6 +250,34 @@ def _validate_expected_fields(
     """고정 audit schema의 필수 field 누락·추가를 fail closed 한다."""
     if frozenset(value) != expected_fields:
         raise UnsafeRouterAuditRecordError(f"{description} does not match configured route schema")
+
+
+def _validate_nonempty_string(value: object) -> None:
+    """감사 schema의 식별·수치 문자열이 빈 값이나 다른 타입이 되지 않게 한다."""
+    if not isinstance(value, str) or not value:
+        raise UnsafeRouterAuditRecordError(
+            "router audit report record does not match configured route value types"
+        )
+
+
+def _validate_list_of_nonempty_strings(value: object) -> None:
+    """audit report의 JSON array field가 비어 있지 않은 문자열 목록인지 확인한다."""
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item for item in value)
+    ):
+        raise UnsafeRouterAuditRecordError(
+            "router audit report record does not match configured route value types"
+        )
+
+
+def _validate_nonnegative_integer(value: object) -> None:
+    """fallback·escalation 횟수에 부울·음수·소수 값을 허용하지 않는다."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise UnsafeRouterAuditRecordError(
+            "router audit report record does not match configured route value types"
+        )
 
 
 def _validate_mapping(record: Mapping[str, object], sensitive_values: tuple[str, ...]) -> None:
