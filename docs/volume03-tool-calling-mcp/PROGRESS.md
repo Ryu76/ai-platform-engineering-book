@@ -2,55 +2,70 @@
 
 ## 현재 상태
 
-- 현재 Phase: **allowlisted MCP STDIO child의 injected shell-free factory ownership 경계**
-- 완료 선언: 아직 하지 않음. actual subprocess factory·OS pipe backpressure·cancellation/signal semantics·exit-code restart supervisor·durable audit/idempotency·Hermes/Codex 연동과 전체 운영 DoD를 구현·문서화·검증해야 합니다.
+- 현재 Phase: **fixed argv·explicit cwd/environment MCP STDIO subprocess factory seam**
+- 완료 선언: 아직 하지 않음. stdout/stderr simultaneous bounded drain·backpressure, stdin ownership,
+cancellation/disconnect, Windows/POSIX process-group/signal semantics, exit-code restart supervisor,
+durable audit/idempotency와 Hermes/Codex 연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
 
-## 이번 슬라이스: immutable launch plan으로 child factory 시작하기
+## 이번 슬라이스: OS-specific Popen factory를 fake seam 뒤에 분리하기
 
-- `src/ai_platform/mcp/host.py`
-  - `McpStdioChildFactory`는 trusted host가 구현할 fixed-argv child start adapter contract만 정의합니다. 이 module은 subprocess, shell, pipe, network 또는 Tool을 열지 않습니다.
-  - `start_mcp_stdio_child()`는 `McpStdioHostLaunchPlan`의 immutable tuple argv, stdout/stderr byte budget, host-fixed `shell=False`만 factory에 정확히 한 번 전달합니다. selector·command string·cwd·environment·stream을 받지 않으며 retry/restart를 하지 않습니다.
-  - factory exception과 `poll`/`terminate`/`wait`/`kill` contract가 없는 반환값은 raw detail 없이 generic `McpStdioHostError`로 거부합니다.
-  - `McpStdioChildProcess`를 runtime-checkable protocol로 표시해 trusted factory output의 최소 shutdown contract를 확인합니다.
+- `src/ai_platform/mcp/subprocess_factory.py`
+  - `McpStdioSubprocessConfig`가 trusted deployment의 absolute cwd와 non-empty bounded
+    NUL-free environment를 immutable snapshot으로 보관합니다. parent environment는 merge하지
+    않으므로 `PATH` 같은 필요한 값은 deployment가 명시해야 합니다.
+  - `McpStdioSubprocessFactory`는 existing `McpStdioChildFactory` contract를 구현합니다.
+    allowlisted tuple argv와 host-fixed `shell=False`만 받아 injected/default Popen factory를
+    정확히 한 번 호출합니다.
+  - Popen call은 `stdin=stdout=stderr=PIPE`, `shell=False`, explicit `cwd`/snapshot `env`,
+    `text=False`, `bufsize=0`, `close_fds=True`로 고정합니다. command string, inherited env,
+    caller-provided cwd/environment/shell option은 받지 않습니다.
+  - wrapped child는 `subprocess.TimeoutExpired`만 bounded `wait()`의 `None`으로 바꾸며,
+    raw start failure와 incomplete process object는 기존 host boundary가 generic error로
+    좁힙니다. pipe drain/read/write, process groups, cancellation, restart는 이 slice에서
+    의도적으로 구현하지 않았습니다.
 - `src/ai_platform/mcp/__init__.py`
-  - child factory protocol과 start function을 public export에 추가했습니다.
-- `examples/volume03/mcp_stdio_injected_child_factory.py`
-  - fixed `safe-echo` plan, in-memory `OfflineFactory`, in-memory `OfflineChild`만 사용해 fixed argv 및 `shell=False` 전달을 출력합니다. 실제 process/shell/signal/destructive action은 수행하지 않습니다.
-- `tests/volume03/test_mcp_host.py`
-  - factory가 exact allowlisted plan values와 `shell=False`만 한 번 받는지, factory raw failure가 숨겨지는지, incomplete child 반환값이 거부되는지를 검증합니다.
-- `docs/volume03-tool-calling-mcp/22-mcp-stdio-injected-child-factory.md`
-  - start ownership, finite factory call, offline exercise, 현재 의도적으로 제외한 actual process/pipe/cancellation/restart/durable operation을 문서화했습니다.
+  - Popen seam, config, child adapter, factory와 error를 public export에 추가했습니다.
+- `examples/volume03/mcp_stdio_subprocess_factory.py`
+  - `OfflinePopen`/`OfflinePopenProcess` in-memory fake만 사용해 fixed argv·`shell=False`와
+    정확히 한 번의 Popen seam call을 출력합니다. 실제 subprocess, shell, signal, pipe IO,
+    filesystem, network, 외부 MCP server, Tool 또는 destructive action은 수행하지 않습니다.
+- `tests/volume03/test_mcp_subprocess_factory.py`
+  - fake Popen이 exact binary pipe/cwd/env/shell kwargs를 한 번 받는지, config environment가
+    caller dict 변경에 흔들리지 않는지, unsafe config이 Popen 전에 거부되는지, raw Popen
+    failure가 숨겨지는지, bounded Popen timeout이 `None`이 되는지를 검증합니다.
+- `docs/volume03-tool-calling-mcp/23-mcp-stdio-subprocess-factory.md`
+  - ownership, fixed Popen boundary, offline exercise, explicit non-goals을 문서화했습니다.
 - `docs/volume03-tool-calling-mcp/README.md`
-  - 스물두 번째 학습 장을 목록에 추가했습니다.
+  - 스물세 번째 학습 장을 목록에 추가했습니다.
 
 ## 검증 기록
 
 실행 위치: `E:\python\ai-platform-engineering-book-volume-03`
 
 ```text
-$ uv run python examples/volume03/mcp_stdio_injected_child_factory.py
-server_name: safe-echo
+$ uv run python examples/volume03/mcp_stdio_subprocess_factory.py
 argv: volume03-safe-echo-server --stdio
 shell: False
+popen_calls: 1
 child_already_exited: True
 
-$ uv run ruff check src/ai_platform/mcp tests/volume03/test_mcp_host.py examples/volume03/mcp_stdio_injected_child_factory.py
+$ uv run ruff check src/ai_platform/mcp tests/volume03/test_mcp_subprocess_factory.py examples/volume03/mcp_stdio_subprocess_factory.py
 All checks passed!
 
 $ uv run mypy src
-Success: no issues found in 21 source files
+Success: no issues found in 22 source files
 
-$ uv run pytest tests/volume03/test_mcp_host.py -q
-25 passed in 0.38s
+$ uv run pytest tests/volume03/test_mcp_host.py tests/volume03/test_mcp_subprocess_factory.py -q
+33 passed in 0.20s
 
 $ uv run ruff check .
 All checks passed!
 
 $ uv run mypy src
-Success: no issues found in 21 source files
+Success: no issues found in 22 source files
 
 $ uv run pytest -q
-190 passed in 1.22s
+198 passed in 1.16s
 
 $ uv run python scripts/validate_docs.py
 문서 검증 통과: Volume 11개
@@ -68,8 +83,15 @@ $ git diff --check
 (exit 0)
 ```
 
-`uv` 명령은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만 프로젝트 가상환경에서 정상 실행했습니다. 예제와 테스트는 fake in-memory factory/child만 사용했으며 실제 process, sys.stdin/sys.stdout, filesystem, shell, pipe, signal, network, 외부 MCP server, destructive Tool을 사용하지 않았습니다.
+`uv` 명령은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만
+프로젝트 가상환경에서 정상 실행했습니다. 실제 Popen default path는 test/example에서 호출하지
+않았으며 fake in-memory Popen/process만 사용했습니다.
 
 ## 다음 슬라이스
 
-actual OS process factory를 열기 전에, platform-specific `subprocess` adapter의 exact `shell=False`·fixed argv·explicit cwd/environment boundary를 production-specific module로 분리하고 fake `Popen` API로 검증해야 합니다. 그 뒤 stdout/stderr simultaneous bounded drain·backpressure, cancellation/disconnect, OS signal/process group semantics, exit-code 분류와 finite restart/backoff를 각각 작은 slice로 분리합니다. durable approval/audit/idempotency와 Hermes/Codex integration은 계속 별도 설계·문서·테스트가 필요합니다.
+Popen factory가 만든 stdout/stderr binary pipes를 actual deployment에서 안전하게 소비하기 전에,
+동시 bounded drain의 ownership과 byte ceiling overflow policy를 separate adapter로 설계하고 fake
+readable streams로 검증해야 합니다. 이때 stdout/stderr deadlock/backpressure, decode/redaction,
+EOF/partial read/error 순서를 작은 slice로 분리하세요. stdin write framing, cancellation/disconnect,
+Windows/POSIX process groups, exit-code restart/backoff, durable approval/audit/idempotency,
+Hermes/Codex integration은 계속 별도 설계·문서·테스트가 필요합니다.

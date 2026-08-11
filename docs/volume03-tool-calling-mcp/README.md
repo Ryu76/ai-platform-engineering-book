@@ -30,5 +30,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 20. [MCP STDIO host launch plan: shell 없이 고정 allowlist와 resource budget을 모델링하기](20-mcp-stdio-allowlisted-launch-plan.md) — subprocess를 시작하지 않고 exact server selector를 fixed argv와 bounded stdout/stderr·shutdown·restart budget의 immutable plan으로 좁히는 경계
 21. [MCP STDIO child shutdown: injected process에 유한한 graceful/force 종료 순서 적용하기](21-mcp-stdio-injected-child-shutdown.md) — trusted child adapter에만 already-exited 확인 → terminate 한 번 → bounded wait → kill 한 번의 finite shutdown 순서를 적용하는 경계
 22. [MCP STDIO child factory: allowlisted plan만 trusted factory에 전달하기](22-mcp-stdio-injected-child-factory.md) — immutable plan의 fixed argv·bounded stream budget·`shell=False`만 injected factory에 한 번 전달하고 실제 subprocess는 열지 않는 시작 ownership 경계
+23. [MCP STDIO subprocess factory: fixed argv·cwd·environment를 fake Popen seam으로 검증하기](23-mcp-stdio-subprocess-factory.md) — OS-specific adapter를 분리하고 explicit cwd·complete environment·binary pipe topology·`shell=False`를 fake Popen으로 검증하는 시작 경계
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.

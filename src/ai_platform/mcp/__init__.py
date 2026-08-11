@@ -39,6 +39,14 @@ from ai_platform.mcp.stdio import (
     parse_stdio_jsonrpc_line,
     run_mcp_stdio_session,
 )
+from ai_platform.mcp.subprocess_factory import (
+    McpStdioPopenFactory,
+    McpStdioPopenProcess,
+    McpStdioSubprocessChild,
+    McpStdioSubprocessConfig,
+    McpStdioSubprocessError,
+    McpStdioSubprocessFactory,
+)
 
 __all__ = [
     "McpCallRequestError",
@@ -50,6 +58,12 @@ __all__ = [
     "McpStdioHostError",
     "McpStdioHostLaunchPlan",
     "McpStdioHostShutdownResult",
+    "McpStdioPopenFactory",
+    "McpStdioPopenProcess",
+    "McpStdioSubprocessChild",
+    "McpStdioSubprocessConfig",
+    "McpStdioSubprocessError",
+    "McpStdioSubprocessFactory",
     "McpPromptCatalog",
     "McpPromptError",
     "McpPromptMessage",
