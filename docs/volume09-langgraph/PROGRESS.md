@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 같은 `JsonFileCheckpointer` 인스턴스를 공유하는 8개의 동시 `DEPLOY` 시작 요청에서도 정확히 하나만 위험 작업의 `WAITING_FOR_APPROVAL` Checkpoint를 생성함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 기존 Action·승인 대기·감사 이벤트를 바꾸거나 `execute` 이벤트를 추가하지 않습니다. JSON의 Lock 보장은 단일 인스턴스의 스레드 범위에 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+- 이번 슬라이스: 같은 Python 프로세스에서 동일한 정규화 JSON 경로를 여는 8개의 독립 `JsonFileCheckpointer` 인스턴스로 동시에 `DEPLOY`를 시작해도 정확히 하나만 위험 작업의 `WAITING_FOR_APPROVAL` Checkpoint를 생성함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 기존 Action·승인 대기·감사 이벤트를 바꾸거나 `execute` 이벤트를 추가하지 않습니다. 경로 단위 Lock 보장은 하나의 프로세스와 같은 로컬 경로로 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
@@ -547,6 +547,65 @@ $ uv run pytest tests/unit/test_volume09_graph.py -q
 
 $ uv run pytest -q
 99 passed in 1.78s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
+
+## 최신 슬라이스 — 동일 JSON 경로 독립 인스턴스 동시 시작
+
+- `docs/volume09-langgraph/16-json-shared-path-concurrent-start.md`
+  - 같은 Python 프로세스에서 동일한 정규화 JSON 경로를 여는 독립 Checkpointer 인스턴스의 동시 시작 경쟁, 경로 단위 Lock 범위와 프로세스 간 운영 저장소 경계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 열여섯 번째 장 링크, 경로 단위 공유 Lock 보장 범위와 새 예제·테스트를 반영했습니다.
+- `src/ai_platform/graph/checkpointer.py`
+  - `JsonFileCheckpointer`가 `path.resolve()`를 기준으로 같은 프로세스 안의 동일 경로 인스턴스와 Lock을 공유하도록 변경했습니다. `save_if_absent()`와 `save_if_current()`은 이 범위에서만 원자성을 보장하며, 프로세스·호스트·네트워크 파일 시스템 간 보장은 주장하지 않습니다.
+- `examples/volume09/json_shared_path_concurrent_start_workflow.py`
+  - 동일 JSON 경로를 여는 8개 독립 Checkpointer 인스턴스의 동시 `DEPLOY` 시작에서 `waiting_for_approval=1`, `conflicts=7`, `plan | approval`만 출력하는 오프라인 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 같은 경로의 독립 JSON Checkpointer 인스턴스 8개가 위험 run 하나만 생성하고, 충돌 요청이 `execute` 없이 기존 승인 대기 상태를 보존하는 계약을 추가했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 엄격한 별도 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+
+## 최신 검증 기록 — 동일 JSON 경로 독립 인스턴스 동시 시작 슬라이스
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run python examples/volume09/json_shared_path_concurrent_start_workflow.py
+waiting_for_approval=1
+conflicts=7
+checkpoint=waiting_for_approval
+events=plan | approval
+
+$ uv run pytest tests/unit/test_volume09_graph.py::test_concurrent_json_checkpoint_instances_share_a_path_lock_for_risky_starts -q  # 10회 반복
+각 반복: 1 passed (0.29s~0.36s), 총 10/10 통과
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+39 passed in 0.50s
+
+$ uv run pytest -q
+100 passed in 1.17s
 
 $ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
 All checks passed!

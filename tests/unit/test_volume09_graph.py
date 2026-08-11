@@ -850,3 +850,45 @@ def test_concurrent_json_checkpoint_starts_create_one_pending_risky_run(tmp_path
     assert waiting.approval_granted is None
     assert [event.node for event in waiting.events] == ["plan", "approval"]
     assert "execute" not in [event.node for event in waiting.events]
+
+
+def test_concurrent_json_checkpoint_instances_share_a_path_lock_for_risky_starts(
+    tmp_path: Path,
+) -> None:
+    """같은 프로세스의 독립 JSON 인스턴스도 동일 파일에서는 한 번만 run을 만든다."""
+    checkpoint_path = tmp_path / "shared-path-concurrent-starts.json"
+    adapters = tuple(
+        WorkflowApiAdapter(
+            workflow=DeterministicWorkflow(
+                checkpointer=JsonFileCheckpointer(path=checkpoint_path)
+            )
+        )
+        for _ in range(8)
+    )
+    request = StartWorkflowRequest(
+        run_id="json-shared-path-start-001",
+        task="학습용 배포를 준비한다",
+        action=ActionKind.DEPLOY,
+    )
+    barrier = Barrier(8)
+
+    def start_once(index: int) -> WorkflowStatus | str:
+        barrier.wait(timeout=5)
+        try:
+            return adapters[index].start(request=request).status
+        except WorkflowRunConflictError:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(start_once, range(8)))
+
+    assert outcomes.count(WorkflowStatus.WAITING_FOR_APPROVAL) == 1
+    assert outcomes.count("conflict") == 7
+    waiting = JsonFileCheckpointer(path=checkpoint_path).load(
+        run_id="json-shared-path-start-001"
+    )
+    assert waiting.action is ActionKind.DEPLOY
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert waiting.approval_granted is None
+    assert [event.node for event in waiting.events] == ["plan", "approval"]
+    assert "execute" not in [event.node for event in waiting.events]

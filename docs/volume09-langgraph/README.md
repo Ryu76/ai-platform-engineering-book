@@ -24,10 +24,11 @@
 13. [동시 승인 재전송과 단일 오프라인 실행 기록](13-concurrent-approval-single-execution.md)
 14. [단일 JSON Checkpointer 인스턴스의 동시 승인 안전성](14-json-checkpoint-concurrent-approval.md)
 15. [단일 JSON Checkpointer 인스턴스의 동시 시작 안전성](15-json-checkpoint-concurrent-start.md)
+16. [동일 JSON 경로의 독립 Checkpointer 동시 시작 안전성](16-json-shared-path-concurrent-start.md)
 
 ## 예정 장
 
-이 슬라이스에서는 하나의 로컬 JSON Checkpointer 인스턴스를 공유하는 동시 시작 요청 중 정확히 하나만 위험 작업의 승인 대기 Checkpoint를 생성하도록 조건부 생성 계약을 검증했습니다. 중복 요청은 기존 Action·승인 대기·감사 이벤트를 바꾸지 않고 충돌로 끝납니다. 이 Lock 보장은 단일 인스턴스의 스레드 범위에만 적용되며, FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
+이 슬라이스에서는 같은 Python 프로세스에서 동일한 정규화 JSON 경로를 여는 독립 Checkpointer 인스턴스의 동시 시작 요청도 정확히 하나만 위험 작업의 승인 대기 Checkpoint를 생성하도록 경로 단위 Lock 계약을 검증했습니다. 중복 요청은 기존 Action·승인 대기·감사 이벤트를 바꾸지 않고 충돌로 끝납니다. 이 Lock 보장은 단일 프로세스의 동일 로컬 경로 범위에만 적용되며, FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
 
 ## 이번 기반 결과물
 
@@ -35,7 +36,7 @@
 - `src/ai_platform/graph/nodes.py`: Plan, Router, 전문 역할, 경로 검토, Approval, Execute, Error Node
 - `src/ai_platform/graph/workflow.py`: 승인 흐름, `StreamingWorkflow`의 Checkpoint 우선 상태 출력, `RoutedWorkflow`의 Conditional Edge 참조 흐름, `PlannerDeveloperReviewerWorkflow`의 고정 역할 순서, `SubgraphWorkflow`의 부모 승인 경계, `RetryWorkflow`의 제한된 재시도, 주입 가능한 Checkpointer 경계
 - `src/ai_platform/graph/api.py`: FastAPI route가 사용할 Pydantic 시작·승인 요청, 공개 응답 스냅샷, 재전송이 기존 Checkpoint를 덮어쓰지 못하게 하는 프레임워크 독립 오프라인 어댑터와 동시 승인 충돌 경계
-- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent` 및 승인 Checkpoint를 비교·교체하는 `save_if_current` 계약
+- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent`, 승인 Checkpoint를 비교·교체하는 `save_if_current`, 같은 프로세스의 동일 정규화 JSON 경로를 여는 인스턴스가 공유하는 Lock 계약
 
 - `examples/volume09/single_node_workflow.py`: 승인 중단 및 재개 데모
 - `examples/volume09/router_conditional_workflow.py`: 낮은 신뢰도 Router의 경로 검토와 실행 승인 데모
@@ -48,7 +49,8 @@
 - `examples/volume09/concurrent_approval_workflow.py`: 동시 승인 재전송 중 정확히 하나만 오프라인 실행 결과를 기록하는 데모
 - `examples/volume09/json_concurrent_approval_workflow.py`: 하나의 JSON Checkpointer 인스턴스가 8개 동시 승인 중 하나만 소비하는 데모
 - `examples/volume09/json_concurrent_start_workflow.py`: 하나의 JSON Checkpointer 인스턴스가 8개 동시 시작 중 하나만 위험 작업의 승인 대기를 생성하는 데모
-- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 동시 승인 계약 테스트
+- `examples/volume09/json_shared_path_concurrent_start_workflow.py`: 같은 JSON 경로를 여는 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 생성하는 데모
+- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 단일/공유 경로 인스턴스 동시 승인·시작 계약 테스트
 
 
 현재 프로젝트 의존성에는 `langgraph` 패키지가 선언되어 있지 않습니다. 이 Volume의 현재 슬라이스들은 LangGraph API 호출을 가장하지 않고, 해당 API가 모델링하는 상태·Node·Edge·interrupt 경계를 직접 구현한 결정론적 참조 모델입니다. 패키지 추가는 이 작업 범위 밖의 프로젝트 설정 변경이므로, 승인된 별도 변경 후 실제 LangGraph 어댑터 장에서 수행합니다.

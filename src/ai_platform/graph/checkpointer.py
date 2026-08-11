@@ -17,6 +17,16 @@ from ai_platform.graph.state import (
     WorkflowStatus,
 )
 
+_PATH_LOCKS: dict[Path, Lock] = {}
+_PATH_LOCKS_GUARD = Lock()
+
+
+def _lock_for_path(path: Path) -> Lock:
+    """같은 프로세스에서 같은 정규화 파일을 쓰는 인스턴스가 Lock을 공유하게 한다."""
+    normalized_path = path.resolve()
+    with _PATH_LOCKS_GUARD:
+        return _PATH_LOCKS.setdefault(normalized_path, Lock())
+
 
 class Checkpointer(Protocol):
     """Workflow가 상태를 저장·재개할 때 사용하는 최소 계약이다."""
@@ -109,8 +119,8 @@ class JsonFileCheckpointer:
             raise ValueError("checkpoint path must be a file")
         if not path.parent.is_dir():
             raise ValueError("checkpoint parent directory must already exist")
-        self._path = path
-        self._lock = Lock()
+        self._path = path.resolve()
+        self._lock = _lock_for_path(self._path)
 
     def save(self, *, run_id: str, state: WorkflowState) -> None:
         """공개 상태를 결정론적 JSON으로 원자적으로 저장한다."""
@@ -148,11 +158,12 @@ class JsonFileCheckpointer:
         return _payload_to_state(payload)
 
     def save_if_absent(self, *, run_id: str, state: WorkflowState) -> bool:
-        """이 인스턴스 안에서 새 run ID의 첫 공개 상태만 원자적으로 기록한다.
+        """같은 프로세스와 정규화된 파일 경로에서 새 run ID를 한 번만 기록한다.
 
-        이 보장은 한 ``JsonFileCheckpointer`` 인스턴스의 스레드 범위에 한정된다. 여러
-        프로세스나 독립 인스턴스의 동시 쓰기에는 파일 잠금이나 데이터베이스가 필요하며,
-        그 운영 저장소는 이 오프라인 학습 예제의 범위 밖이다.
+        이 보장은 같은 Python 프로세스에서 정규화된 동일 경로를 여는 모든
+        ``JsonFileCheckpointer`` 인스턴스의 스레드 범위에 한정된다. 여러 프로세스나
+        네트워크 파일 시스템의 동시 쓰기에는 파일 잠금이나 데이터베이스가 필요하며, 그
+        운영 저장소는 이 오프라인 학습 예제의 범위 밖이다.
         """
         _validate_run_id(run_id)
         _validate_public_state(state)
@@ -186,11 +197,11 @@ class JsonFileCheckpointer:
         expected_state: WorkflowState,
         state: WorkflowState,
     ) -> bool:
-        """같은 인스턴스에서 비교와 교체를 하나의 파일-쓰기 Lock으로 묶는다.
+        """같은 프로세스와 정규화된 파일 경로에서 비교와 교체를 한 Lock으로 묶는다.
 
-        이 보장도 ``save_if_absent()``와 같이 한 Checkpointer 인스턴스의 스레드 범위에
-        한정된다. 독립 프로세스나 인스턴스 사이의 승인 경쟁에는 운영 저장소의 compare-
-        and-swap 또는 트랜잭션이 필요하다.
+        이 보장도 ``save_if_absent()``와 같이 같은 프로세스에서 정규화된 동일 경로를
+        여는 모든 인스턴스의 스레드 범위에 한정된다. 독립 프로세스나 네트워크 파일
+        시스템의 승인 경쟁에는 운영 저장소의 compare-and-swap 또는 트랜잭션이 필요하다.
         """
         _validate_run_id(run_id)
         _validate_public_state(state)
