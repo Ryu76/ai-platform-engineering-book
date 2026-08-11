@@ -12,6 +12,8 @@ from ai_platform.rag.loader import (
 from ai_platform.rag.retrieval import (
     ChunkingConfig,
     Citation,
+    ConfidenceThresholdConfig,
+    ConfidenceThresholdIndex,
     ContextBudgetConfig,
     ContextBudgetIndex,
     ContextualGenerator,
@@ -41,6 +43,8 @@ from ai_platform.rag.retrieval import (
 __all__ = [
     "ChunkingConfig",
     "Citation",
+    "ConfidenceThresholdConfig",
+    "ConfidenceThresholdIndex",
     "ContextBudgetConfig",
     "ContextBudgetIndex",
     "ContextualGenerator",

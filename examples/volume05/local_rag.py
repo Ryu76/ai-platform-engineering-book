@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_platform.rag import (
+    ConfidenceThresholdConfig,
+    ConfidenceThresholdIndex,
     ContextBudgetConfig,
     ContextBudgetIndex,
     DenseCandidate,
@@ -102,9 +104,13 @@ def main() -> None:
         index=reranked_index,
         config=DocumentDiversityConfig(candidate_count=3, max_chunks_per_document=1),
     )
-    index = ContextBudgetIndex(
+    budgeted_index = ContextBudgetIndex(
         index=diverse_index,
         config=ContextBudgetConfig(candidate_count=3, max_context_characters=600),
+    )
+    index = ConfidenceThresholdIndex(
+        index=budgeted_index,
+        config=ConfidenceThresholdConfig(candidate_count=3, minimum_confidence=0.8),
     )
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
 

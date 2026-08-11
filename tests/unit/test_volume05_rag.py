@@ -7,6 +7,8 @@ import pytest
 
 from ai_platform.rag import (
     ChunkingConfig,
+    ConfidenceThresholdConfig,
+    ConfidenceThresholdIndex,
     ContextBudgetConfig,
     ContextBudgetIndex,
     DenseCandidate,
@@ -501,6 +503,89 @@ def test_context_budget_index_returns_no_answer_without_truncating_an_oversized_
     assert generator.calls == []
 
 
+def test_confidence_threshold_index_filters_normalized_evidence_and_preserves_citations() -> None:
+    source = RecordingSearchIndex(
+        (
+            _hit(
+                chunk_id="shipping#1", document_id="shipping", text="shipping evidence", score=0.95
+            ),
+            _hit(chunk_id="returns#1", document_id="returns", text="return evidence", score=0.8),
+            _hit(
+                chunk_id="exchange#1", document_id="exchange", text="exchange evidence", score=0.79
+            ),
+        )
+    )
+    index = ConfidenceThresholdIndex(
+        index=source,
+        config=ConfidenceThresholdConfig(candidate_count=3, minimum_confidence=0.8),
+    )
+
+    hits = index.search("근거", top_k=3)
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["shipping#1", "returns#1"]
+    assert [hit.score for hit in hits] == [0.95, 0.8]
+    assert hits[1].citation(label=2).source_uri == "local://returns"
+    assert source.calls == [("근거", 3)]
+
+
+def test_confidence_threshold_index_returns_no_answer_without_calling_generator() -> None:
+    source = RecordingSearchIndex(
+        (_hit(chunk_id="shipping#1", document_id="shipping", text="weak evidence", score=0.79),)
+    )
+    generator = RecordingGenerator()
+    pipeline = RagPipeline(
+        index=ConfidenceThresholdIndex(
+            index=source,
+            config=ConfidenceThresholdConfig(candidate_count=1, minimum_confidence=0.8),
+        ),
+        generator=generator,
+    )
+
+    answer = pipeline.answer("근거")
+
+    assert answer.no_answer is True
+    assert answer.citations == ()
+    assert generator.calls == []
+
+
+@pytest.mark.parametrize(
+    "hits, config, message",
+    [
+        ([_hit(chunk_id="first#1", document_id="first", text="evidence")], None, "tuple"),
+        (
+            (
+                _hit(chunk_id="same#1", document_id="first", text="first"),
+                _hit(chunk_id="same#1", document_id="second", text="second"),
+            ),
+            None,
+            "duplicate candidate",
+        ),
+        (
+            (
+                _hit(chunk_id="first#1", document_id="first", text="first"),
+                _hit(chunk_id="second#1", document_id="second", text="second"),
+            ),
+            ConfidenceThresholdConfig(candidate_count=1),
+            "more candidates than requested",
+        ),
+        (
+            (_hit(chunk_id="first#1", document_id="first", text="first", score=1.1),),
+            None,
+            "confidence scores",
+        ),
+    ],
+)
+def test_confidence_threshold_index_rejects_untrusted_search_candidates(
+    hits: tuple[SearchHit, ...] | list[SearchHit],
+    config: ConfidenceThresholdConfig | None,
+    message: str,
+) -> None:
+    index = ConfidenceThresholdIndex(index=RecordingSearchIndex(hits), config=config)
+
+    with pytest.raises(RagConfigurationError, match=message):
+        index.search("근거")
+
+
 def test_document_diversity_index_limits_ranked_contexts_per_document_and_preserves_citations() -> (
     None
 ):
@@ -739,6 +824,8 @@ def test_chunking_config_accepts_minimum_safe_size() -> None:
         lambda: QueryTransformationConfig(reciprocal_rank_k=False),
         lambda: RerankingConfig(candidate_count=0),
         lambda: RerankingConfig(minimum_relevance_score=1.1),
+        lambda: ConfidenceThresholdConfig(candidate_count=0),
+        lambda: ConfidenceThresholdConfig(minimum_confidence=float("nan")),
         lambda: ContextBudgetConfig(candidate_count=21),
         lambda: ContextBudgetConfig(max_context_characters=True),
         lambda: ContextBudgetConfig(max_context_characters=20_001),

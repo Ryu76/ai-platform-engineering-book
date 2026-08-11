@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 정규화 신뢰도 임계값·abstention 슬라이스 완료
+
+### 완료
+
+- `ConfidenceThresholdConfig`와 `ConfidenceThresholdIndex`를 추가했습니다. 이 경계는 이미 검색된 제한 후보만 받고, 근거 점수가 유한한 0~1 정규화 신뢰도인지 검증한 뒤 명시한 최소 신뢰도 이상인 청크만 원래 순서대로 전달합니다.
+- 점수 척도를 변환하거나 새 근거를 만들지 않으며, 통과한 `SearchHit`를 그대로 반환해 점수·텍스트·매칭 용어·출처 URI·문자 범위와 인용 경계를 보존합니다. 정규화되지 않은 점수, tuple 이외 값, 요청보다 많은 후보, 중복 청크 ID는 거부합니다.
+- 모든 후보가 임계값 미만이면 빈 결과를 반환합니다. 따라서 `RagPipeline`은 생성기를 호출하지 않고 결정론적 No-answer를 반환합니다.
+- 예제의 로컬 Mock Hybrid/RRF·질의 변형·재순위화·문서 다양성·컨텍스트 예산 체인 끝에 후보 3개·최소 신뢰도 0.8 `ConfidenceThresholdIndex`를 연결했습니다. 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+- 임계값 경계값 포함 필터링, 인용 보존, 모든 근거의 abstention과 생성기 미호출, 비신뢰 검색 후보, 설정 범위를 Volume 05 단위 테스트에 추가했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 94 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 5 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 3 source files
+uv run python examples/volume05/local_rag.py
+# 배송·반품·PDF 교환 근거와 인용, 주차장 할인 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 로컬 RAG API 경계를 입력·출력 계약과 Mock 생성기로 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 결정론적 문서 수준 검색 다양성 슬라이스 완료
 
 ### 완료

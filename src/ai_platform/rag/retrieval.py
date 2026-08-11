@@ -413,6 +413,86 @@ class DocumentDiversityIndex:
         return candidates
 
 
+@dataclass(frozen=True, slots=True)
+class ConfidenceThresholdConfig:
+    """정규화된 근거 신뢰도 임계값에 사용할 후보 수와 최소 점수다."""
+
+    candidate_count: int = 10
+    minimum_confidence: float = 0.0
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.candidate_count, bool)
+            or not isinstance(self.candidate_count, int)
+            or not 1 <= self.candidate_count <= 20
+        ):
+            raise RagConfigurationError("candidate_count must be an integer between 1 and 20")
+        if (
+            isinstance(self.minimum_confidence, bool)
+            or not isinstance(self.minimum_confidence, (int, float))
+            or not math.isfinite(self.minimum_confidence)
+            or not 0.0 <= self.minimum_confidence <= 1.0
+        ):
+            raise RagConfigurationError(
+                "minimum_confidence must be a finite number between 0 and 1"
+            )
+
+
+class ConfidenceThresholdIndex:
+    """정규화된 근거 점수가 임계값을 넘지 못하면 안전하게 abstain한다.
+
+    이 경계는 이미 검색된 제한 후보만 받는다. 따라서 검색 점수의 제공자별 척도를
+    변환하지 않으며, 0~1로 정규화된 점수 계약을 명시적으로 검증한다. 임계값 이상의
+    선택 청크는 원래 점수·텍스트·매칭 용어·출처 URI·문자 범위를 그대로 보존한다.
+    모든 후보가 임계값보다 낮으면 빈 결과를 반환해 ``RagPipeline``이 생성기 호출 없이
+    No-answer를 반환하도록 한다.
+    """
+
+    def __init__(
+        self, *, index: SearchableIndex, config: ConfidenceThresholdConfig | None = None
+    ) -> None:
+        if not hasattr(index, "search"):
+            raise RagConfigurationError("index must provide a search method")
+        self._index = index
+        self._config = config or ConfidenceThresholdConfig()
+
+    def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
+        """임계값 이상의 정규화된 근거만 기존 순서대로 반환한다."""
+        _validate_search_input(query=query, top_k=top_k)
+        candidates = self._validated_candidates(
+            self._index.search(query, top_k=self._config.candidate_count)
+        )
+        selected = [
+            candidate
+            for candidate in candidates
+            if candidate.score >= self._config.minimum_confidence
+        ]
+        return tuple(selected[:top_k])
+
+    def _validated_candidates(self, candidates: tuple[SearchHit, ...]) -> tuple[SearchHit, ...]:
+        if not isinstance(candidates, tuple):
+            raise RagConfigurationError("index must return a tuple of SearchHit values")
+        if len(candidates) > self._config.candidate_count:
+            raise RagConfigurationError("index returned more candidates than requested")
+        candidate_ids: set[str] = set()
+        for candidate in candidates:
+            if not isinstance(candidate, SearchHit):
+                raise RagConfigurationError("index must return SearchHit values")
+            if candidate.chunk.chunk_id in candidate_ids:
+                raise RagConfigurationError("index must not return duplicate candidate chunk IDs")
+            if (
+                isinstance(candidate.score, bool)
+                or not isinstance(candidate.score, (int, float))
+                or not math.isfinite(candidate.score)
+                or not 0.0 <= candidate.score <= 1.0
+            ):
+                raise RagConfigurationError(
+                    "index confidence scores must be finite numbers between 0 and 1"
+                )
+            candidate_ids.add(candidate.chunk.chunk_id)
+        return candidates
+
+
 class QueryTransformer(Protocol):
     """원 질문을 보존한 결정론적 질의 변형 경계다.
 
