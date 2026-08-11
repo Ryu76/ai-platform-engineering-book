@@ -42,6 +42,10 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     hpa = (repository_root / "k8s/volume11/autoscaling/hpa.yaml").read_text(encoding="utf-8")
     ingress = (repository_root / "k8s/volume11/ingress.yaml").read_text(encoding="utf-8")
     pvc = (repository_root / "k8s/volume11/storage/pvc.yaml").read_text(encoding="utf-8")
+    _before_startup, startup_marker, after_startup = deployment.partition("startupProbe:")
+    startup_probe, _before_readiness, _after_readiness = after_startup.partition(
+        "readinessProbe:"
+    )
 
     return {
         "dockerfile_is_multistage_and_nonroot": all(
@@ -57,6 +61,16 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
         in deployment,
         "deployment_has_distinct_health_probes": "path: /livez" in deployment
         and "path: /readyz" in deployment,
+        "deployment_declares_startup_probe_boundary": bool(startup_marker)
+        and all(
+            value in startup_probe
+            for value in (
+                "path: /livez",
+                "periodSeconds: 5",
+                "timeoutSeconds: 2",
+                "failureThreshold: 12",
+            )
+        ),
         "deployment_declares_resource_requests_and_limits": all(
             value in deployment
             for value in ("cpu: 100m", "memory: 128Mi", "cpu: 500m", "memory: 256Mi")

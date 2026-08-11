@@ -99,6 +99,9 @@ def test_probe_manifests_use_example_image_and_distinct_readiness_and_liveness_r
     assert "image: example.invalid/ai-platform-api:0.1.0" in deployment
     assert "path: /readyz" in deployment
     assert "path: /livez" in deployment
+    assert "startupProbe:" in deployment
+    assert "periodSeconds: 5" in deployment
+    assert "failureThreshold: 12" in deployment
     assert "readOnlyRootFilesystem: true" in deployment
     assert "AI_PLATFORM_READY: \"true\"" in configmap
     assert "AI_PLATFORM_REQUIRED_DEPENDENCIES: \"qdrant,redis,postgresql\"" in configmap

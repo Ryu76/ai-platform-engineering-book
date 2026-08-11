@@ -2,6 +2,44 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 17: Startup Probe 초기화·재시작 판단의 정적 경계
+
+### 완료한 범위
+
+- [Startup Probe: 초기화 시간과 재시작 판단의 정적 경계](17-startup-probe-lifecycle-static-boundary.md) 장을 추가했습니다.
+  - Startup Probe, liveness probe, readiness probe의 서로 다른 질문과 `/livez`·`/readyz` route 책임을 분리했습니다.
+  - `periodSeconds: 5`, `timeoutSeconds: 2`, `failureThreshold: 12`는 sample YAML declaration이며 startup latency, kubelet scheduling, restart 또는 traffic readiness의 실행 증거가 아님을 명시했습니다.
+  - 실제 image, container, kubelet, cluster, Event, Service endpoint, Secret, credential, deployment를 사용하지 않는 local-only 경계를 문서의 실습·오류 해결·과제에 유지했습니다.
+- `k8s/volume11/deployment.yaml`에 named `http` port의 `/livez` Startup Probe 정적 계약을 추가했습니다.
+  - 기존 `example.invalid/ai-platform-api:0.1.0` placeholder image, readiness/liveness probe, resource 및 SecurityContext 선언은 유지했습니다.
+- `src/ai_platform/api/operations_review.py`의 local artifact review에 `deployment_declares_startup_probe_boundary` check를 추가했습니다.
+  - check는 Startup Probe text section에서 route, period, timeout, threshold만 읽으며 Docker daemon, Kubernetes API, kubelet, container, network를 호출하지 않습니다.
+- `tests/integration/test_volume11_startup_probe.py`를 추가하고 health artifact·mini-project tests 및 README를 갱신했습니다.
+  - test는 Startup Probe declaration, placeholder image, local review key 및 문서의 runtime-evidence boundary를 검증합니다.
+- 실제 image build/pull, container execution, kubelet probe scheduling, restart, admission, cluster connection, resource creation, rollout, rollback 또는 deployment를 실행하지 않았습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/local_operations_review_demo.py` | 통과 — 12개 local artifact check가 모두 `true`; Startup Probe check는 source text-only이며 image build, container execution, dependency connectivity, telemetry backend, Kubernetes deployment는 `not_verified` |
+| `uv run pytest tests/integration/test_volume11_health_artifacts.py tests/integration/test_volume11_mini_project.py tests/integration/test_volume11_runtime_security.py tests/integration/test_volume11_startup_probe.py -q` | 통과 — 26 passed |
+| `uv run pytest -q` | 통과 — 전체 103 passed |
+| `uv run ruff check .`, `uv run mypy src` | 통과 — Ruff 전체 통과, mypy 14 source files 문제 없음 |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — Volume 11 문서, 링크·코드 블록·비밀값 검사 통과 |
+| `docker compose -f docker/volume11/compose.health.yaml config --no-interpolate` 및 `docker compose -f docker/volume11/compose.dependencies.yaml config --no-interpolate` | 통과 — local Compose config parsing만 수행, image·container·network·volume을 만들지 않음 |
+| `kubectl kustomize k8s/volume11` | 통과 — Startup Probe가 포함된 local render만 수행, Kubernetes API·cluster·resource 생성 없음 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- PRD Volume DoD는 아직 충족하지 않았습니다. PRD 필수 실습의 API Docker image 생성·Docker Compose 통합 실행·Kubernetes 로컬 환경 구성·Rolling Update·Rollback·최종 AI Platform 배포는 현재 작업 제한의 live cluster·deployment 금지 또는 아직 실행하지 않은 image/container/kubelet evidence와 충돌해 완료 선언할 수 없습니다.
+- 따라서 `VOLUME11_COMPLETE=true`를 설정하거나 self-pause 하지 않습니다. static Startup Probe declaration과 local render가 container startup, kubelet enforcement, restart, endpoint readiness 또는 deployment evidence를 대체하지 않습니다.
+
+### 다음 Slice
+
+현재 작업 제한을 유지하는 동안에는 Volume 11 local-only artifact·test·placeholder boundary의 보수만 수행합니다. image build/Compose integration execution, Kubernetes local environment, kubelet/runtime enforcement, update/rollback, final deployment를 실제로 검증할 수 있도록 명시적 범위가 변경되기 전에는 completion flag를 추가하지 않습니다. 실제 image, container, cluster, Secret, credential, alert, backend 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 16: Runtime SecurityContext 선언과 강제의 정적 경계
 
 ### 완료한 범위
