@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 같은 `MemoryCheckpointer` 인스턴스를 공유하는 8개의 동시 `DEPLOY` 시작 요청에서도 정확히 하나만 `WAITING_FOR_APPROVAL` Checkpoint를 생성하고, 나머지 7개는 `WorkflowRunConflictError`로 끝나는 계약을 추가했습니다. 성공한 run도 별도의 엄격한 Boolean 승인 요청 뒤에만 오프라인 `execute` 시뮬레이션으로 이동합니다. 서버·네트워크·실제 위험 작업은 실행하지 않았습니다.
+- 이번 슬라이스: 같은 `MemoryCheckpointer` 인스턴스를 공유하는 8개의 동시 `DEPLOY` 승인 요청에서도 정확히 하나만 승인 대기 Checkpoint를 소비하고, 하나의 오프라인 `COMPLETED` 결과만 기록하도록 비교·교체 저장 계약을 추가했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 `execute` 이벤트를 추가하지 않습니다. 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
@@ -466,6 +466,71 @@ $ uv run pytest tests/unit/test_volume09_graph.py -q
 
 $ uv run pytest -q
 95 passed in 1.12s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 다음 작업
+
+- 별도 승인된 의존성·프로젝트 설정 변경이 있을 때에만 실제 `langgraph`와 FastAPI `TestClient` 통합을 추가합니다. 그 전까지는 외부 서버·네트워크·위험 작업을 실행하지 않습니다.
+
+## 최신 슬라이스 — 동시 승인 재전송의 단일 소비
+
+- `docs/volume09-langgraph/13-concurrent-approval-single-execution.md`
+  - 동시 승인 재전송, 비교-교체 Checkpoint, 충돌 처리 및 실제 위험 실행과의 운영상 차이를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 열세 번째 장 링크, 비교-교체 Checkpointer 계약 및 동시 승인 예제를 반영했습니다.
+- `src/ai_platform/graph/checkpointer.py`, `src/ai_platform/graph/workflow.py`, `src/ai_platform/graph/api.py`
+  - `save_if_current()` 비교·교체 계약을 메모리·로컬 JSON Checkpointer에 추가하고, `DeterministicWorkflow.resume()`이 후보 상태를 하나만 원자적으로 기록하게 했습니다. API 어댑터는 이미 소비된 승인 대기를 충돌로 공개합니다.
+- `examples/volume09/concurrent_approval_workflow.py`
+  - 같은 승인 대기 `DEPLOY` run에 대한 8개 동시 승인에서 `completed=1`, `conflicts=7`과 단일 감사 순서를 출력하는 오프라인 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 동시 승인 요청의 단일 완료·7개 충돌·단일 `execute` 이벤트와 메모리·JSON Checkpointer의 비교-교체 보존 계약을 추가했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 모든 위험 ActionKind는 엄격한 별도 Boolean 승인 전에는 `WAITING_FOR_APPROVAL`을 벗어나지 않습니다.
+
+## 최신 검증 기록 — 동시 승인 단일 소비 슬라이스
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run python examples/volume09/concurrent_approval_workflow.py
+completed=1
+conflicts=7
+checkpoint=completed
+events=plan | approval | approval | execute
+
+$ uv run pytest tests/unit/test_volume09_graph.py::test_concurrent_api_approvals_record_one_decision_and_one_offline_execution -q  # 20회 반복
+각 반복: 1 passed (0.24s~0.28s), 총 20/20 통과
+
+$ uv run pytest -q
+97 passed in 1.30s
 
 $ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
 All checks passed!

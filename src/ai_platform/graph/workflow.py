@@ -62,12 +62,25 @@ class DeterministicWorkflow:
         return state
 
     def resume(self, *, run_id: str, approved: bool) -> WorkflowState:
-        """사람의 명시적 결정을 받은 interrupt만 재개한다."""
-        state = self._checkpointer.load(run_id=run_id)
-        state = resolve_approval_node(state, approved=approved)
+        """사람의 명시적 결정을 한 Checkpoint에 한 번만 원자적으로 적용한다.
+
+        모든 Node는 순수한 오프라인 상태 전이만 만든다. 따라서 승인 결정과 그 뒤의
+        실행 *시뮬레이션*을 후보 상태로 먼저 계산한 뒤, 비교·교체 저장에 성공한 한
+        재개 요청만 결과를 기록한다. 실제 외부 위험 작업은 이 패턴만으로 충분하지
+        않으며, 운영 저장소 트랜잭션과 별도 실행 권한 정책이 필요하다.
+        """
+        expected_state = self._checkpointer.load(run_id=run_id)
+        state = resolve_approval_node(expected_state, approved=approved)
         if state.status is WorkflowStatus.READY:
             state = execute_node(state)
-        self._checkpointer.save(run_id=run_id, state=state)
+        if not self._checkpointer.save_if_current(
+            run_id=run_id,
+            expected_state=expected_state,
+            state=state,
+        ):
+            raise WorkflowRunConflictError(
+                f"workflow checkpoint changed before approval was recorded: {run_id}"
+            )
         return state
 
     def checkpoint(self, *, run_id: str) -> WorkflowState:

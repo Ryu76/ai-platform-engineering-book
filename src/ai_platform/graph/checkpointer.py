@@ -27,6 +27,15 @@ class Checkpointer(Protocol):
     def save_if_absent(self, *, run_id: str, state: WorkflowState) -> bool:
         """run ID가 없을 때만 상태를 저장하고 생성 성공 여부를 반환한다."""
 
+    def save_if_current(
+        self,
+        *,
+        run_id: str,
+        expected_state: WorkflowState,
+        state: WorkflowState,
+    ) -> bool:
+        """현재 상태가 기대 상태와 같을 때만 새 상태를 원자적으로 저장한다."""
+
     def load(self, *, run_id: str) -> WorkflowState:
         """run ID의 최신 상태를 읽는다."""
 
@@ -54,6 +63,21 @@ class MemoryCheckpointer:
         _validate_run_id(run_id)
         with self._lock:
             if run_id in self._states:
+                return False
+            self._states[run_id] = state
+            return True
+
+    def save_if_current(
+        self,
+        *,
+        run_id: str,
+        expected_state: WorkflowState,
+        state: WorkflowState,
+    ) -> bool:
+        """같은 프로세스에서 비교와 교체를 하나의 Lock 경계로 처리한다."""
+        _validate_run_id(run_id)
+        with self._lock:
+            if self._states.get(run_id) != expected_state:
                 return False
             self._states[run_id] = state
             return True
@@ -135,6 +159,45 @@ class JsonFileCheckpointer:
         with self._lock:
             checkpoints = self._read_checkpoints()
             if run_id in checkpoints:
+                return False
+            checkpoints[run_id] = _state_to_payload(state)
+            payload = {
+                "schema_version": self._SCHEMA_VERSION,
+                "checkpoints": checkpoints,
+            }
+            temporary_path = self._path.with_name(
+                f".{self._path.name}.{uuid4().hex}.tmp"
+            )
+            try:
+                temporary_path.write_text(
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                temporary_path.replace(self._path)
+            finally:
+                if temporary_path.exists():
+                    temporary_path.unlink()
+            return True
+
+    def save_if_current(
+        self,
+        *,
+        run_id: str,
+        expected_state: WorkflowState,
+        state: WorkflowState,
+    ) -> bool:
+        """같은 인스턴스에서 비교와 교체를 하나의 파일-쓰기 Lock으로 묶는다.
+
+        이 보장도 ``save_if_absent()``와 같이 한 Checkpointer 인스턴스의 스레드 범위에
+        한정된다. 독립 프로세스나 인스턴스 사이의 승인 경쟁에는 운영 저장소의 compare-
+        and-swap 또는 트랜잭션이 필요하다.
+        """
+        _validate_run_id(run_id)
+        _validate_public_state(state)
+        with self._lock:
+            checkpoints = self._read_checkpoints()
+            raw_current_state = checkpoints.get(run_id)
+            if raw_current_state is None or _payload_to_state(raw_current_state) != expected_state:
                 return False
             checkpoints[run_id] = _state_to_payload(state)
             payload = {

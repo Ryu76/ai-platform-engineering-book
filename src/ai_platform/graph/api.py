@@ -9,7 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from ai_platform.graph.state import ActionKind, WorkflowEvent, WorkflowState, WorkflowStatus
-from ai_platform.graph.workflow import DeterministicWorkflow
+from ai_platform.graph.workflow import DeterministicWorkflow, WorkflowRunConflictError
 
 
 class StartWorkflowRequest(BaseModel):
@@ -115,9 +115,24 @@ class WorkflowApiAdapter:
     def resume(
         self, *, run_id: str, request: ApprovalRequest
     ) -> WorkflowResponse:
-        """명시적 승인 요청으로 이미 중단된 위험 작업만 재개한다."""
+        """명시적 승인 요청으로 이미 중단된 위험 작업만 재개한다.
+
+        동시 승인 재전송 중 먼저 상태를 소비한 요청 뒤에 도착한 요청은 Workflow의
+        내부 ``waiting state`` 오류를 외부의 충돌 계약으로 변환한다. 다른 입력 검증
+        오류는 숨기지 않는다.
+        """
         normalized_run_id = _validated_run_id(run_id)
-        state = self._workflow.resume(run_id=normalized_run_id, approved=request.approved)
+        try:
+            state = self._workflow.resume(
+                run_id=normalized_run_id,
+                approved=request.approved,
+            )
+        except ValueError as error:
+            if "waiting state" not in str(error):
+                raise
+            raise WorkflowRunConflictError(
+                f"workflow approval is no longer pending: {normalized_run_id}"
+            ) from error
         return WorkflowResponse.from_state(run_id=normalized_run_id, state=state)
 
 

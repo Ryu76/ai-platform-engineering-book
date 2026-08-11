@@ -713,3 +713,73 @@ def test_concurrent_api_starts_create_one_risky_run_and_preserve_approval_gate()
     assert [event.node for event in completed.events] == [
         "plan", "approval", "approval", "execute"
     ]
+
+
+def test_concurrent_api_approvals_record_one_decision_and_one_offline_execution() -> None:
+    """동시 승인 재전송도 하나만 승인 대기를 소비하고 실행 시뮬레이션을 기록한다."""
+    checkpointer = MemoryCheckpointer()
+    adapter = WorkflowApiAdapter(workflow=DeterministicWorkflow(checkpointer=checkpointer))
+    adapter.start(
+        request=StartWorkflowRequest(
+            run_id="approval-concurrent-001",
+            task="학습용 배포를 준비한다",
+            action=ActionKind.DEPLOY,
+        )
+    )
+    barrier = Barrier(8)
+
+    def approve_once() -> WorkflowStatus | str:
+        barrier.wait(timeout=5)
+        try:
+            return adapter.resume(
+                run_id="approval-concurrent-001",
+                request=ApprovalRequest(approved=True),
+            ).status
+        except WorkflowRunConflictError:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(lambda _: approve_once(), range(8)))
+
+    assert outcomes.count(WorkflowStatus.COMPLETED) == 1
+    assert outcomes.count("conflict") == 7
+    completed = checkpointer.load(run_id="approval-concurrent-001")
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert completed.approval_granted is True
+    assert [event.node for event in completed.events] == [
+        "plan", "approval", "approval", "execute"
+    ]
+
+
+def test_checkpointers_compare_and_replace_only_the_expected_state(tmp_path: Path) -> None:
+    """비교-교체 실패는 이미 변경된 위험 작업 Checkpoint를 덮어쓰지 않는다."""
+    initial = WorkflowState.start(task="학습용 배포를 준비한다", action=ActionKind.DEPLOY)
+    changed = initial.record(
+        node="plan",
+        detail="오프라인 계획",
+        status=WorkflowStatus.PLANNED,
+    )
+    replacement = WorkflowState.start(task="로컬 문서를 읽는다", action=ActionKind.READ)
+
+    for checkpointer in (
+        MemoryCheckpointer(),
+        JsonFileCheckpointer(path=tmp_path / "compare-and-replace-checkpoints.json"),
+    ):
+        checkpointer.save(run_id="compare-and-replace-001", state=initial)
+        assert (
+            checkpointer.save_if_current(
+                run_id="compare-and-replace-001",
+                expected_state=initial,
+                state=changed,
+            )
+            is True
+        )
+        assert (
+            checkpointer.save_if_current(
+                run_id="compare-and-replace-001",
+                expected_state=initial,
+                state=replacement,
+            )
+            is False
+        )
+        assert checkpointer.load(run_id="compare-and-replace-001") == changed
