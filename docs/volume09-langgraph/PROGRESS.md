@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 같은 `MemoryCheckpointer` 인스턴스를 공유하는 8개의 동시 `DEPLOY` 승인 요청에서도 정확히 하나만 승인 대기 Checkpoint를 소비하고, 하나의 오프라인 `COMPLETED` 결과만 기록하도록 비교·교체 저장 계약을 추가했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 `execute` 이벤트를 추가하지 않습니다. 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+- 이번 슬라이스: 같은 `JsonFileCheckpointer` 인스턴스를 공유하는 8개의 동시 `DEPLOY` 승인 요청에서도 정확히 하나만 승인 대기 Checkpoint를 소비하고, 하나의 오프라인 `COMPLETED` 결과만 기록함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 `execute` 이벤트를 추가하지 않습니다. JSON의 Lock 보장은 단일 인스턴스의 스레드 범위에 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다. 예제·Volume 09 테스트(37개)·전체 테스트(98개)·정적 검사·문서 검증을 통과했습니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일

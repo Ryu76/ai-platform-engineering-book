@@ -783,3 +783,39 @@ def test_checkpointers_compare_and_replace_only_the_expected_state(tmp_path: Pat
             is False
         )
         assert checkpointer.load(run_id="compare-and-replace-001") == changed
+
+
+def test_concurrent_json_checkpoint_approvals_consume_one_pending_state(tmp_path: Path) -> None:
+    """같은 JSON Checkpointer 인스턴스의 동시 승인은 하나만 실행 시뮬레이션을 기록한다."""
+    checkpointer = JsonFileCheckpointer(path=tmp_path / "concurrent-approvals.json")
+    adapter = WorkflowApiAdapter(workflow=DeterministicWorkflow(checkpointer=checkpointer))
+    adapter.start(
+        request=StartWorkflowRequest(
+            run_id="json-approval-concurrent-001",
+            task="학습용 배포를 준비한다",
+            action=ActionKind.DEPLOY,
+        )
+    )
+    barrier = Barrier(8)
+
+    def approve_once() -> WorkflowStatus | str:
+        barrier.wait(timeout=5)
+        try:
+            return adapter.resume(
+                run_id="json-approval-concurrent-001",
+                request=ApprovalRequest(approved=True),
+            ).status
+        except WorkflowRunConflictError:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(lambda _: approve_once(), range(8)))
+
+    assert outcomes.count(WorkflowStatus.COMPLETED) == 1
+    assert outcomes.count("conflict") == 7
+    completed = checkpointer.load(run_id="json-approval-concurrent-001")
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert completed.approval_granted is True
+    assert [event.node for event in completed.events] == [
+        "plan", "approval", "approval", "execute"
+    ]
