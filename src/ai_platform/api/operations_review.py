@@ -39,17 +39,27 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     )
     batch = (repository_root / "k8s/volume11/batch/cronjob.yaml").read_text(encoding="utf-8")
     hpa = (repository_root / "k8s/volume11/autoscaling/hpa.yaml").read_text(encoding="utf-8")
+    ingress = (repository_root / "k8s/volume11/ingress.yaml").read_text(encoding="utf-8")
+    pvc = (repository_root / "k8s/volume11/storage/pvc.yaml").read_text(encoding="utf-8")
 
     return {
         "deployment_uses_example_image": "image: example.invalid/ai-platform-api:0.1.0"
         in deployment,
         "deployment_has_distinct_health_probes": "path: /livez" in deployment
         and "path: /readyz" in deployment,
+        "deployment_declares_resource_requests_and_limits": all(
+            value in deployment
+            for value in ("cpu: 100m", "memory: 128Mi", "cpu: 500m", "memory: 256Mi")
+        ),
         "base_excludes_secret_example": "secret.example.yaml" not in base_kustomization,
         "compose_is_internal_placeholder_topology": "internal: true" in compose
         and "example.invalid/" in compose
         and "    ports:" not in compose,
+        "ingress_uses_placeholder_host": "host: api.volume11.example.invalid" in ingress,
         "batch_schedule_is_suspended": "suspend: true" in batch,
+        "storage_is_placeholder_and_separate": "storageClassName: example-storage-class"
+        in pvc
+        and "- storage/" not in base_kustomization,
         "hpa_targets_a_separate_example": "name: ai-platform-api-example" in hpa,
     }
 

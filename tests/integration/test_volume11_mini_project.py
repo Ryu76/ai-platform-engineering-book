@@ -29,8 +29,17 @@ def test_local_operations_review_combines_probe_telemetry_and_render_only_bounda
     }
     artifact_checks = review["artifact_checks"]
     assert isinstance(artifact_checks, dict)
-    assert artifact_checks
-    assert all(artifact_checks.values())
+    assert artifact_checks == {
+        "deployment_uses_example_image": True,
+        "deployment_has_distinct_health_probes": True,
+        "deployment_declares_resource_requests_and_limits": True,
+        "base_excludes_secret_example": True,
+        "compose_is_internal_placeholder_topology": True,
+        "ingress_uses_placeholder_host": True,
+        "batch_schedule_is_suspended": True,
+        "storage_is_placeholder_and_separate": True,
+        "hpa_targets_a_separate_example": True,
+    }
     assert review["not_verified"] == [
         "container execution",
         "dependency connectivity",
@@ -105,3 +114,29 @@ def test_preflight_handoff_chapter_separates_local_evidence_from_operational_app
         in handoff
     )
     assert "VOLUME11_COMPLETE=true" not in handoff
+
+
+def test_prd_traceability_keeps_static_artifacts_separate_from_blocked_live_practices() -> None:
+    """The PRD audit maps required learning artifacts without declaring the Volume complete."""
+    traceability = (VOLUME / "14-prd-traceability-offline-boundary.md").read_text(
+        encoding="utf-8"
+    )
+    readme = (VOLUME / "README.md").read_text(encoding="utf-8")
+
+    assert "](14-prd-traceability-offline-boundary.md)" in readme
+    for artifact in (
+        "docker/volume11/Dockerfile",
+        "docker/volume11/compose.dependencies.yaml",
+        "k8s/volume11/deployment.yaml",
+        "k8s/volume11/ingress.yaml",
+        "k8s/volume11/batch/",
+        "k8s/volume11/storage/",
+        "k8s/volume11/autoscaling/",
+        "src/ai_platform/api/operations_review.py",
+    ):
+        assert artifact in traceability
+    assert "Docker Compose 통합 실행" in traceability
+    assert "Kubernetes 로컬 환경 구성" in traceability
+    assert "최종 AI Platform 배포" in traceability
+    assert "not verified / incomplete" in traceability
+    assert "`VOLUME11_COMPLETE=true`를 설정하지 않습니다" in traceability

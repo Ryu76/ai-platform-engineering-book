@@ -2,6 +2,42 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 14: PRD 추적성과 local-only 완료 판정 경계
+
+### 완료한 범위
+
+- [Volume 11 PRD 추적성: 오프라인 증거와 미완료 경계](14-prd-traceability-offline-boundary.md) 장을 추가했습니다.
+  - PRD의 Dockerfile/Compose/ConfigMap·Secret/health/observability/Kubernetes artifact/resource limit/update/incident 요구를 기존 Volume artifact와 local evidence로 매핑했습니다.
+  - API Docker image 생성, Compose 통합 실행, Kubernetes local environment, update/rollback, log/fault live evidence, final deployment의 상태를 artifact-only·render/config verified·local-contract verified·not verified로 구분했습니다.
+  - container, live cluster, deployment가 금지된 현재 범위에서는 PRD Volume DoD가 incomplete이며 `VOLUME11_COMPLETE=true`를 추가하지 않는다고 명시했습니다.
+- `src/ai_platform/api/operations_review.py`의 local text review를 확장했습니다.
+  - 기존 placeholder/probe/Secret/Compose/batch/HPA check에 Deployment CPU·memory request/limit, placeholder Ingress host, placeholder StorageClass와 base-set 분리를 추가했습니다.
+  - 추가 check도 local file read만 사용하며 Docker daemon, Kubernetes API, Secret, credential, network 또는 deployment를 호출하지 않습니다.
+- README와 `tests/integration/test_volume11_mini_project.py`를 갱신했습니다.
+  - 새 추적성 장 링크, PRD artifact 경계, 정확한 9개 local artifact check를 테스트합니다.
+- 실제 image build/pull, container, cluster, alert, backend, Secret, credential, rollout, rollback 또는 deployment를 실행하지 않았습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/local_operations_review_demo.py` | 통과 — in-memory probe status 4개가 예상값이고 9개 local artifact check가 모두 `true`; network·container·backend·cluster 연결 없음 |
+| `uv run pytest tests/integration/test_volume11_mini_project.py -q` | 통과 — 5 passed |
+| `uv run pytest -q` | 통과 — 전체 95 passed |
+| `docker compose -f docker/volume11/compose.dependencies.yaml config --no-interpolate` 및 `kubectl kustomize k8s/volume11{,/batch,/storage,/autoscaling}` | 통과 — local config/render만 수행, resource·container·cluster 연결 없음 |
+| `uv run ruff check .`, `uv run mypy src` | 통과 — Ruff 전체 통과, mypy 14 source files 문제 없음 |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — Volume 11개, 링크·코드 블록·비밀값 검사 통과 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- PRD Volume DoD는 아직 충족하지 않았습니다. PRD 필수 실습의 Docker Compose 통합 실행, Kubernetes 로컬 환경 구성, Rolling Update, Rollback, 최종 AI Platform 배포는 현재 작업 제한의 live cluster·deployment 금지와 충돌해 실행·완료 선언할 수 없습니다.
+- 따라서 `VOLUME11_COMPLETE=true`를 설정하거나 self-pause 하지 않습니다. local-only evidence가 live execution evidence를 대체하지 않습니다.
+
+### 다음 Slice
+
+현재 작업 제한을 유지하는 동안에는 PRD traceability와 local-only artifact/test boundary의 보수만 수행합니다. Docker Compose 통합 실행, Kubernetes local environment, update/rollback, final deployment를 실제로 검증할 수 있도록 명시적 범위가 변경되기 전에는 completion flag를 추가하지 않습니다. 실제 cluster, Secret, credential, alert, backend 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 13: 운영 전 체크리스트·용어집·인계 경계
 
 ### 완료한 범위
