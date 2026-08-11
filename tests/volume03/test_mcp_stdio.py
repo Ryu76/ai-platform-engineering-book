@@ -6,6 +6,7 @@ import json
 import pytest
 
 from ai_platform.mcp.catalog import McpServerCatalog, McpToolDefinition
+from ai_platform.mcp.resources import McpResourceCatalog, McpStaticResource
 from ai_platform.mcp.stdio import (
     MCP_PROTOCOL_VERSION,
     McpStdioError,
@@ -89,6 +90,42 @@ def test_stdio_session_projects_fixed_catalog_with_read_only_tools_list() -> Non
     assert session.state is McpStdioState.READY
 
 
+def test_stdio_session_projects_fixed_catalog_with_read_only_resources_list() -> None:
+    resource_catalog = McpResourceCatalog(
+        (
+            McpStaticResource(
+                uri="ai-platform://volume03/transport-boundary",
+                name="Transport boundary note",
+                mime_type="text/plain",
+                text="Listing a resource does not read a file or execute a Tool.",
+            ),
+        )
+    )
+    session = McpStdioSession(resource_catalog=resource_catalog)
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"resources-001","method":"resources/list","params":{}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line) == {
+        "jsonrpc": "2.0",
+        "id": "resources-001",
+        "result": {
+            "resources": [
+                {
+                    "uri": "ai-platform://volume03/transport-boundary",
+                    "name": "Transport boundary note",
+                    "mimeType": "text/plain",
+                }
+            ]
+        },
+    }
+    assert session.state is McpStdioState.READY
+
+
 @pytest.mark.parametrize(
     ("raw_line", "message"),
     (
@@ -97,6 +134,16 @@ def test_stdio_session_projects_fixed_catalog_with_read_only_tools_list() -> Non
             '{"jsonrpc":"2.0","id":"list-002","method":"tools/list",'
             '"params":{"cursor":"unexpected"}}\n',
             "tools/list params must be empty",
+        ),
+        ('{"jsonrpc":"2.0","method":"resources/list"}\n', "resources/list must include"),
+        (
+            '{"jsonrpc":"2.0","id":"resources-002","method":"resources/list",'
+            '"params":{"cursor":"unexpected"}}\n',
+            "resources/list params must be empty",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"read-001","method":"resources/read","params":{}}\n',
+            "no MCP methods",
         ),
         ('{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n', "no MCP methods"),
     ),

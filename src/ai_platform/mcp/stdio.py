@@ -1,4 +1,4 @@
-"""한 줄 JSON-RPC와 read-only ``tools/list``만 검증하는 MCP STDIO adapter.
+"""한 줄 JSON-RPC와 read-only catalog 목록만 검증하는 MCP STDIO adapter.
 
 이 모듈은 실제 ``sys.stdin``/``sys.stdout``를 열거나 Tool을 실행하지 않는다. 호출자는
 입력 줄 하나를 ``receive_line()``에 전달하고, 반환된 한 줄만 stdout에 쓸 수 있다.
@@ -13,6 +13,7 @@ from enum import StrEnum
 from types import MappingProxyType
 
 from ai_platform.mcp.catalog import McpServerCatalog
+from ai_platform.mcp.resources import McpResourceCatalog
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
 DEFAULT_MAX_MESSAGE_BYTES = 16_384
@@ -50,22 +51,25 @@ class McpJsonRpcRequest:
 
 
 class McpStdioSession:
-    """고정 lifecycle 뒤 catalog를 read-only ``tools/list``으로만 노출한다.
+    """고정 lifecycle 뒤 catalog를 read-only 목록 method로만 노출한다.
 
-    ``tools/list``은 고정된 ``McpServerCatalog`` snapshot만 응답한다. ``tools/call``과
-    다른 모든 method는 dispatcher에 전달하지 않으므로 transport metadata가 Tool 실행
-    인자나 승인 입력으로 섞일 수 없다.
+    ``tools/list``과 ``resources/list``은 고정된 catalog snapshot만 응답한다.
+    ``tools/call``과 ``resources/read``를 포함한 다른 모든 method는 dispatcher나
+    loader에 전달하지 않으므로 transport metadata가 Tool 실행 인자나 승인 입력으로
+    섞이거나 URI가 파일 경로로 해석될 수 없다.
     """
 
     def __init__(
         self,
         *,
         catalog: McpServerCatalog | None = None,
+        resource_catalog: McpResourceCatalog | None = None,
         max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
     ) -> None:
         _validate_max_message_bytes(max_message_bytes)
         self._max_message_bytes = max_message_bytes
         self._catalog = catalog or McpServerCatalog(())
+        self._resource_catalog = resource_catalog or McpResourceCatalog(())
         self._state = McpStdioState.WAITING_FOR_INITIALIZE
 
     @property
@@ -124,20 +128,26 @@ class McpStdioSession:
         self._state = McpStdioState.READY
 
     def _receive_ready_request(self, request: McpJsonRpcRequest) -> str:
-        """READY에서는 execution-free ``tools/list`` request 하나만 허용한다."""
-        if request.method != "tools/list":
+        """READY에서는 execution-free catalog list request만 허용한다."""
+        if request.method not in {"tools/list", "resources/list"}:
             raise McpStdioError(
-                "no MCP methods are enabled besides read-only tools/list in this adapter"
+                "no MCP methods are enabled besides read-only tools/list and resources/list "
+                "in this adapter"
             )
         if request.is_notification:
-            raise McpStdioError("tools/list must include a JSON-RPC request id")
+            raise McpStdioError(f"{request.method} must include a JSON-RPC request id")
         if request.params:
-            raise McpStdioError("tools/list params must be empty when present")
+            raise McpStdioError(f"{request.method} params must be empty when present")
+        result: dict[str, object]
+        if request.method == "tools/list":
+            result = {"tools": list(self._catalog.list_tools())}
+        else:
+            result = {"resources": list(self._resource_catalog.list_resources())}
         return encode_stdio_jsonrpc_message(
             {
                 "jsonrpc": "2.0",
                 "id": request.request_id,
-                "result": {"tools": list(self._catalog.list_tools())},
+                "result": result,
             },
             max_message_bytes=self._max_message_bytes,
         )
