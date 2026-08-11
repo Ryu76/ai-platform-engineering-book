@@ -23,8 +23,11 @@ from ai_platform.rag import (
     RagPipeline,
     RerankingIndex,
     RerankResult,
+    RetrievalEvaluationBaseline,
+    RetrievalEvaluationBaselineCase,
     RetrievalEvaluationConfig,
     RetrievalEvaluator,
+    RetrievalRegressionChecker,
     SearchHit,
 )
 
@@ -124,12 +127,30 @@ def main() -> None:
     evaluation_report = RetrievalEvaluator(
         index=index, config=RetrievalEvaluationConfig(top_k=1)
     ).evaluate(evaluation_cases)
+    baseline = RetrievalEvaluationBaseline(
+        top_k=1,
+        cases=tuple(
+            RetrievalEvaluationBaselineCase(
+                case_id=case.case_id,
+                query=case.query,
+                expected_chunk_ids=case.expected_chunk_ids,
+            )
+            for case in evaluation_cases
+        ),
+        recall_at_k=1.0,
+        hit_rate=1.0,
+        mean_reciprocal_rank=1.0,
+    )
+    regression = RetrievalRegressionChecker(baseline=baseline).evaluate(evaluation_report)
+    if not regression.passed:
+        raise RuntimeError("sample RAG retrieval quality regressed from its fixed baseline")
     print(
         "검색 평가: "
         f"Recall@{evaluation_report.top_k}={evaluation_report.recall_at_k:.2f}, "
         f"Hit rate={evaluation_report.hit_rate:.2f}, "
         f"MRR={evaluation_report.mean_reciprocal_rank:.2f}"
     )
+    print("검색 회귀 판정: 통과 (고정 기준선 대비 지표 하락 없음)")
     print()
 
     for query in (

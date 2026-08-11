@@ -31,10 +31,14 @@ from ai_platform.rag import (
     RerankingConfig,
     RerankingIndex,
     RerankResult,
+    RetrievalEvaluationBaseline,
+    RetrievalEvaluationBaselineCase,
     RetrievalEvaluationCase,
     RetrievalEvaluationConfig,
     RetrievalEvaluationSetLoadingConfig,
     RetrievalEvaluator,
+    RetrievalRegressionChecker,
+    RetrievalRegressionPolicy,
     SearchHit,
     SourceDocument,
 )
@@ -1170,6 +1174,173 @@ def test_local_evaluation_set_loader_rejects_duplicate_or_excess_cases(tmp_path:
     ],
 )
 def test_retrieval_evaluation_rejects_invalid_contract_values(
+    factory: Callable[[], object],
+) -> None:
+    with pytest.raises(RagConfigurationError):
+        factory()
+
+
+def test_retrieval_regression_checker_compares_compatible_reports_with_metric_budgets() -> None:
+    cases = (
+        RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),
+        RetrievalEvaluationCase("returns", "반품", ("returns#1",)),
+    )
+    baseline_report = RetrievalEvaluator(
+        index=RecordingSearchIndex(
+            (
+                _hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),
+                _hit(chunk_id="returns#1", document_id="returns", text="return evidence"),
+            )
+        ),
+        config=RetrievalEvaluationConfig(top_k=2),
+    ).evaluate(cases)
+    current_report = RetrievalEvaluator(
+        index=RecordingSearchIndex(
+            (_hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),)
+        ),
+        config=RetrievalEvaluationConfig(top_k=2),
+    ).evaluate(cases)
+
+    baseline = RetrievalEvaluationBaseline.from_report(baseline_report)
+    decision = RetrievalRegressionChecker(
+        baseline=baseline,
+        policy=RetrievalRegressionPolicy(
+            maximum_recall_at_k_drop=0.5,
+            maximum_hit_rate_drop=0.5,
+            maximum_mean_reciprocal_rank_drop=0.25,
+        ),
+    ).evaluate(current_report)
+
+    assert baseline.to_payload() == {
+        "top_k": 2,
+        "cases": [
+            {"case_id": "shipping", "expected_chunk_ids": ["shipping#1"]},
+            {"case_id": "returns", "expected_chunk_ids": ["returns#1"]},
+        ],
+        "recall_at_k": 1.0,
+        "hit_rate": 1.0,
+        "mean_reciprocal_rank": 0.75,
+    }
+    assert decision.passed is True
+    assert decision.to_payload() == {
+        "top_k": 2,
+        "evaluated_cases": 2,
+        "passed": True,
+        "metrics": [
+            {
+                "name": "recall_at_k",
+                "baseline_score": 1.0,
+                "current_score": 0.5,
+                "drop": 0.5,
+                "maximum_drop": 0.5,
+                "passed": True,
+            },
+            {
+                "name": "hit_rate",
+                "baseline_score": 1.0,
+                "current_score": 0.5,
+                "drop": 0.5,
+                "maximum_drop": 0.5,
+                "passed": True,
+            },
+            {
+                "name": "mean_reciprocal_rank",
+                "baseline_score": 0.75,
+                "current_score": 0.5,
+                "drop": 0.25,
+                "maximum_drop": 0.25,
+                "passed": True,
+            },
+        ],
+    }
+
+
+def test_retrieval_regression_checker_reports_failure_without_hiding_metric_values() -> None:
+    cases = (RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),)
+    baseline_report = RetrievalEvaluator(
+        index=RecordingSearchIndex(
+            (_hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),)
+        ),
+        config=RetrievalEvaluationConfig(top_k=1),
+    ).evaluate(cases)
+    current_report = RetrievalEvaluator(
+        index=RecordingSearchIndex(()), config=RetrievalEvaluationConfig(top_k=1)
+    ).evaluate(cases)
+
+    decision = RetrievalRegressionChecker(
+        baseline=RetrievalEvaluationBaseline.from_report(baseline_report)
+    ).evaluate(current_report)
+
+    assert decision.passed is False
+    assert [(metric.name, metric.drop, metric.passed) for metric in decision.metrics] == [
+        ("recall_at_k", 1.0, False),
+        ("hit_rate", 1.0, False),
+        ("mean_reciprocal_rank", 1.0, False),
+    ]
+
+
+@pytest.mark.parametrize(
+    "baseline_top_k, current_case, message",
+    [
+        (2, RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)), "top_k must match"),
+        (
+            1,
+            RetrievalEvaluationCase("shipping", "다른 배송 질문", ("shipping#1",)),
+            "cases must match",
+        ),
+        (
+            1,
+            RetrievalEvaluationCase("shipping", "배송", ("different#1",)),
+            "cases must match",
+        ),
+    ],
+)
+def test_retrieval_regression_checker_rejects_incompatible_baseline_comparisons(
+    baseline_top_k: int, current_case: RetrievalEvaluationCase, message: str
+) -> None:
+    baseline_cases = (RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),)
+    baseline_report = RetrievalEvaluator(
+        index=RecordingSearchIndex(
+            (_hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),)
+        ),
+        config=RetrievalEvaluationConfig(top_k=baseline_top_k),
+    ).evaluate(baseline_cases)
+    current_report = RetrievalEvaluator(
+        index=RecordingSearchIndex(
+            (_hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),)
+        ),
+        config=RetrievalEvaluationConfig(top_k=1),
+    ).evaluate((current_case,))
+
+    with pytest.raises(RagConfigurationError, match=message):
+        RetrievalRegressionChecker(
+            baseline=RetrievalEvaluationBaseline.from_report(baseline_report)
+        ).evaluate(current_report)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: RetrievalEvaluationBaseline(
+            top_k=True,
+            cases=(RetrievalEvaluationBaselineCase("shipping", "배송", ("shipping#1",)),),
+            recall_at_k=1.0,
+            hit_rate=1.0,
+            mean_reciprocal_rank=1.0,
+        ),
+        lambda: RetrievalEvaluationBaseline(
+            top_k=1,
+            cases=(RetrievalEvaluationBaselineCase("shipping", "배송", ("shipping#1",)),),
+            recall_at_k=float("nan"),
+            hit_rate=1.0,
+            mean_reciprocal_rank=1.0,
+        ),
+        lambda: RetrievalEvaluationBaselineCase("shipping", "배송", ("shipping#1", "shipping#1")),
+        lambda: RetrievalRegressionPolicy(maximum_hit_rate_drop=True),
+        lambda: RetrievalRegressionPolicy(maximum_recall_at_k_drop=1.1),
+    ],
+)
+def test_retrieval_regression_contract_rejects_invalid_baseline_and_policy_values(
     factory: Callable[[], object],
 ) -> None:
     with pytest.raises(RagConfigurationError):

@@ -9,6 +9,7 @@ Recall@k, Hit rate, MRR을 계산한다. 문서 원문이나 생성 답변을 �
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -202,6 +203,7 @@ class RetrievalEvaluationResult:
     """한 고정 질의의 검색 순위와 근거 회수 지표다."""
 
     case_id: str
+    query: str
     expected_chunk_ids: tuple[str, ...]
     retrieved_chunk_ids: tuple[str, ...]
     first_relevant_rank: int | None
@@ -322,6 +324,7 @@ class RetrievalEvaluator:
         recovered_count = len(expected_chunk_ids.intersection(retrieved_chunk_ids))
         return RetrievalEvaluationResult(
             case_id=case.case_id,
+            query=case.query,
             expected_chunk_ids=case.expected_chunk_ids,
             retrieved_chunk_ids=retrieved_chunk_ids,
             first_relevant_rank=first_relevant_rank,
@@ -342,3 +345,280 @@ class RetrievalEvaluator:
                 raise RagConfigurationError("index must not return duplicate hit chunk IDs")
             chunk_ids.add(hit.chunk.chunk_id)
         return hits
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationBaselineCase:
+    """회귀 비교에서 동일한 기대 근거를 확인하기 위한 고정 사례 참조다."""
+
+    case_id: str
+    query: str
+    expected_chunk_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.case_id, str) or not self.case_id.strip():
+            raise RagConfigurationError("baseline case_id must be a non-empty string")
+        if not isinstance(self.query, str) or not self.query.strip():
+            raise RagConfigurationError("baseline query must be a non-empty string")
+        if not isinstance(self.expected_chunk_ids, tuple) or not self.expected_chunk_ids:
+            raise RagConfigurationError("baseline expected_chunk_ids must be a non-empty tuple")
+        if any(
+            not isinstance(chunk_id, str) or not chunk_id.strip()
+            for chunk_id in self.expected_chunk_ids
+        ):
+            raise RagConfigurationError(
+                "baseline expected_chunk_ids must contain non-empty strings"
+            )
+        if len(set(self.expected_chunk_ids)) != len(self.expected_chunk_ids):
+            raise RagConfigurationError("baseline expected_chunk_ids must not contain duplicates")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationBaseline:
+    """같은 고정 평가 세트에서 허용 가능한 검색 품질 기준선이다."""
+
+    top_k: int
+    cases: tuple[RetrievalEvaluationBaselineCase, ...]
+    recall_at_k: float
+    hit_rate: float
+    mean_reciprocal_rank: float
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.top_k, bool)
+            or not isinstance(self.top_k, int)
+            or not 1 <= self.top_k <= 20
+        ):
+            raise RagConfigurationError("baseline top_k must be an integer between 1 and 20")
+        if not isinstance(self.cases, tuple) or not self.cases:
+            raise RagConfigurationError("baseline cases must be a non-empty tuple")
+        if any(not isinstance(case, RetrievalEvaluationBaselineCase) for case in self.cases):
+            raise RagConfigurationError(
+                "baseline cases must contain RetrievalEvaluationBaselineCase values"
+            )
+        case_ids = [case.case_id for case in self.cases]
+        if len(set(case_ids)) != len(case_ids):
+            raise RagConfigurationError("baseline case_id values must be unique")
+        for field_name, value in (
+            ("recall_at_k", self.recall_at_k),
+            ("hit_rate", self.hit_rate),
+            ("mean_reciprocal_rank", self.mean_reciprocal_rank),
+        ):
+            _validate_unit_interval_score(field_name=field_name, value=value)
+
+    @classmethod
+    def from_report(cls, report: RetrievalEvaluationReport) -> RetrievalEvaluationBaseline:
+        """검증된 현재 보고서를 이후의 결정론적 회귀 기준선으로 고정한다."""
+        _validate_evaluation_report(report)
+        return cls(
+            top_k=report.top_k,
+            cases=tuple(
+                RetrievalEvaluationBaselineCase(
+                    case_id=result.case_id,
+                    query=result.query,
+                    expected_chunk_ids=result.expected_chunk_ids,
+                )
+                for result in report.results
+            ),
+            recall_at_k=report.recall_at_k,
+            hit_rate=report.hit_rate,
+            mean_reciprocal_rank=report.mean_reciprocal_rank,
+        )
+
+    def to_payload(self) -> dict[str, object]:
+        """질의·원문 없이 고정 기준선의 호환성 정보와 집계 점수를 반환한다."""
+        return {
+            "top_k": self.top_k,
+            "cases": [
+                {
+                    "case_id": case.case_id,
+                    "expected_chunk_ids": list(case.expected_chunk_ids),
+                }
+                for case in self.cases
+            ],
+            "recall_at_k": self.recall_at_k,
+            "hit_rate": self.hit_rate,
+            "mean_reciprocal_rank": self.mean_reciprocal_rank,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionPolicy:
+    """기준선보다 낮아질 수 있는 각 검색 지표의 최대 폭이다."""
+
+    maximum_recall_at_k_drop: float = 0.0
+    maximum_hit_rate_drop: float = 0.0
+    maximum_mean_reciprocal_rank_drop: float = 0.0
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("maximum_recall_at_k_drop", self.maximum_recall_at_k_drop),
+            ("maximum_hit_rate_drop", self.maximum_hit_rate_drop),
+            (
+                "maximum_mean_reciprocal_rank_drop",
+                self.maximum_mean_reciprocal_rank_drop,
+            ),
+        ):
+            _validate_unit_interval_score(field_name=field_name, value=value)
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionMetricResult:
+    """한 집계 지표의 기준선·현재 값·허용 하락 폭을 기록한다."""
+
+    name: str
+    baseline_score: float
+    current_score: float
+    drop: float
+    maximum_drop: float
+
+    @property
+    def passed(self) -> bool:
+        """현재 값이 정책이 허용하는 기준선 하락 범위 안에 있으면 참이다."""
+        return self.drop <= self.maximum_drop
+
+    def to_payload(self) -> dict[str, object]:
+        """JSON 호환 단일 지표 회귀 판정 결과를 반환한다."""
+        return {
+            "name": self.name,
+            "baseline_score": self.baseline_score,
+            "current_score": self.current_score,
+            "drop": self.drop,
+            "maximum_drop": self.maximum_drop,
+            "passed": self.passed,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionDecision:
+    """동일한 고정 평가 세트에 대한 전체 결정론적 회귀 판정이다."""
+
+    top_k: int
+    evaluated_cases: int
+    metrics: tuple[RetrievalRegressionMetricResult, ...]
+
+    @property
+    def passed(self) -> bool:
+        """모든 집계 지표가 정책을 통과했는지 반환한다."""
+        return all(metric.passed for metric in self.metrics)
+
+    def to_payload(self) -> dict[str, object]:
+        """원문·질의·생성 답변 없이 JSON 호환 회귀 판정을 반환한다."""
+        return {
+            "top_k": self.top_k,
+            "evaluated_cases": self.evaluated_cases,
+            "passed": self.passed,
+            "metrics": [metric.to_payload() for metric in self.metrics],
+        }
+
+
+class RetrievalRegressionChecker:
+    """호환되는 고정 평가 보고서를 기준선 및 하락 허용 폭과 비교한다.
+
+    기준선과 현재 보고서는 ``top_k`` 및 사례 순서·ID·질문·기대 청크 ID가 모두 같아야 한다.
+    따라서 서로 다른 데이터셋 또는 다른 관련성 정의를 품질 개선/저하로 오인하지 않는다.
+    이 경계는 로컬 보고서만 비교하며 검색·생성·네트워크·제공자 SDK를 호출하지 않는다.
+    """
+
+    def __init__(
+        self,
+        *,
+        baseline: RetrievalEvaluationBaseline,
+        policy: RetrievalRegressionPolicy | None = None,
+    ) -> None:
+        if not isinstance(baseline, RetrievalEvaluationBaseline):
+            raise RagConfigurationError("baseline must be a RetrievalEvaluationBaseline")
+        self._baseline = baseline
+        self._policy = policy or RetrievalRegressionPolicy()
+
+    def evaluate(self, report: RetrievalEvaluationReport) -> RetrievalRegressionDecision:
+        """현재 보고서가 같은 기준선의 품질 하락 정책을 통과하는지 판정한다."""
+        _validate_evaluation_report(report)
+        current_cases = tuple(
+            RetrievalEvaluationBaselineCase(
+                case_id=result.case_id,
+                query=result.query,
+                expected_chunk_ids=result.expected_chunk_ids,
+            )
+            for result in report.results
+        )
+        if report.top_k != self._baseline.top_k:
+            raise RagConfigurationError("regression report top_k must match the baseline")
+        if current_cases != self._baseline.cases:
+            raise RagConfigurationError(
+                "regression report cases must match the baseline case order and expected chunk IDs"
+            )
+        return RetrievalRegressionDecision(
+            top_k=report.top_k,
+            evaluated_cases=report.evaluated_cases,
+            metrics=(
+                self._metric_result(
+                    name="recall_at_k",
+                    baseline_score=self._baseline.recall_at_k,
+                    current_score=report.recall_at_k,
+                    maximum_drop=self._policy.maximum_recall_at_k_drop,
+                ),
+                self._metric_result(
+                    name="hit_rate",
+                    baseline_score=self._baseline.hit_rate,
+                    current_score=report.hit_rate,
+                    maximum_drop=self._policy.maximum_hit_rate_drop,
+                ),
+                self._metric_result(
+                    name="mean_reciprocal_rank",
+                    baseline_score=self._baseline.mean_reciprocal_rank,
+                    current_score=report.mean_reciprocal_rank,
+                    maximum_drop=self._policy.maximum_mean_reciprocal_rank_drop,
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _metric_result(
+        *, name: str, baseline_score: float, current_score: float, maximum_drop: float
+    ) -> RetrievalRegressionMetricResult:
+        return RetrievalRegressionMetricResult(
+            name=name,
+            baseline_score=baseline_score,
+            current_score=current_score,
+            drop=max(0.0, baseline_score - current_score),
+            maximum_drop=maximum_drop,
+        )
+
+
+def _validate_unit_interval_score(*, field_name: str, value: object) -> None:
+    """점수와 허용 하락 폭이 유한한 0~1 수인지 확인한다."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not 0.0 <= value <= 1.0
+    ):
+        raise RagConfigurationError(f"{field_name} must be a finite number between 0 and 1")
+
+
+def _validate_evaluation_report(report: object) -> None:
+    """직접 생성된 보고서가 비교 계약을 우회하지 못하게 최소 불변식을 확인한다."""
+    if not isinstance(report, RetrievalEvaluationReport):
+        raise RagConfigurationError("regression report must be a RetrievalEvaluationReport")
+    if (
+        isinstance(report.top_k, bool)
+        or not isinstance(report.top_k, int)
+        or not 1 <= report.top_k <= 20
+    ):
+        raise RagConfigurationError("regression report top_k must be an integer between 1 and 20")
+    if not isinstance(report.results, tuple) or not report.results:
+        raise RagConfigurationError("regression report results must be a non-empty tuple")
+    if any(not isinstance(result, RetrievalEvaluationResult) for result in report.results):
+        raise RagConfigurationError(
+            "regression report results must contain RetrievalEvaluationResult values"
+        )
+    case_ids = [result.case_id for result in report.results]
+    if len(set(case_ids)) != len(case_ids):
+        raise RagConfigurationError("regression report case_id values must be unique")
+    for field_name, value in (
+        ("regression report recall_at_k", report.recall_at_k),
+        ("regression report hit_rate", report.hit_rate),
+        ("regression report mean_reciprocal_rank", report.mean_reciprocal_rank),
+    ):
+        _validate_unit_interval_score(field_name=field_name, value=value)

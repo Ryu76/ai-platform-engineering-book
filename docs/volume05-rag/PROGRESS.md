@@ -1,5 +1,44 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 고정 기준선 검색 회귀 판정 슬라이스 완료
+
+### 완료
+
+- `RetrievalEvaluationBaseline`·`RetrievalEvaluationBaselineCase`·`RetrievalRegressionPolicy`·`RetrievalRegressionChecker`와 지표별/전체 판정 payload 계약을 추가했습니다. 이 경계는 이미 계산된 로컬 검색 평가 보고서만 비교하며 검색·생성·파일·네트워크·제공자 SDK를 호출하지 않습니다.
+- 기준선과 현재 보고서의 `top_k`, 사례 순서·ID·질문, 기대 청크 ID가 모두 같을 때만 비교합니다. 따라서 서로 다른 데이터셋·관련성 정의·반환 깊이를 품질 변화로 오인하지 않으며, 호환되지 않으면 명시적으로 거부합니다.
+- Recall@k·Hit rate·MRR은 각각 0~1의 최대 하락 허용 폭을 갖습니다. 기본 정책은 하락을 허용하지 않고, 호환되는 품질 저하는 숨기지 않은 `passed: false`와 기준선·현재·하락·허용 폭으로 반환합니다.
+- 로컬 예제는 고정 JSON 평가 사례 및 각 지표 1.00의 명시적 기준선과 현재 보고서를 비교해 회귀 판정 통과를 출력합니다. 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 147 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 7 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 5 source files
+uv run python examples/volume05/local_rag.py
+# 고정 JSON 평가 세트 Recall@1·Hit rate·MRR 모두 1.00, 기준선 회귀 판정 통과, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 고정 기준선 및 회귀 판정 payload를 로컬 파일에서 다시 읽고 엄격히 검증하는 경계를 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 파일 기반 고정 로컬 검색 평가 세트 슬라이스 완료
 
 ### 완료
