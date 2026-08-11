@@ -3,7 +3,8 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME04_COMPLETE` 미설정
-- 현재 slice: 24 — retrieval metric batch 입력 계약 강화
+- 현재 slice: 25 — cosine score 범위 계약 강화
+- 검증: Volume 04 테스트 69 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
 - 범위: 외부 API, 다운로드 모델, Docker, Qdrant를 실행하지 않았습니다.
 
 ## 2026-08-10 — Slice 01 완료
@@ -665,7 +666,7 @@ git diff --check
 
 `uv`는 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고가 있었지만, uv가 프로젝트 환경으로 위 검증을 완료했습니다.
 
-## 2026-08-11 — Slice 24 완료: retrieval metric batch 입력 계약 강화
+## 2026-08-11 — Slice 24 완료: retrieval metric batch 입력 계약 강화 [LATEST]
 
 ### 추가한 결과물
 

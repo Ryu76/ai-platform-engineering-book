@@ -121,12 +121,21 @@ def test_evaluation_rejects_ambiguous_or_invalid_inputs(
         evaluate_ranking(ranked_ids, relevant_ids, k=k)
 
 
-def test_threshold_rejects_non_finite_or_out_of_range_values() -> None:
-    """NaN, infinity, cosine 범위 밖 임계값은 명시적으로 실패해야 한다."""
-    with pytest.raises(RetrievalEvaluationError, match="finite"):
-        meets_score_threshold(math.nan, minimum_score=0.5)
-    with pytest.raises(RetrievalEvaluationError, match="between"):
-        meets_score_threshold(0.5, minimum_score=1.1)
+@pytest.mark.parametrize(
+    ("score", "minimum_score", "message"),
+    [
+        (math.nan, 0.5, "score must be a finite number"),
+        (0.5, math.inf, "minimum_score must be a finite number"),
+        (1.1, 0.5, "score must be between"),
+        (0.5, -1.1, "minimum_score must be between"),
+    ],
+)
+def test_threshold_rejects_non_finite_or_out_of_cosine_range_values(
+    score: float, minimum_score: float, message: str
+) -> None:
+    """score와 임계값 모두 유한한 cosine 범위를 벗어나면 명시적으로 실패해야 한다."""
+    with pytest.raises(RetrievalEvaluationError, match=message):
+        meets_score_threshold(score, minimum_score=minimum_score)
 
 
 @pytest.mark.parametrize(

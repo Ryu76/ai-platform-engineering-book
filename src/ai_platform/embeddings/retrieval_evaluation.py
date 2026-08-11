@@ -110,10 +110,8 @@ def meets_score_threshold(score: float, *, minimum_score: float) -> bool:
     이 함수는 답변의 사실성을 보장하지 않는다. 검색 점수만으로 답할 근거가 없다고
     판단하는 보수적인 로컬 gate이며, 운영 임계값은 대표 질의 평가 결과로 정해야 한다.
     """
-    _require_finite_score(score, name="score")
-    _require_finite_score(minimum_score, name="minimum_score")
-    if not -1.0 <= minimum_score <= 1.0:
-        raise RetrievalEvaluationError("minimum_score must be between -1.0 and 1.0")
+    _require_cosine_score(score, name="score")
+    _require_cosine_score(minimum_score, name="minimum_score")
     return score >= minimum_score
 
 
@@ -159,6 +157,13 @@ def _require_finite_score(score: float, *, name: str) -> None:
     """점수와 임계값의 수치성과 유한성을 검증한다."""
     if isinstance(score, bool) or not isinstance(score, (int, float)) or not isfinite(score):
         raise RetrievalEvaluationError(f"{name} must be a finite number")
+
+
+def _require_cosine_score(score: float, *, name: str) -> None:
+    """score가 유한한 cosine 범위 안의 수인지 검증한다."""
+    _require_finite_score(score, name=name)
+    if not -1.0 <= score <= 1.0:
+        raise RetrievalEvaluationError(f"{name} must be between -1.0 and 1.0")
 
 
 def _require_unit_interval_metric(value: float, *, name: str) -> None:
