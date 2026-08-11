@@ -26,6 +26,7 @@
 15. [단일 JSON Checkpointer 인스턴스의 동시 시작 안전성](15-json-checkpoint-concurrent-start.md)
 16. [동일 JSON 경로의 독립 Checkpointer 동시 시작 안전성](16-json-shared-path-concurrent-start.md)
 17. [동일 JSON 경로의 독립 Checkpointer 동시 승인 안전성](17-json-shared-path-concurrent-approval.md)
+18. [동일 JSON 경로의 독립 Checkpointer 동시 거절 안전성](18-json-shared-path-concurrent-rejection.md)
 
 ## 예정 장
 
@@ -52,7 +53,8 @@
 - `examples/volume09/json_concurrent_start_workflow.py`: 하나의 JSON Checkpointer 인스턴스가 8개 동시 시작 중 하나만 위험 작업의 승인 대기를 생성하는 데모
 - `examples/volume09/json_shared_path_concurrent_start_workflow.py`: 같은 JSON 경로를 여는 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 생성하는 데모
 - `examples/volume09/json_shared_path_concurrent_approval_workflow.py`: 같은 JSON 경로를 여는 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 소비하는 데모
-- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 단일/공유 경로 인스턴스 동시 승인·시작 계약 테스트
+- `examples/volume09/json_shared_path_concurrent_rejection_workflow.py`: 같은 JSON 경로를 여는 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 거절하는 데모
+- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 단일/공유 경로 인스턴스 동시 승인·거절·시작 계약 테스트
 
 
 현재 프로젝트 의존성에는 `langgraph` 패키지가 선언되어 있지 않습니다. 이 Volume의 현재 슬라이스들은 LangGraph API 호출을 가장하지 않고, 해당 API가 모델링하는 상태·Node·Edge·interrupt 경계를 직접 구현한 결정론적 참조 모델입니다. 패키지 추가는 이 작업 범위 밖의 프로젝트 설정 변경이므로, 승인된 별도 변경 후 실제 LangGraph 어댑터 장에서 수행합니다.
