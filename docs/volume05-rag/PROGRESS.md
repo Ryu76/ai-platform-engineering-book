@@ -1,5 +1,41 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — FastAPI 필수 JSON 본문 경계 슬라이스 완료
+
+### 완료
+
+- `create_fastapi_rag_app()`의 `/rag/query` 핸들러에 명시적인 필수 `Body(...)` 마커를 추가했습니다. 따라서 FastAPI가 `object` 타입 매개변수를 쿼리 매개변수로 해석하지 않고, 역직렬화한 단일 JSON 본문을 기존 `LocalRagApi.handle()` 계약에 전달합니다.
+- 선택적 의존성의 지연 로드는 그대로 유지합니다. FastAPI가 없는 현재 프로젝트 환경에서는 모듈 import·로컬 예제 실행에 프레임워크·서버·네트워크가 필요하지 않으며, 팩토리 호출 시에만 명확한 설치 오류가 발생합니다.
+- 로컬 FastAPI Mock은 필수 본문 마커의 `Ellipsis` 기본값, 단일 고정 POST 경로, 200 인용 응답, 공개 400 요청 오류와 잘못된 JSON의 정규화 오류 처리기를 검증합니다. 라이브 API·비밀값·서버 실행·포트 바인딩·배포는 수행하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 9 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 7 source files
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 197 passed
+uv run python examples/volume05/local_rag.py
+# Mock 임베딩·메모리 벡터 검색, 고정 평가/승인 기준선 회귀, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- FastAPI를 프로젝트 의존성으로 명시할 수 있는 별도 허용 범위에서 실제 `TestClient`로 필수 JSON 본문, 200 인용·No-answer, 누락/잘못된 JSON 및 공개 400 경계를 통합 검증합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 선택적 FastAPI 요청 어댑터 계약 슬라이스 완료
 
 ### 완료

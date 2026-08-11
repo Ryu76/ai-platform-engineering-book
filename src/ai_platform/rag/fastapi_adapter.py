@@ -30,7 +30,7 @@ def create_fastapi_rag_app(*, pipeline: RagPipeline) -> object:
     공개 400 계약으로 정규화한다.
     """
     api = LocalRagApi(pipeline=pipeline)
-    fastapi, json_response, request_validation_error = _load_fastapi_components()
+    fastapi, body, json_response, request_validation_error = _load_fastapi_components()
     app = fastapi.FastAPI(
         title="Volume 05 Local RAG API",
         version="1.0.0",
@@ -50,7 +50,10 @@ def create_fastapi_rag_app(*, pipeline: RagPipeline) -> object:
             },
         )
 
-    def query(payload: object) -> object:
+    # ``object`` alone is interpreted as a query parameter by FastAPI. The
+    # explicit required Body marker keeps this boundary aligned with
+    # ``LocalRagApi.handle()``, which accepts one deserialized JSON value.
+    def query(payload: object = body(...)) -> object:
         response = api.handle(payload)
         return json_response(status_code=response.status_code, content=response.to_payload())
 
@@ -59,7 +62,7 @@ def create_fastapi_rag_app(*, pipeline: RagPipeline) -> object:
     return app
 
 
-def _load_fastapi_components() -> tuple[Any, Any, Any]:
+def _load_fastapi_components() -> tuple[Any, Any, Any, Any]:
     """선택적 FastAPI 의존성을 팩토리 호출 시점에만 로드한다."""
     try:
         fastapi = cast(Any, import_module("fastapi"))
@@ -72,4 +75,4 @@ def _load_fastapi_components() -> tuple[Any, Any, Any]:
                 "install the optional fastapi package"
             ) from error
         raise
-    return fastapi, responses.JSONResponse, exceptions.RequestValidationError
+    return fastapi, fastapi.Body, responses.JSONResponse, exceptions.RequestValidationError

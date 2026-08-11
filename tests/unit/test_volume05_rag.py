@@ -181,6 +181,13 @@ class RecordingJsonResponse:
         self.content = content
 
 
+class RecordingBody:
+    """FastAPI의 필수 JSON 본문 마커를 기록하는 프레임워크 Mock이다."""
+
+    def __init__(self, default: object) -> None:
+        self.default = default
+
+
 class RecordingFastApi:
     """서버·네트워크 없이 FastAPI 팩토리의 라우트 연결을 검증하는 프레임워크 Mock이다."""
 
@@ -1141,6 +1148,7 @@ def test_fastapi_adapter_wires_mocked_pipeline_to_stable_json_routes(
 ) -> None:
     fastapi_module = ModuleType("fastapi")
     fastapi_module.FastAPI = RecordingFastApi  # type: ignore[attr-defined]
+    fastapi_module.Body = RecordingBody  # type: ignore[attr-defined]
     responses_module = ModuleType("fastapi.responses")
     responses_module.JSONResponse = RecordingJsonResponse  # type: ignore[attr-defined]
     exceptions_module = ModuleType("fastapi.exceptions")
@@ -1165,6 +1173,11 @@ def test_fastapi_adapter_wires_mocked_pipeline_to_stable_json_routes(
     path, route_kwargs, handler = app.routes[0]
     assert path == FASTAPI_RAG_QUERY_PATH
     assert route_kwargs == {"response_model": None}
+    assert handler.__defaults__ is not None
+    assert len(handler.__defaults__) == 1
+    required_body = handler.__defaults__[0]
+    assert isinstance(required_body, RecordingBody)
+    assert required_body.default is Ellipsis
     response = handler({"query": "배송 상태는 어떻게 확인하나요?", "top_k": 1})
     assert isinstance(response, RecordingJsonResponse)
     assert response.status_code == 200

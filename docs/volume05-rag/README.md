@@ -86,7 +86,7 @@ payload = response.to_payload()
 
 ## 선택적 FastAPI HTTP 어댑터
 
-`create_fastapi_rag_app()`은 위의 프레임워크 독립 계약을 실제 FastAPI 앱의 단일 `POST /rag/query` 라우트에 연결합니다. 팩토리는 서버를 실행하거나 포트를 열지 않으며, 문서 로더·검색기·생성기는 기존에 만든 로컬/Mock 인스턴스를 그대로 주입받습니다. OpenAPI와 문서 UI도 자동 노출하지 않습니다.
+`create_fastapi_rag_app()`은 위의 프레임워크 독립 계약을 실제 FastAPI 앱의 단일 **필수 JSON 본문** `POST /rag/query` 라우트에 연결합니다. 팩토리는 서버를 실행하거나 포트를 열지 않으며, 문서 로더·검색기·생성기는 기존에 만든 로컬/Mock 인스턴스를 그대로 주입받습니다. `payload`는 명시적인 `Body(...)` 경계이므로 FastAPI가 이를 쿼리 매개변수로 해석하지 않습니다. OpenAPI와 문서 UI도 자동 노출하지 않습니다.
 
 ```python
 from ai_platform.rag import RagPipeline, create_fastapi_rag_app
@@ -98,7 +98,7 @@ app = create_fastapi_rag_app(pipeline=pipeline)
 
 현재 실습 의존성에는 FastAPI가 포함되지 않으므로, 이 팩토리를 호출했는데 패키지가 없으면 `RagConfigurationError`가 설치 필요성을 명확히 알립니다. 모듈을 import하거나 기존 로컬 예제를 실행하는 것만으로는 FastAPI·서버·네트워크가 생성되지 않습니다. 설치된 FastAPI에서 JSON 본문 파싱에 실패하거나 본문이 누락된 경우도 `400 {"error": {"code": "invalid_request", "message": "request payload must be valid JSON"}}`로 정규화합니다. 유효 JSON은 `LocalRagApi`에 그대로 위임하므로 응답 본문, 인용, No-answer와 잘못된 필드의 400 계약은 프레임워크 독립 경계와 동일합니다.
 
-테스트는 FastAPI 프레임워크 객체를 로컬 Mock으로 바꿔 라우트·오류 처리기 등록, 200 인용 응답, 400 요청 오류를 서버나 네트워크 없이 검증합니다. 실제 `TestClient` 통합 검증은 FastAPI를 프로젝트 의존성으로 명시할 수 있는 별도 범위에서 추가해야 합니다.
+테스트는 FastAPI 프레임워크 객체를 로컬 Mock으로 바꿔 필수 `Body(...)` 등록, 라우트·오류 처리기 등록, 200 인용 응답, 400 요청 오류를 서버나 네트워크 없이 검증합니다. 실제 `TestClient` 통합 검증은 FastAPI를 프로젝트 의존성으로 명시할 수 있는 별도 범위에서 추가해야 합니다.
 
 ## 고정 검색 품질 평가 계약
 
