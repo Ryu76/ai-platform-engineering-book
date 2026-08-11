@@ -1039,3 +1039,56 @@ def test_json_checkpoint_path_aliases_share_a_normalized_lock_for_risky_approval
     assert [event.node for event in completed.events] == [
         "plan", "approval", "approval", "execute"
     ]
+
+
+def test_json_checkpoint_path_aliases_share_a_normalized_lock_for_risky_rejections(
+    tmp_path: Path,
+) -> None:
+    """서로 다른 경로 표기도 resolve 뒤 같은 승인 대기를 한 번만 거절한다."""
+    checkpoint_path = tmp_path / "normalized-shared-rejections.json"
+    alias_directory = tmp_path / "path-alias"
+    alias_directory.mkdir()
+    alias_path = alias_directory / ".." / checkpoint_path.name
+    assert checkpoint_path != alias_path
+    adapters = tuple(
+        WorkflowApiAdapter(
+            workflow=DeterministicWorkflow(
+                checkpointer=JsonFileCheckpointer(
+                    path=checkpoint_path if index % 2 == 0 else alias_path
+                )
+            )
+        )
+        for index in range(8)
+    )
+    run_id = "json-normalized-path-rejection-001"
+    adapters[0].start(
+        request=StartWorkflowRequest(
+            run_id=run_id,
+            task="학습용 배포를 준비한다",
+            action=ActionKind.DEPLOY,
+        )
+    )
+    barrier = Barrier(8)
+
+    def reject_once(index: int) -> WorkflowStatus | str:
+        barrier.wait(timeout=5)
+        try:
+            return adapters[index].resume(
+                run_id=run_id,
+                request=ApprovalRequest(approved=False),
+            ).status
+        except WorkflowRunConflictError:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(reject_once, range(8)))
+
+    assert outcomes.count(WorkflowStatus.REJECTED) == 1
+    assert outcomes.count("conflict") == 7
+    rejected = JsonFileCheckpointer(path=checkpoint_path).load(run_id=run_id)
+    assert rejected.action is ActionKind.DEPLOY
+    assert rejected.status is WorkflowStatus.REJECTED
+    assert rejected.approval_granted is False
+    assert rejected.result is None
+    assert [event.node for event in rejected.events] == ["plan", "approval", "approval"]
+    assert "execute" not in [event.node for event in rejected.events]
