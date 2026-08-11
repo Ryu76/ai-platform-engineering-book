@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 11: 실행 중 검토 결정 계약
+
+- `BoundedReviewWorkflow`와 `ApprovalGatedReleaseHandoffWorkflow`는 모든 신뢰할 수 없는 실행 Agent 응답의 `review`를 `ReviewDecision` 또는 `None`으로 audit 기록과 후속 역할 호출 전에 검사한다. `"approve"` 같은 문자열은 enum처럼 보여도 `AgentProtocolError`로 fail-closed한다.
+- 잘못된 Planner review는 Researcher·Developer·Reviewer·QA를 호출하지 않고, 잘못된 Release Reviewer review는 명시적 `APPROVED` 입력이 있어도 QA·DevOps를 호출하지 않는다.
+- `tests/volume07/test_runtime_review_decision_contract.py`는 고정 Mock 생성자 검증을 우회하는 local test double로 두 실행 경계를 고정한다. 네트워크, live API, secret, 도구 실행, 배포는 사용하지 않는다.
+- `docs/volume07-multi-agent/08-runtime-review-decision-contract.md`에 구성 fixture 검증과 신뢰할 수 없는 실행 Agent protocol 검증의 역할 분리를 기록했다.
+
 ## 2026-08-11 — Slice 10: 고정 Mock script 항목 계약
 
 - `DeterministicMockAgent`, `DeterministicMockCoordinator`, `DeterministicMockWorker`, `DeterministicMockConflictAgent`는 immutable tuple 컨테이너뿐 아니라 모든 고정 response/plan/proposal 항목의 타입과 기본 필드를 구성 단계에서 검사한다. 빈 문자열, 잘못된 type, Worker boolean 위반, 중복 delegated task ID는 첫 Agent 호출 전에 `WorkflowConfigurationError`로 fail-closed한다.

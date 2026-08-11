@@ -157,3 +157,7 @@ class ApprovalGatedReleaseHandoffWorkflow:
             raise AgentProtocolError("agent response must be an AgentResponse")
         if not isinstance(response.content, str) or not response.content.strip():
             raise AgentProtocolError("agent response content must be a non-empty string")
+        if response.review is not None and not isinstance(response.review, ReviewDecision):
+            raise AgentProtocolError(
+                "agent response review must be a ReviewDecision or None"
+            )

@@ -13,6 +13,7 @@ Planner, Researcher, Developer, Reviewer, QA 역할의 메시지·상태·도구
 5. [구성 단계 Agent 경계 검증](05-agent-boundary-configuration.md) — 호출 가능한 역할 계약, immutable assignee allow-list, 실행 전 fail-closed
 6. [결정론적 Mock script 고정](06-immutable-mock-scripts.md) — immutable response/plan/proposal script, 구성 시 fail-closed
 7. [고정 Mock script 항목 계약](07-fixed-script-entry-contracts.md) — fixture 형식·필수 값 구성 시 fail-closed
+8. [실행 중 검토 결정 계약](08-runtime-review-decision-contract.md) — 신뢰할 수 없는 Agent의 review enum을 audit/후속 역할 전에 fail-closed
 
 ## 진행 상태
 
