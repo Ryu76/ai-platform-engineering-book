@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 13: Hermes runtime과 직접 구현의 책임 경계
+
+- `docs/volume07-multi-agent/10-hermes-runtime-comparison.md`에 Volume 07의 deterministic local Mock workflow와 Hermes Agent runtime의 역할·메시지·state/memory·tool·bounded loop·사람 승인 책임을 비교했다.
+- Hermes의 현재 architecture, configuration, tools, persistent memory, security 공식 문서를 연결했다. 비교 장은 Hermes profile 또는 설정을 변경하지 않으며, 실제 runtime 적용 전에는 최신 공식 문서로 설정과 보안 경계를 다시 확인하도록 명시한다.
+- 비교 실습은 `examples/volume07/`의 네 local Mock 예제와 `tests/volume07`만 실행한다. live API, secret, network Agent 호출, 도구 실행, 배포는 사용하지 않는다.
+
 ## 2026-08-11 — Slice 12: 역할 범위 검토 권한
 
 - `BoundedReviewWorkflow`와 `ApprovalGatedReleaseHandoffWorkflow`는 `ReviewDecision`을 Reviewer 역할에만 허용한다. Planner·Researcher·Developer·QA·DevOps의 명시적 review 값은 audit trail에 기록되거나 다음 역할을 호출하기 전에 `AgentProtocolError`로 fail-closed한다.

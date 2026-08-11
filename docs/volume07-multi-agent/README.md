@@ -15,6 +15,7 @@ Planner, Researcher, Developer, Reviewer, QA 역할의 메시지·상태·도구
 7. [고정 Mock script 항목 계약](07-fixed-script-entry-contracts.md) — fixture 형식·필수 값 구성 시 fail-closed
 8. [실행 중 검토 결정 계약](08-runtime-review-decision-contract.md) — 신뢰할 수 없는 Agent의 review enum을 audit/후속 역할 전에 fail-closed
 9. [역할 범위 검토 권한](09-role-scoped-review-authority.md) — Reviewer 외 역할의 review 결정은 audit/후속 역할 전에 fail-closed
+10. [Hermes Agent Runtime과 직접 구현 비교](10-hermes-runtime-comparison.md) — role, memory, tool, bounded loop, human approval의 책임 경계 비교
 
 ## 진행 상태
 
