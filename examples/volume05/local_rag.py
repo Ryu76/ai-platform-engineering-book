@@ -22,6 +22,9 @@ from ai_platform.rag import (
     RagPipeline,
     RerankingIndex,
     RerankResult,
+    RetrievalEvaluationCase,
+    RetrievalEvaluationConfig,
+    RetrievalEvaluator,
     SearchHit,
 )
 
@@ -115,6 +118,34 @@ def main() -> None:
     )
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
     api = LocalRagApi(pipeline=pipeline)
+    evaluation_report = RetrievalEvaluator(
+        index=index, config=RetrievalEvaluationConfig(top_k=1)
+    ).evaluate(
+        (
+            RetrievalEvaluationCase(
+                case_id="delivery-arrival",
+                query="언제 도착하나요?",
+                expected_chunk_ids=("local:handbook.md#1",),
+            ),
+            RetrievalEvaluationCase(
+                case_id="return-request",
+                query="반품 요청은 어떻게 접수하나요?",
+                expected_chunk_ids=("local:returns.md#1",),
+            ),
+            RetrievalEvaluationCase(
+                case_id="exchange-window",
+                query="교환은 언제 신청하나요?",
+                expected_chunk_ids=("local:exchange-notice.pdf#page=1#1",),
+            ),
+        )
+    )
+    print(
+        "검색 평가: "
+        f"Recall@{evaluation_report.top_k}={evaluation_report.recall_at_k:.2f}, "
+        f"Hit rate={evaluation_report.hit_rate:.2f}, "
+        f"MRR={evaluation_report.mean_reciprocal_rank:.2f}"
+    )
+    print()
 
     for query in (
         "언제 도착하나요?",

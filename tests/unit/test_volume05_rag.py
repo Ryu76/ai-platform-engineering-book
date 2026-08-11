@@ -30,6 +30,9 @@ from ai_platform.rag import (
     RerankingConfig,
     RerankingIndex,
     RerankResult,
+    RetrievalEvaluationCase,
+    RetrievalEvaluationConfig,
+    RetrievalEvaluator,
     SearchHit,
     SourceDocument,
 )
@@ -882,6 +885,155 @@ def test_local_rag_api_accepts_a_prevalidated_request_object() -> None:
     assert response.no_answer is False
     assert response.citations[0].chunk_id == "shipping#1"
     assert generator.calls[0][0] == "배송"
+
+
+def test_retrieval_evaluator_reports_deterministic_fixed_query_metrics_without_generation() -> None:
+    source = RecordingSearchIndex(
+        (
+            _hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),
+            _hit(chunk_id="returns#1", document_id="returns", text="return evidence"),
+        )
+    )
+    evaluator = RetrievalEvaluator(index=source, config=RetrievalEvaluationConfig(top_k=2))
+
+    report = evaluator.evaluate(
+        (
+            RetrievalEvaluationCase(
+                case_id="shipping", query="배송", expected_chunk_ids=("shipping#1", "exchange#1")
+            ),
+            RetrievalEvaluationCase(
+                case_id="exchange", query="교환", expected_chunk_ids=("exchange#1",)
+            ),
+        )
+    )
+
+    assert source.calls == [("배송", 2), ("교환", 2)]
+    assert report.top_k == 2
+    assert report.evaluated_cases == 2
+    assert report.recall_at_k == pytest.approx(1 / 3)
+    assert report.hit_rate == pytest.approx(0.5)
+    assert report.mean_reciprocal_rank == pytest.approx(0.5)
+    assert report.results[0].first_relevant_rank == 1
+    assert report.results[0].recall_at_k == pytest.approx(0.5)
+    assert report.results[0].reciprocal_rank == pytest.approx(1.0)
+    assert report.results[1].passed is False
+    assert report.results[1].first_relevant_rank is None
+    assert report.results[1].recall_at_k == pytest.approx(0.0)
+    assert report.results[1].reciprocal_rank == pytest.approx(0.0)
+    assert report.to_payload() == {
+        "top_k": 2,
+        "evaluated_cases": 2,
+        "recall_at_k": pytest.approx(1 / 3),
+        "hit_rate": pytest.approx(0.5),
+        "mean_reciprocal_rank": pytest.approx(0.5),
+        "results": [
+            {
+                "case_id": "shipping",
+                "expected_chunk_ids": ["shipping#1", "exchange#1"],
+                "retrieved_chunk_ids": ["shipping#1", "returns#1"],
+                "first_relevant_rank": 1,
+                "passed": True,
+                "recall_at_k": pytest.approx(0.5),
+                "reciprocal_rank": pytest.approx(1.0),
+            },
+            {
+                "case_id": "exchange",
+                "expected_chunk_ids": ["exchange#1"],
+                "retrieved_chunk_ids": ["shipping#1", "returns#1"],
+                "first_relevant_rank": None,
+                "passed": False,
+                "recall_at_k": pytest.approx(0.0),
+                "reciprocal_rank": pytest.approx(0.0),
+            },
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    "cases, config, message",
+    [
+        ((), None, "at least one evaluation case"),
+        (
+            (
+                RetrievalEvaluationCase("same", "배송", ("shipping#1",)),
+                RetrievalEvaluationCase("same", "반품", ("returns#1",)),
+            ),
+            None,
+            "case_id values must be unique",
+        ),
+        (("not a case",), None, "RetrievalEvaluationCase values"),
+        (
+            (
+                RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),
+                RetrievalEvaluationCase("returns", "반품", ("returns#1",)),
+            ),
+            RetrievalEvaluationConfig(max_cases=1),
+            "more cases than configured",
+        ),
+    ],
+)
+def test_retrieval_evaluator_rejects_invalid_fixed_case_sets(
+    cases: tuple[RetrievalEvaluationCase, ...] | tuple[str, ...],
+    config: RetrievalEvaluationConfig | None,
+    message: str,
+) -> None:
+    with pytest.raises(RagConfigurationError, match=message):
+        RetrievalEvaluator(index=RecordingSearchIndex(()), config=config).evaluate(cases)
+
+
+@pytest.mark.parametrize(
+    "hits, config, message",
+    [
+        (
+            [_hit(chunk_id="shipping#1", document_id="shipping", text="evidence")],
+            RetrievalEvaluationConfig(top_k=1),
+            "tuple",
+        ),
+        (
+            (
+                _hit(chunk_id="shipping#1", document_id="shipping", text="first"),
+                _hit(chunk_id="shipping#1", document_id="shipping", text="second"),
+            ),
+            RetrievalEvaluationConfig(top_k=2),
+            "duplicate hit",
+        ),
+        (
+            (
+                _hit(chunk_id="shipping#1", document_id="shipping", text="first"),
+                _hit(chunk_id="returns#1", document_id="returns", text="second"),
+            ),
+            RetrievalEvaluationConfig(top_k=1),
+            "more hits than requested",
+        ),
+    ],
+)
+def test_retrieval_evaluator_rejects_untrusted_search_results(
+    hits: tuple[SearchHit, ...] | list[SearchHit],
+    config: RetrievalEvaluationConfig,
+    message: str,
+) -> None:
+    with pytest.raises(RagConfigurationError, match=message):
+        RetrievalEvaluator(index=RecordingSearchIndex(hits), config=config).evaluate(
+            (RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),)
+        )
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: RetrievalEvaluationCase("", "배송", ("shipping#1",)),
+        lambda: RetrievalEvaluationCase("shipping", " ", ("shipping#1",)),
+        lambda: RetrievalEvaluationCase("shipping", "배송", ()),
+        lambda: RetrievalEvaluationCase("shipping", "배송", ("shipping#1", "shipping#1")),
+        lambda: RetrievalEvaluationConfig(top_k=0),
+        lambda: RetrievalEvaluationConfig(max_cases=True),
+    ],
+)
+def test_retrieval_evaluation_rejects_invalid_contract_values(
+    factory: Callable[[], object],
+) -> None:
+    with pytest.raises(RagConfigurationError):
+        factory()
 
 
 def test_chunking_config_accepts_minimum_safe_size() -> None:

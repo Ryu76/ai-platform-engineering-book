@@ -1,5 +1,38 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 고정 로컬 검색 품질 평가 계약 슬라이스 완료
+
+### 완료
+
+- `RetrievalEvaluationCase`, `RetrievalEvaluationConfig`, `RetrievalEvaluator`, 사례 결과·보고서 계약을 추가했습니다. 생성기·네트워크·제공자 SDK·실시간 데이터 없이 호출자가 명시한 고정 질의와 기대 청크 ID만 평가합니다.
+- 사례별 기대 근거 회수 비율(Recall@k), 첫 기대 근거의 역순위, hit 여부를 보존하고, 전체 세트에는 마이크로 Recall@k·Hit rate·MRR을 결정론적으로 집계합니다. `to_payload()`는 원문과 생성 답변 없이 사례 ID·청크 ID·순위·지표만 반환합니다.
+- 빈/중복 사례, 빈/중복 기대 청크 ID, 범위를 벗어난 설정과 tuple 이외·과다·중복 검색 결과를 거부해 신뢰하지 않는 검색기 출력이 지표를 왜곡하지 못하게 했습니다. 검색 내부 오류는 숨기지 않습니다.
+- 로컬 예제는 기존 sample data와 Mock 검색 체인으로 배송·반품·PDF 교환 고정 질의를 Recall@1·Hit rate·MRR로 평가하며, 실행 결과는 모두 1.00입니다.
+- 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 117 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 7 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 5 source files
+uv run python examples/volume05/local_rag.py
+# 고정 샘플 검색 평가 Recall@1·Hit rate·MRR 모두 1.00, 인용 답변 및 No-answer 확인
+```
+
+### 다음 슬라이스
+
+- 고정 로컬 평가 세트를 파일 기반으로 로드·검증하는 경계를 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 프레임워크 독립 로컬 RAG API 계약 슬라이스 완료
 
 ### 완료

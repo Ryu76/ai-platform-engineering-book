@@ -9,6 +9,13 @@ from ai_platform.rag.api import (
     RagQueryRequest,
     RagRequestError,
 )
+from ai_platform.rag.evaluation import (
+    RetrievalEvaluationCase,
+    RetrievalEvaluationConfig,
+    RetrievalEvaluationReport,
+    RetrievalEvaluationResult,
+    RetrievalEvaluator,
+)
 from ai_platform.rag.loader import (
     LocalMarkdownLoader,
     LocalPdfLoader,
@@ -58,6 +65,11 @@ __all__ = [
     "RagErrorResponse",
     "RagQueryRequest",
     "RagRequestError",
+    "RetrievalEvaluationCase",
+    "RetrievalEvaluationConfig",
+    "RetrievalEvaluationReport",
+    "RetrievalEvaluationResult",
+    "RetrievalEvaluator",
     "Citation",
     "ConfidenceThresholdConfig",
     "ConfidenceThresholdIndex",
