@@ -489,3 +489,45 @@ PRD DoD 상태:
 - 허용된 Volume 08 Router 범위의 구현·예제·테스트·학습자 체크리스트·미니 프로젝트·문서 검증은 모두 재검증했습니다.
 - 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 범위는 여전히 남아 있습니다. 현재 사용자 지시는 해당 공유 문서 변경을 금지하므로 이 tick에서는 수정하지 않았습니다.
 - 따라서 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-11 — Tick 12: 허용 범위 완료 경계 재검증
+
+완료한 범위:
+
+- 허용된 Volume 08 Router source, 예제, 단위 테스트가 현재 formatter·lint·정적 타입 검사와 Volume 전용 회귀를 계속 통과함을 재검증했습니다.
+- 고정 fixture 미니 프로젝트를 재실행하여 policy, rule, keyword, semantic, LLM, fallback, Agent·Tool·Model escalation, strict API의 여덟 경로가 외부 호출 없이 JSON 결정 report를 생성함을 확인했습니다.
+- 전체 로컬 회귀와 문서·링크·코드 블록·비밀값 검사를 재실행했습니다. 정책 경계, 결정론성, 원문 비노출 계약에 대한 source 변경은 필요하지 않았습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+32 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 12 source files
+
+uv run pytest tests/unit/test_volume08_*.py -q
+75 passed in 0.71s
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 JSON report 출력; policy, rule, keyword, semantic, LLM, fallback, escalation, API 모두 결정론적으로 성공
+
+uv run pytest -q
+136 passed in 1.07s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
+- 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
+- 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
