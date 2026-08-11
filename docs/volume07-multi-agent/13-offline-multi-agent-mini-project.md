@@ -77,6 +77,8 @@ CLI contract를 테스트합니다.
 uv run pytest tests/volume07/test_offline_multi_agent_mini_project.py -q
 ```
 
+이 테스트는 flag가 전혀 없는 경우, 네 flag가 모두 있는 경우, 그리고 **flag 하나만** 있는 네 경우를 검증합니다. 마지막 경우에는 선택한 stage 하나만 `completed`이고, 나머지 세 stage는 계속 `awaiting_human_approval`여야 합니다.
+
 ## 7. 코드 설명
 
 `build_review_workflow()`, `build_delegation_workflow()`, `build_conflict_workflow()`, `build_release_workflow()`는 새 호출마다 새 deterministic Mock을 구성합니다. 그래서 한 stage의 script 소비가 다른 stage에 영향을 주지 않습니다.
@@ -104,6 +106,8 @@ release_handoff_note=-
 
 네 flag를 모두 전달하면 status는 각각 `completed`가 됩니다. `release_handoff_note`에는 `no deployment ran.`이 포함됩니다. 이는 local note가 생성되었다는 뜻일 뿐, 배포 결과가 아닙니다.
 
+예를 들어 `--approve-delegation`만 전달하면 `delegation_status=completed` 및 `delegation_completed_task_ids=draft,verify`만 바뀝니다. Review, conflict, release status는 모두 `awaiting_human_approval`로 남습니다. 이 출력은 한 stage의 flag가 다른 stage의 QA, Worker, DevOps 권한으로 확장되지 않는다는 CLI contract입니다.
+
 ## 9. 오류 해결
 
 | 증상 | 원인 | 확인 및 해결 |
@@ -129,7 +133,7 @@ release_handoff_note=-
 
 ## 12. 과제
 
-- **기본:** 네 stage 중 하나만 승인했을 때의 정확한 CLI output을 테스트로 추가합니다.
+- **기본:** `test_one_approval_flag_completes_only_its_own_local_stage`의 parameter를 읽고, 네 stage 중 하나만 승인했을 때 다른 세 stage가 pause하는 이유를 설명합니다.
 - **응용:** `REJECTED` approval enum을 전달하는 별도 local test helper를 만들고 Agent call이 0회인지 확인합니다.
 - **심화:** approval decision의 scope가 review, delegation, conflict, release 중 하나와만 일치하도록 immutable data model을 설계합니다. live identity provider나 deployment는 연결하지 않습니다.
 

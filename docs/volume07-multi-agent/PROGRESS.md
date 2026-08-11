@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 19: stage별 사람 승인 flag 격리 계약
+
+- `tests/volume07/test_offline_multi_agent_mini_project.py`는 이제 review, delegation, conflict, release의 네 단일 `--approve-*` 실행을 각각 subprocess로 검증한다. 선택한 stage 하나만 `completed`이며 나머지 세 stage는 계속 `awaiting_human_approval`이어야 한다.
+- delegation의 단일 승인에서는 `draft,verify` local worker 결과만, release의 단일 승인에서는 local handoff note만 허용한다. 한 flag가 다른 QA·Worker·DevOps gate를 열 수 없음을 고정했고, live API, secret, network Agent, tool 실행, 파일 변경, deployment는 추가하지 않았다.
+- `13-offline-multi-agent-mini-project.md`에 단일 flag의 예상 경계와 이미 구현한 exercise test를 반영했다. 모든 workflow는 immutable deterministic Mock script와 기존의 finite review/round/task/attempt bound를 유지한다.
+
 ## 2026-08-11 — Slice 18: 권 단위 학습 체크리스트·용어집·Router 인계
 
 - `docs/volume07-multi-agent/15-volume-learning-checklist-glossary-and-router-handoff.md`에 네 deterministic local workflow의 권 단위 재실행 순서, 기본 `PENDING` pause와 독립 approval flag의 예상 출력을 추가했다.
