@@ -12,6 +12,10 @@ from ai_platform.graph.state import ActionKind, WorkflowEvent, WorkflowState, Wo
 from ai_platform.graph.workflow import DeterministicWorkflow
 
 
+class WorkflowRunConflictError(ValueError):
+    """이미 존재하는 run ID로 시작 상태를 덮어쓰려 할 때 발생한다."""
+
+
 class StartWorkflowRequest(BaseModel):
     """``POST /workflows`` 본문에 해당하는 검증된 오프라인 시작 요청이다."""
 
@@ -98,7 +102,13 @@ class WorkflowApiAdapter:
         self._workflow = workflow or DeterministicWorkflow()
 
     def start(self, *, request: StartWorkflowRequest) -> WorkflowResponse:
-        """검증된 시작 요청을 실행하고 현재 상태를 HTTP 응답 계약으로 변환한다."""
+        """새 run ID만 시작하고 현재 상태를 HTTP 응답 계약으로 변환한다.
+
+        시작 요청 재전송이 기존 승인 대기 Checkpoint를 안전 작업이나 다른 작업으로
+        바꾸지 못하게 한다. 실제 HTTP route는 이 오류를 409 Conflict 등 자신의
+        전송 계층 오류로 매핑할 수 있다.
+        """
+        self._reject_existing_run_id(run_id=request.run_id)
         state = self._workflow.invoke(
             run_id=request.run_id,
             task=request.task,
@@ -113,6 +123,14 @@ class WorkflowApiAdapter:
         normalized_run_id = _validated_run_id(run_id)
         state = self._workflow.resume(run_id=normalized_run_id, approved=request.approved)
         return WorkflowResponse.from_state(run_id=normalized_run_id, state=state)
+
+    def _reject_existing_run_id(self, *, run_id: str) -> None:
+        """저장된 run ID가 있으면 명시적 재개 외의 상태 변경을 거부한다."""
+        try:
+            self._workflow.checkpoint(run_id=run_id)
+        except KeyError:
+            return
+        raise WorkflowRunConflictError(f"run_id already exists: {run_id}")
 
 
 def _validated_run_id(run_id: str) -> str:

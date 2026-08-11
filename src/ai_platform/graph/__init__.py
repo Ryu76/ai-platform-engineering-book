@@ -7,6 +7,7 @@ from ai_platform.graph.api import (
     WorkflowApiAdapter,
     WorkflowEventResponse,
     WorkflowResponse,
+    WorkflowRunConflictError,
 )
 from ai_platform.graph.checkpointer import Checkpointer, JsonFileCheckpointer, MemoryCheckpointer
 from ai_platform.graph.state import (
@@ -54,6 +55,7 @@ __all__ = [
     "WorkflowEvent",
     "WorkflowEventResponse",
     "WorkflowResponse",
+    "WorkflowRunConflictError",
     "WorkflowState",
     "WorkflowStatus",
 ]

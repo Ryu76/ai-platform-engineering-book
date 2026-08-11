@@ -6,6 +6,7 @@ from ai_platform.graph import (
     ApprovalRequest,
     StartWorkflowRequest,
     WorkflowApiAdapter,
+    WorkflowRunConflictError,
 )
 
 
@@ -32,6 +33,17 @@ def main() -> None:
         status=waiting.status,
         events=[event.node for event in waiting.events],
     )
+
+    try:
+        adapter.start(
+            request=StartWorkflowRequest(
+                run_id="api-demo-001",
+                task="로컬 문서를 읽는다",
+                action=ActionKind.READ,
+            )
+        )
+    except WorkflowRunConflictError as error:
+        print(f"중복 시작 거부: {error}")
 
     completed = adapter.resume(
         run_id="api-demo-001",

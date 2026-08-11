@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: FastAPI route가 소비할 Pydantic 요청·응답 어댑터를 추가했습니다. 위험 ActionKind의 시작 요청은 `WAITING_FOR_APPROVAL` 응답에서 멈추며, 별도의 엄격한 Boolean 승인 요청 뒤에만 오프라인 `execute` 시뮬레이션으로 이동합니다. 서버·네트워크·실제 위험 작업은 실행하지 않았습니다.
+- 이번 슬라이스: FastAPI route가 소비할 Pydantic 요청·응답 어댑터에 run ID 충돌 방지를 추가했습니다. 이미 존재하는 run ID의 시작 재전송은 `WorkflowRunConflictError`로 거부되어 기존 위험 작업의 `WAITING_FOR_APPROVAL` Checkpoint를 덮어쓰지 못하며, 별도의 엄격한 Boolean 승인 요청 뒤에만 오프라인 `execute` 시뮬레이션으로 이동합니다. 서버·네트워크·실제 위험 작업은 실행하지 않았습니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
@@ -86,6 +86,16 @@
   - `DEPLOY` 시작 응답이 승인 대기에서 멈추고 별도 명시적 승인 뒤에만 오프라인 완료하는 데모를 추가했습니다.
 - `tests/unit/test_volume09_graph.py`
   - 위험 시작 요청의 `execute` 부재, 문자열 승인 거부·명시적 거절의 비실행, 추가 필드·빈 경로 run ID 거부 계약을 추가했습니다.
+- `docs/volume09-langgraph/09-run-id-conflict-approval-safety.md`
+  - 재전송이 기존 승인 대기 Checkpoint를 교체하지 않는 run ID 충돌 계약과 운영 HTTP 409 매핑 경계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 아홉 번째 장 링크와 run ID 충돌 방지 출고 범위를 반영했습니다.
+- `src/ai_platform/graph/api.py`, `src/ai_platform/graph/__init__.py`
+  - `WorkflowRunConflictError`와 기존 run ID 사전 검사를 추가했습니다. 충돌 시작은 `invoke()` 전에 거부되어 기존 action·감사 이벤트·승인 대기 상태가 보존됩니다.
+- `examples/volume09/fastapi_adapter_workflow.py`
+  - 위험 작업 시작 뒤 동일 run ID의 안전 작업 재시작이 거부되고 원래 작업만 명시적 승인으로 완료하는 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 중복 시작이 위험 작업 Checkpoint를 덮어쓰지 않고 원래 `DEPLOY`만 승인 재개되는 계약을 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다.
 
@@ -270,6 +280,40 @@ $ uv run pytest tests/unit/test_volume09_graph.py -q
 
 $ uv run pytest -q
 89 passed in 0.99s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+
+$ uv run python examples/volume09/fastapi_adapter_workflow.py
+시작 응답: status=waiting_for_approval
+events=plan | approval
+중복 시작 거부: run_id already exists: api-demo-001
+명시적 승인 응답: status=completed
+events=plan | approval | approval | execute
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+29 passed in 0.60s
+
+$ uv run pytest -q
+90 passed in 0.99s
 
 $ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
 All checks passed!

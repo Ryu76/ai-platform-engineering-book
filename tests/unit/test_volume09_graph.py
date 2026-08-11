@@ -23,6 +23,7 @@ from ai_platform.graph import (
     StreamingWorkflow,
     SubgraphWorkflow,
     WorkflowApiAdapter,
+    WorkflowRunConflictError,
     WorkflowState,
     WorkflowStatus,
 )
@@ -583,3 +584,38 @@ def test_api_request_models_reject_extra_fields_and_blank_path_run_id() -> None:
 
     with pytest.raises(ValidationError):
         RunIdPath(run_id="   ")
+
+
+def test_api_adapter_rejects_duplicate_start_without_replacing_pending_approval() -> None:
+    """동일 run ID 재시작은 위험 작업의 기존 승인 대기 상태를 바꾸지 못한다."""
+    adapter = WorkflowApiAdapter()
+    waiting = adapter.start(
+        request=StartWorkflowRequest(
+            run_id="api-duplicate-001",
+            task="학습용 배포를 준비한다",
+            action=ActionKind.DEPLOY,
+        )
+    )
+
+    with pytest.raises(WorkflowRunConflictError, match="run_id already exists"):
+        adapter.start(
+            request=StartWorkflowRequest(
+                run_id="api-duplicate-001",
+                task="로컬 문서를 읽는다",
+                action=ActionKind.READ,
+            )
+        )
+
+    completed = adapter.resume(
+        run_id="api-duplicate-001",
+        request=ApprovalRequest(approved=True),
+    )
+
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert completed.action is ActionKind.DEPLOY
+    assert [event.node for event in completed.events] == [
+        "plan",
+        "approval",
+        "approval",
+        "execute",
+    ]
