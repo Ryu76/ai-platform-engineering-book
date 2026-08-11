@@ -66,7 +66,7 @@ uv run pytest tests/unit/test_volume04_retrieval_evaluation.py -q
 
 검색 결과가 `k`보다 적어도 precision의 분모는 `k`입니다. 예를 들어 `k=3`인데 결과가 하나이고 그 하나가 관련 문서여도 precision@3은 `1/3`입니다. 후보 부족을 숨기지 않는 보수적인 정의입니다. 반면 reciprocal rank는 top-k로 자르지 않은 전체 순위에서 첫 관련 결과를 찾습니다. top-k 품질과 첫 정답의 위치를 별도로 볼 수 있습니다.
 
-`mean_retrieval_metrics`는 질의별 결과를 평균 precision, 평균 recall, MRR, hit rate로 요약합니다. `meets_score_threshold`는 유한한 cosine score와 `[-1.0, 1.0]` 안의 임계값만 받고, `score >= minimum_score`일 때만 참을 반환합니다.
+`RetrievalMetrics`와 `RetrievalSummary`는 public immutable record이므로 수동으로 만들더라도 모든 수치가 bool이 아닌 유한한 `[0.0, 1.0]` 값인지 확인합니다. 따라서 잘못된 fixture의 `NaN`, 무한대, 범위 밖 비율이 평균으로 전파되지 않습니다. `mean_retrieval_metrics`는 검증된 질의별 결과를 평균 precision, 평균 recall, MRR, hit rate로 요약합니다. `meets_score_threshold`는 유한한 cosine score와 `[-1.0, 1.0]` 안의 임계값만 받고, `score >= minimum_score`일 때만 참을 반환합니다.
 
 ## 8. 정상 실행 결과와 해석
 

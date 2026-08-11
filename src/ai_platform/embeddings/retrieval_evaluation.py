@@ -24,6 +24,14 @@ class RetrievalMetrics:
     reciprocal_rank: float
     hit_at_k: bool
 
+    def __post_init__(self) -> None:
+        """집계 전에 지표가 유한한 단위 구간 값인지 확인한다."""
+        _require_unit_interval_metric(self.precision_at_k, name="precision_at_k")
+        _require_unit_interval_metric(self.recall_at_k, name="recall_at_k")
+        _require_unit_interval_metric(self.reciprocal_rank, name="reciprocal_rank")
+        if not isinstance(self.hit_at_k, bool):
+            raise RetrievalEvaluationError("hit_at_k must be a bool")
+
 
 @dataclass(frozen=True, slots=True)
 class RetrievalSummary:
@@ -33,6 +41,15 @@ class RetrievalSummary:
     mean_recall_at_k: float
     mean_reciprocal_rank: float
     hit_rate_at_k: float
+
+    def __post_init__(self) -> None:
+        """요약 지표가 유한한 단위 구간 값인지 확인한다."""
+        _require_unit_interval_metric(self.mean_precision_at_k, name="mean_precision_at_k")
+        _require_unit_interval_metric(self.mean_recall_at_k, name="mean_recall_at_k")
+        _require_unit_interval_metric(
+            self.mean_reciprocal_rank, name="mean_reciprocal_rank"
+        )
+        _require_unit_interval_metric(self.hit_rate_at_k, name="hit_rate_at_k")
 
 
 def evaluate_ranking(
@@ -136,3 +153,10 @@ def _require_finite_score(score: float, *, name: str) -> None:
     """점수와 임계값의 수치성과 유한성을 검증한다."""
     if isinstance(score, bool) or not isinstance(score, (int, float)) or not isfinite(score):
         raise RetrievalEvaluationError(f"{name} must be a finite number")
+
+
+def _require_unit_interval_metric(value: float, *, name: str) -> None:
+    """공개 평가 지표가 bool이 아닌 유한한 0부터 1 사이 수인지 검증한다."""
+    _require_finite_score(value, name=name)
+    if not 0.0 <= value <= 1.0:
+        raise RetrievalEvaluationError(f"{name} must be between 0.0 and 1.0")

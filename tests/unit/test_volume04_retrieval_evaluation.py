@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 
 import pytest
 
@@ -10,6 +11,7 @@ from ai_platform.embeddings import (
     InMemoryVectorStore,
     RetrievalEvaluationError,
     RetrievalMetrics,
+    RetrievalSummary,
     VectorPoint,
     evaluate_ranking,
     mean_retrieval_metrics,
@@ -110,3 +112,32 @@ def test_threshold_rejects_non_finite_or_out_of_range_values() -> None:
         meets_score_threshold(math.nan, minimum_score=0.5)
     with pytest.raises(RetrievalEvaluationError, match="between"):
         meets_score_threshold(0.5, minimum_score=1.1)
+
+
+@pytest.mark.parametrize(
+    ("factory", "message"),
+    [
+        (
+            lambda: RetrievalMetrics(math.nan, 0.0, 0.0, False),
+            "precision_at_k must be a finite number",
+        ),
+        (
+            lambda: RetrievalMetrics(1.1, 0.0, 0.0, False),
+            "precision_at_k must be between",
+        ),
+        (
+            lambda: RetrievalMetrics(0.0, 0.0, 0.0, 1),
+            "hit_at_k must be a bool",
+        ),
+        (
+            lambda: RetrievalSummary(0.0, 0.0, 0.0, math.inf),
+            "hit_rate_at_k must be a finite number",
+        ),
+    ],
+)
+def test_public_metric_records_reject_invalid_values(
+    factory: Callable[[], object], message: str
+) -> None:
+    """수동 생성한 public metric record도 집계 전에 유효해야 한다."""
+    with pytest.raises(RetrievalEvaluationError, match=message):
+        factory()
