@@ -201,3 +201,31 @@ def test_volume10_eighth_chapter_connects_offline_pipeline_to_verified_artifacts
     )
     assert all(artifact.is_file() for artifact in expected_artifacts)
     assert "](08-offline-evaluation-pipeline.md)" in readme
+
+
+def test_volume10_final_chapter_closes_practice_interview_and_completion_contract() -> None:
+    """마지막 장은 문제 해결·과제·면접 질문·전체 완료 점검을 실제 경로와 연결해야 한다."""
+    chapter = (VOLUME / "09-practice-interview-summary.md").read_text(encoding="utf-8")
+    readme = (VOLUME / "README.md").read_text(encoding="utf-8")
+    progress = (VOLUME / "PROGRESS.md").read_text(encoding="utf-8")
+    expected_artifacts = (
+        ROOT / "src" / "ai_platform" / "evaluation" / "offline_pipeline.py",
+        ROOT / "examples" / "volume10" / "offline_evaluation_pipeline.py",
+        ROOT / "tests" / "evaluation" / "test_offline_pipeline.py",
+    )
+
+    assert all(section in chapter for section in REQUIRED_SECTIONS)
+    assert "uv run python examples/volume10/offline_evaluation_pipeline.py" in chapter
+    assert "uv run pytest tests/evaluation -q" in chapter
+    assert "### 면접 질문" in chapter
+    assert "no-answer" in chapter
+    assert "Regression decision: REJECT" in chapter
+    assert (
+        "LLM API · Agent 도구 · Vector DB · 네트워크 · 라이브 시계 · 난수 "
+        "── 사용하지 않음" in chapter
+    )
+    assert all(artifact.is_file() for artifact in expected_artifacts)
+    assert "](09-practice-interview-summary.md)" in readme
+    assert "작성 예정" not in readme
+    assert "VOLUME10_COMPLETE=true" in progress
+    assert "자체 일시 중지" in progress

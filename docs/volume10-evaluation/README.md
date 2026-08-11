@@ -14,7 +14,7 @@
 6. [Latency·Token·Cost 측정](06-latency-token-cost.md)
 7. [회귀 비교와 평가 리포트](07-regression-report.md)
 8. [미니 프로젝트: 오프라인 평가 파이프라인](08-offline-evaluation-pipeline.md)
-9. 문제 해결·과제·면접 질문·요약·체크리스트 *(작성 예정)*
+9. [문제 해결·과제·면접 질문·요약·완료 체크리스트](09-practice-interview-summary.md)
 
 ## 이번 권의 오프라인 실행 경로
 

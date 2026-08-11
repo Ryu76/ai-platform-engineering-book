@@ -2,9 +2,10 @@
 
 ## 현재 상태
 
-- 현재 Phase: **Phase 11 — Volume 10 Evaluation**
-- 이번 슬라이스: **고정 기준선·후보를 함께 실행하고 no-answer 분리를 유지하는 오프라인 평가 파이프라인 미니 프로젝트**
-- 완료 선언: 아직 하지 않음. 전체 문제 해결·과제·면접 질문·요약·완료 체크리스트가 남아 있습니다.
+- 현재 Phase: **Phase 11 — Volume 10 Evaluation 완료 (자체 일시 중지)**
+- 이번 슬라이스: **문제 해결·과제·면접 질문·요약·전체 완료 체크리스트를 포함한 최종 검증**
+- 완료 선언: PRD Volume Definition of Done을 오프라인 고정 데이터·문서·테스트로 충족했고, 이후 Volume 10 cron 작업은 자체 일시 중지합니다.
+- `VOLUME10_COMPLETE=true`
 
 ## 이번 슬라이스 (2026-08-10)
 
@@ -218,7 +219,7 @@ $ uv run python scripts/validate_code_blocks.py && uv run python scripts/validat
 
 ## 알려진 차단 사항
 
-- Volume 10은 여덟 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석, 답변·보류·환각·인용 기준선, Router·Agent 기준선, 고정 Latency·Token·Cost 기준선, 동일 계약의 회귀 리포트, 전체 오프라인 평가 파이프라인을 완료했습니다. PRD의 Volume Definition of Done을 아직 만족하지 않으므로 `VOLUME10_COMPLETE=true`를 설정하지 않았습니다.
+- Volume 10의 범위 안에 차단 사항은 없습니다. 아홉 장, 버전 관리되는 골든 데이터셋, 검색 평균·사례별 실패 분석, 답변·보류·환각·인용 기준선, Router·Agent 기준선, 고정 Latency·Token·Cost 기준선, 동일 계약의 회귀 리포트, 전체 오프라인 평가 파이프라인, 문제 해결·과제·면접 질문·요약·완료 체크리스트를 모두 작성·검증했습니다.
 - 고정 사실 ID 비교는 자연어 주장 의미, 인용 문서의 정확한 구간, 필수 인용의 완전성을 판정하지 않습니다. 사람 검토와 LLM-as-a-Judge는 후속 운영 평가 설계에서 라벨 지침·익명화·판정 변동 통제와 함께 보완해야 합니다.
 - 고정 Top-3 순위와 기록 답변은 평가 계산을 설명하기 위한 입력입니다. 실제 Retriever·LLM·Router·Agent에 연결하는 통합 평가와 데이터셋 변경 승인 정책은 후속 장에서 구현합니다.
 
@@ -335,4 +336,41 @@ $ uv run python scripts/validate_code_blocks.py && uv run python scripts/validat
 
 ## 다음 작업
 
-- 문제 해결·과제·면접 질문·요약·전체 완료 체크리스트 장을 작성하고 PRD의 Volume Definition of Done을 다시 검증합니다. 완료 전에는 `VOLUME10_COMPLETE=true`를 설정하지 않습니다.
+- `VOLUME10_COMPLETE=true`이므로 Volume 10 cron 작업을 자체 일시 중지합니다. 새로운 명시적 요구가 있기 전까지 이 범위에서 추가 변경을 만들지 않습니다.
+
+### 최종 문제 해결·과제·면접 질문·완료 체크리스트 슬라이스 (2026-08-11)
+
+- `docs/volume10-evaluation/09-practice-interview-summary.md`
+  - PRD 장 구조의 14개 섹션으로 문제 해결, 오류 해결, 응용·기본·심화 과제, 여덟 개 면접 질문, 실무 적용, 전체 완료 체크리스트, 핵심 정리를 작성했습니다.
+  - no-answer의 검색 분모 분리, 동일 dataset/version/case IDs 회귀 계약, Recall 회귀의 무상쇄 거부를 전체 권의 고정 수치로 다시 연결했습니다.
+- `docs/volume10-evaluation/README.md`, `tests/evaluation/test_volume10_completion_contract.py`
+  - 아홉 번째 장 링크와 실제 오프라인 실행·전체 테스트 경로를 연결하고 마지막 장의 14개 섹션·면접 질문·결정론적 경계를 계약 테스트로 검증했습니다.
+
+#### 최종 검증 기록
+
+```text
+$ uv run python examples/volume10/offline_evaluation_pipeline.py
+Dataset: volume10-support-policy@1.0.0
+Evaluation cases: 5
+Retrieval cases: 4
+Baseline Recall@3: 0.750000
+Candidate Recall@3: 0.500000
+Regression decision: REJECT
+retrieval.recall_at_3: status=regression; delta=-0.250000
+
+$ uv run pytest tests/evaluation -q
+74 passed
+
+$ uv run ruff check src/ai_platform/evaluation tests/evaluation examples/volume10
+All checks passed!
+
+$ uv run mypy src/ai_platform/evaluation
+Success: no issues found in 9 source files
+
+$ uv run python scripts/validate_code_blocks.py && uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py
+코드 블록 검증 통과
+문서 검증 통과: Volume 11개
+링크 검증 통과
+```
+
+이 최종 슬라이스는 공개 고정 데이터·순수 로컬 계산·문서·테스트만 사용했습니다. 실제 LLM API 호출, 외부 데이터 전송, 배포, 비밀값, 네트워크 호출을 수행하지 않았습니다.
