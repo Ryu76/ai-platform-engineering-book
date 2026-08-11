@@ -6,11 +6,13 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from ai_platform.mcp.host import (
+    McpStdioChildProcess,
     McpStdioHostAllowlist,
     McpStdioHostError,
     McpStdioHostLaunchPlan,
     McpStdioServerSpec,
     shutdown_mcp_stdio_child,
+    start_mcp_stdio_child,
 )
 
 
@@ -203,3 +205,82 @@ def test_shutdown_hides_child_adapter_exception_detail() -> None:
         shutdown_mcp_stdio_child(_shutdown_plan(), child)
 
     assert "internal process detail" not in str(error.value)
+
+
+class _RecordingChildFactory:
+    """실제 subprocess 대신 trusted factory가 받은 고정 값을 기록한다."""
+
+    def __init__(self, child: McpStdioChildProcess) -> None:
+        self.child = child
+        self.calls: list[dict[str, object]] = []
+
+    def start(
+        self,
+        *,
+        argv: tuple[str, ...],
+        max_stdout_bytes: int,
+        max_stderr_bytes: int,
+        shell: bool,
+    ) -> McpStdioChildProcess:
+        self.calls.append(
+            {
+                "argv": argv,
+                "max_stdout_bytes": max_stdout_bytes,
+                "max_stderr_bytes": max_stderr_bytes,
+                "shell": shell,
+            }
+        )
+        return self.child
+
+
+def test_start_passes_only_allowlisted_plan_values_to_factory_with_shell_disabled() -> None:
+    child = _FakeChild(poll_result=0, wait_results=[])
+    factory = _RecordingChildFactory(child)
+
+    started_child = start_mcp_stdio_child(_shutdown_plan(), factory)
+
+    assert started_child is child
+    assert factory.calls == [
+        {
+            "argv": ("volume03-safe-echo-server", "--stdio"),
+            "max_stdout_bytes": 16_384,
+            "max_stderr_bytes": 4_096,
+            "shell": False,
+        }
+    ]
+
+
+def test_start_rejects_factory_failure_without_leaking_factory_detail() -> None:
+    class _FailingFactory:
+        def start(
+            self,
+            *,
+            argv: tuple[str, ...],
+            max_stdout_bytes: int,
+            max_stderr_bytes: int,
+            shell: bool,
+        ) -> McpStdioChildProcess:
+            del argv, max_stdout_bytes, max_stderr_bytes, shell
+            raise RuntimeError("test-only OS command detail")
+
+    with pytest.raises(McpStdioHostError, match="child start failed") as error:
+        start_mcp_stdio_child(_shutdown_plan(), _FailingFactory())
+
+    assert "test-only OS command detail" not in str(error.value)
+
+
+def test_start_rejects_factory_result_without_child_shutdown_contract() -> None:
+    class _InvalidFactory:
+        def start(
+            self,
+            *,
+            argv: tuple[str, ...],
+            max_stdout_bytes: int,
+            max_stderr_bytes: int,
+            shell: bool,
+        ) -> object:
+            del argv, max_stdout_bytes, max_stderr_bytes, shell
+            return object()
+
+    with pytest.raises(McpStdioHostError, match="invalid child"):
+        start_mcp_stdio_child(_shutdown_plan(), _InvalidFactory())  # type: ignore[arg-type]

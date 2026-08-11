@@ -10,13 +10,14 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from math import isfinite
 from types import MappingProxyType
-from typing import Protocol
+from typing import Literal, Protocol, runtime_checkable
 
 
 class McpStdioHostError(ValueError):
     """MCP STDIO host launch configuration 또는 allowlist selector가 유효하지 않을 때 발생한다."""
 
 
+@runtime_checkable
 class McpStdioChildProcess(Protocol):
     """host가 소유한 child의 최소 종료 계약이다; 이 module은 process를 만들지 않는다."""
 
@@ -31,6 +32,25 @@ class McpStdioChildProcess(Protocol):
 
     def kill(self) -> None:
         """grace period 뒤 최후 수단으로 child를 강제 종료한다."""
+
+
+class McpStdioChildFactory(Protocol):
+    """trusted host가 구현하는 shell-free child 생성 adapter 계약이다.
+
+    이 교육용 boundary는 factory 구현이나 실제 subprocess를 제공하지 않는다. 호출자는
+    allowlisted launch plan의 고정 argv와 byte budget만 전달하며 ``shell``은 언제나
+    ``False``다.
+    """
+
+    def start(
+        self,
+        *,
+        argv: tuple[str, ...],
+        max_stdout_bytes: int,
+        max_stderr_bytes: int,
+        shell: Literal[False],
+    ) -> McpStdioChildProcess:
+        """고정 argv로 child 하나를 시작하고, host가 소유할 adapter를 반환한다."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +183,31 @@ def shutdown_mcp_stdio_child(
         termination_requested=True,
         force_killed=True,
     )
+
+
+def start_mcp_stdio_child(
+    plan: McpStdioHostLaunchPlan, factory: McpStdioChildFactory
+) -> McpStdioChildProcess:
+    """allowlisted immutable plan만 trusted factory에 전달해 child 하나를 시작한다.
+
+    이 함수는 selector, command string, shell option, environment, cwd, stdin/stdout/stderr
+    stream을 받지 않는다. actual process API와 pipe ownership은 후속 OS-specific factory
+    slice의 책임이며, 이 경계는 restart 또는 실패 재시도를 하지 않는다.
+    """
+    if not isinstance(plan, McpStdioHostLaunchPlan):
+        raise McpStdioHostError("MCP STDIO launch plan is invalid")
+    try:
+        child = factory.start(
+            argv=plan.argv,
+            max_stdout_bytes=plan.max_stdout_bytes,
+            max_stderr_bytes=plan.max_stderr_bytes,
+            shell=False,
+        )
+    except Exception:
+        raise McpStdioHostError("MCP STDIO child start failed") from None
+    if not isinstance(child, McpStdioChildProcess):
+        raise McpStdioHostError("MCP STDIO child factory returned an invalid child")
+    return child
 
 
 def _validate_server_name(name: object) -> None:
