@@ -647,3 +647,20 @@ git diff --check
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
 - Commit: `fix(volume04): validate upsert point batches`
+
+## 2026-08-11 — Verification Tick 23 완료
+
+### 재검증 결과
+
+- 허용된 Volume 04 단위 테스트 5개를 함께 실행해 **60 passed in 0.28s**를 확인했습니다.
+- `ruff check src/ai_platform/embeddings examples/volume04` 및 Volume 04 테스트 대상은 통과했고, `mypy src/ai_platform/embeddings`도 **5 source files**에서 오류 없이 통과했습니다.
+- 네 개의 결정적 local mock 예제를 모두 실행했습니다. embedding 예제는 API retry 문서를 `score=0.548`로 1위에, payload-filter 예제는 `collection_size=3`과 `retry-guide`를 반환했습니다. 품질 예제는 `precision_at_1=1.0`, `recall_at_1=1.0`, `mrr=1.0`, `answerable=True`였고 lifecycle 예제는 `deleted_count=1`, `reindexed_version=2`, `collection_size=3`, `top_1_recovered=True`였습니다.
+- 검증 마지막의 `git diff --check`도 통과했습니다. 기록 전 작업 트리는 clean했습니다.
+
+### 범위 및 완료 상태
+
+- 이번 tick은 외부 API, 모델 다운로드, Docker, Qdrant, database 또는 비밀값을 사용하지 않은 결정적 local mock 재검증입니다.
+- 실제 Qdrant service DoD(고정 버전 local-only Compose, schema 조회, payload filter·upsert·delete·reindex parity, cleanup/idempotency)는 cron의 허용 경로와 실행 제한 밖이어서 여전히 미검증입니다.
+- 따라서 `VOLUME04_COMPLETE=true`를 추가하지 않았고 cron pause도 실행하지 않았습니다.
+
+`uv`는 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고가 있었지만, uv가 프로젝트 환경으로 위 검증을 완료했습니다.
