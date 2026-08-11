@@ -1092,3 +1092,50 @@ def test_json_checkpoint_path_aliases_share_a_normalized_lock_for_risky_rejectio
     assert rejected.result is None
     assert [event.node for event in rejected.events] == ["plan", "approval", "approval"]
     assert "execute" not in [event.node for event in rejected.events]
+
+
+def test_json_checkpoint_path_aliases_share_a_normalized_lock_for_risky_starts(
+    tmp_path: Path,
+) -> None:
+    """서로 다른 경로 표기도 resolve 뒤 위험 run 하나만 승인 대기로 만든다."""
+    checkpoint_path = tmp_path / "normalized-shared-starts.json"
+    alias_directory = tmp_path / "path-alias"
+    alias_directory.mkdir()
+    alias_path = alias_directory / ".." / checkpoint_path.name
+    assert checkpoint_path != alias_path
+    adapters = tuple(
+        WorkflowApiAdapter(
+            workflow=DeterministicWorkflow(
+                checkpointer=JsonFileCheckpointer(
+                    path=checkpoint_path if index % 2 == 0 else alias_path
+                )
+            )
+        )
+        for index in range(8)
+    )
+    request = StartWorkflowRequest(
+        run_id="json-normalized-path-start-001",
+        task="학습용 배포를 준비한다",
+        action=ActionKind.DEPLOY,
+    )
+    barrier = Barrier(8)
+
+    def start_once(index: int) -> WorkflowStatus | str:
+        barrier.wait(timeout=5)
+        try:
+            return adapters[index].start(request=request).status
+        except WorkflowRunConflictError:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(start_once, range(8)))
+
+    assert outcomes.count(WorkflowStatus.WAITING_FOR_APPROVAL) == 1
+    assert outcomes.count("conflict") == 7
+    waiting = JsonFileCheckpointer(path=checkpoint_path).load(run_id=request.run_id)
+    assert waiting.action is ActionKind.DEPLOY
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert waiting.approval_granted is None
+    assert waiting.result is None
+    assert [event.node for event in waiting.events] == ["plan", "approval"]
+    assert "execute" not in [event.node for event in waiting.events]

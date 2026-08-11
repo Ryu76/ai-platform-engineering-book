@@ -29,10 +29,11 @@
 18. [동일 JSON 경로의 독립 Checkpointer 동시 거절 안전성](18-json-shared-path-concurrent-rejection.md)
 19. [정규화된 JSON 경로 별칭의 동시 승인 안전성](19-json-normalized-path-concurrent-approval.md)
 20. [정규화된 JSON 경로 별칭의 동시 거절 안전성](20-json-normalized-path-concurrent-rejection.md)
+21. [정규화된 JSON 경로 별칭의 동시 시작 안전성](21-json-normalized-path-concurrent-start.md)
 
 ## 예정 장
 
-이 슬라이스에서는 서로 다른 `Path` 표기(`path-alias/../checkpoints.json`)라도 정규화 뒤 같은 JSON 파일을 가리키면, 독립 Checkpointer 인스턴스의 동시 거절 요청 중 정확히 하나만 위험 작업의 승인 대기 Checkpoint를 `REJECTED`로 소비하도록 경로 단위 Lock과 비교-교체 계약을 검증했습니다. 중복 요청은 기존 Action·거절 상태·감사 이벤트를 바꾸지 않고 충돌로 끝나며, 어떤 요청도 `execute`를 기록하지 않습니다. 이 Lock 보장은 단일 프로세스의 동일 로컬 경로 범위에만 적용되며, FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
+이 슬라이스에서는 서로 다른 `Path` 표기(`path-alias/../checkpoints.json`)라도 정규화 뒤 같은 JSON 파일을 가리키면, 독립 Checkpointer 인스턴스의 동시 위험 작업 시작 요청 중 정확히 하나만 `WAITING_FOR_APPROVAL` Checkpoint를 생성하도록 경로 단위 Lock과 원자적 생성 계약을 검증했습니다. 중복 요청은 기존 Action·승인 대기 상태·감사 이벤트를 바꾸지 않고 충돌로 끝나며, 어떤 요청도 `execute`를 기록하지 않습니다. 이 Lock 보장은 단일 프로세스의 동일 로컬 경로 범위에만 적용되며, FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
 
 ## 이번 기반 결과물
 
@@ -58,6 +59,7 @@
 - `examples/volume09/json_shared_path_concurrent_rejection_workflow.py`: 같은 JSON 경로를 여는 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 거절하는 데모
 - `examples/volume09/json_normalized_path_concurrent_approval_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 소비하는 데모
 - `examples/volume09/json_normalized_path_concurrent_rejection_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 거절하는 데모
+- `examples/volume09/json_normalized_path_concurrent_start_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 생성하는 데모
 - `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작 계약 테스트
 
 
