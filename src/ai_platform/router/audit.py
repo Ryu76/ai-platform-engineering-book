@@ -62,10 +62,10 @@ def validate_router_audit_record(
     normalized_sensitive_values = _normalize_sensitive_values(sensitive_values)
     _validate_mapping(record, normalized_sensitive_values)
     try:
-        json.dumps(record)
+        json.dumps(record, allow_nan=False)
     except (TypeError, ValueError) as error:
         raise UnsafeRouterAuditRecordError(
-            "router audit record must be JSON serializable"
+            "router audit record must be strict JSON serializable"
         ) from error
 
 

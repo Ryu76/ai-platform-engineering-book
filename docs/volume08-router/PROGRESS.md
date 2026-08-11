@@ -574,3 +574,48 @@ PRD DoD 상태:
 - 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
 - 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
 - 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-11 — Tick 14: strict JSON Router audit 경계
+
+완료한 범위:
+
+- `validate_router_audit_record()`의 JSON 검증을 `allow_nan=False` strict mode로 강화했습니다. 이에 따라 Python 기본 encoder가 관대하게 출력할 수 있는 `NaN`, `Infinity`, `-Infinity`를 감사 record에서 fail closed 합니다.
+- 고정 audit fixture 테스트가 `Decimal` 같은 JSON 외 객체뿐 아니라 세 가지 비유한 float 값을 모두 `UnsafeRouterAuditRecordError`로 거부함을 검증합니다.
+- 미니 프로젝트 문서와 학습자 체크리스트에 strict JSON 경계, 오류 해결 방법, 완료 조건을 반영했습니다. Router fixture, 정책 선택, 외부 호출 경계에는 변경이 없습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+34 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 13 source files
+
+uv run pytest tests/unit/test_volume08_router_audit.py tests/unit/test_volume08_router_mini_project.py -q
+7 passed in 0.65s
+
+uv run pytest tests/unit/test_volume08_*.py -q
+80 passed in 0.78s
+
+uv run pytest -q
+141 passed in 1.99s
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 strict JSON audit report 출력; 외부 호출 없음
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
+- 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
+- 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.

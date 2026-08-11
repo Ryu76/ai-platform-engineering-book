@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from math import inf, nan
 
 import pytest
 
@@ -45,11 +46,16 @@ def test_audit_record_rejects_sensitive_text_even_under_an_allowed_field() -> No
         )
 
 
-def test_audit_record_rejects_non_json_values_and_invalid_sensitive_inputs() -> None:
+def test_audit_record_rejects_non_strict_json_values_and_invalid_sensitive_inputs() -> None:
     with pytest.raises(UnsafeRouterAuditRecordError, match="non-JSON value"):
         validate_router_audit_record(
             {"request_id": "audit-decimal-001", "confidence": Decimal("1")}
         )
+    for unsafe_float in (nan, inf, -inf):
+        with pytest.raises(UnsafeRouterAuditRecordError, match="strict JSON serializable"):
+            validate_router_audit_record(
+                {"request_id": "audit-non-finite-001", "confidence": unsafe_float}
+            )
     with pytest.raises(UnsafeRouterAuditRecordError, match="nonempty strings"):
         validate_router_audit_record({"request_id": "audit-empty-001"}, sensitive_values=("",))
     with pytest.raises(UnsafeRouterAuditRecordError, match="iterable of strings"):
