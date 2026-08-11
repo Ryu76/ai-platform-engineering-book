@@ -13,6 +13,7 @@ from enum import StrEnum
 from types import MappingProxyType
 
 from ai_platform.mcp.catalog import McpServerCatalog
+from ai_platform.mcp.prompts import McpPromptCatalog
 from ai_platform.mcp.resources import McpResourceCatalog
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
@@ -53,10 +54,10 @@ class McpJsonRpcRequest:
 class McpStdioSession:
     """고정 lifecycle 뒤 catalog를 read-only 목록 method로만 노출한다.
 
-    ``tools/list``과 ``resources/list``은 고정된 catalog snapshot만 응답한다.
-    ``tools/call``과 ``resources/read``를 포함한 다른 모든 method는 dispatcher나
-    loader에 전달하지 않으므로 transport metadata가 Tool 실행 인자나 승인 입력으로
-    섞이거나 URI가 파일 경로로 해석될 수 없다.
+    ``tools/list``, ``resources/list``, ``prompts/list``은 고정된 catalog snapshot만
+    응답한다. ``tools/call``, ``resources/read``, ``prompts/get``을 포함한 다른 모든
+    method는 dispatcher, loader, prompt renderer에 전달하지 않으므로 transport metadata가
+    Tool 실행 인자나 승인 입력으로 섞이거나 URI가 파일 경로로 해석될 수 없다.
     """
 
     def __init__(
@@ -64,12 +65,14 @@ class McpStdioSession:
         *,
         catalog: McpServerCatalog | None = None,
         resource_catalog: McpResourceCatalog | None = None,
+        prompt_catalog: McpPromptCatalog | None = None,
         max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
     ) -> None:
         _validate_max_message_bytes(max_message_bytes)
         self._max_message_bytes = max_message_bytes
         self._catalog = catalog or McpServerCatalog(())
         self._resource_catalog = resource_catalog or McpResourceCatalog(())
+        self._prompt_catalog = prompt_catalog or McpPromptCatalog(())
         self._state = McpStdioState.WAITING_FOR_INITIALIZE
 
     @property
@@ -129,10 +132,10 @@ class McpStdioSession:
 
     def _receive_ready_request(self, request: McpJsonRpcRequest) -> str:
         """READY에서는 execution-free catalog list request만 허용한다."""
-        if request.method not in {"tools/list", "resources/list"}:
+        if request.method not in {"tools/list", "resources/list", "prompts/list"}:
             raise McpStdioError(
-                "no MCP methods are enabled besides read-only tools/list and resources/list "
-                "in this adapter"
+                "no MCP methods are enabled besides read-only tools/list, resources/list, "
+                "and prompts/list in this adapter"
             )
         if request.is_notification:
             raise McpStdioError(f"{request.method} must include a JSON-RPC request id")
@@ -141,8 +144,10 @@ class McpStdioSession:
         result: dict[str, object]
         if request.method == "tools/list":
             result = {"tools": list(self._catalog.list_tools())}
-        else:
+        elif request.method == "resources/list":
             result = {"resources": list(self._resource_catalog.list_resources())}
+        else:
+            result = {"prompts": list(self._prompt_catalog.list_prompts())}
         return encode_stdio_jsonrpc_message(
             {
                 "jsonrpc": "2.0",

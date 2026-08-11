@@ -6,6 +6,7 @@ import json
 import pytest
 
 from ai_platform.mcp.catalog import McpServerCatalog, McpToolDefinition
+from ai_platform.mcp.prompts import McpPromptCatalog, McpPromptMessage, McpStaticPrompt
 from ai_platform.mcp.resources import McpResourceCatalog, McpStaticResource
 from ai_platform.mcp.stdio import (
     MCP_PROTOCOL_VERSION,
@@ -126,6 +127,45 @@ def test_stdio_session_projects_fixed_catalog_with_read_only_resources_list() ->
     assert session.state is McpStdioState.READY
 
 
+def test_stdio_session_projects_fixed_catalog_with_read_only_prompts_list() -> None:
+    prompt_catalog = McpPromptCatalog(
+        (
+            McpStaticPrompt(
+                name="review-tool-boundary",
+                description="Reviews the fixed Tool Calling safety boundary.",
+                messages=(
+                    McpPromptMessage(
+                        role="system",
+                        content="Review allowlist and approval boundaries without executing Tools.",
+                    ),
+                ),
+            ),
+        )
+    )
+    session = McpStdioSession(prompt_catalog=prompt_catalog)
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"prompts-001","method":"prompts/list","params":{}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line) == {
+        "jsonrpc": "2.0",
+        "id": "prompts-001",
+        "result": {
+            "prompts": [
+                {
+                    "name": "review-tool-boundary",
+                    "description": "Reviews the fixed Tool Calling safety boundary.",
+                }
+            ]
+        },
+    }
+    assert session.state is McpStdioState.READY
+
+
 @pytest.mark.parametrize(
     ("raw_line", "message"),
     (
@@ -141,11 +181,18 @@ def test_stdio_session_projects_fixed_catalog_with_read_only_resources_list() ->
             '"params":{"cursor":"unexpected"}}\n',
             "resources/list params must be empty",
         ),
+        ('{"jsonrpc":"2.0","method":"prompts/list"}\n', "prompts/list must include"),
+        (
+            '{"jsonrpc":"2.0","id":"prompts-002","method":"prompts/list",'
+            '"params":{"cursor":"unexpected"}}\n',
+            "prompts/list params must be empty",
+        ),
         (
             '{"jsonrpc":"2.0","id":"read-001","method":"resources/read","params":{}}\n',
             "no MCP methods",
         ),
         ('{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n', "no MCP methods"),
+        ('{"jsonrpc":"2.0","id":"get-001","method":"prompts/get","params":{}}\n', "no MCP methods"),
     ),
 )
 def test_stdio_session_rejects_non_read_only_or_ambiguous_ready_methods(
