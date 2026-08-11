@@ -54,6 +54,35 @@ class WorkflowEvent:
     detail: str
 
 
+def reduce_events(
+    existing: tuple[WorkflowEvent, ...], updates: tuple[WorkflowEvent, ...]
+) -> tuple[WorkflowEvent, ...]:
+    """Node별 로컬 감사 이벤트를 기존 로그 뒤에 결정론적으로 병합한다.
+
+    ``updates``는 각각의 Node가 만든 로컬 업데이트이므로 1부터 연속된 순서를
+    가져야 한다. Reducer는 기존 로그 길이만큼 순서를 이동해 전체 Workflow 로그를
+    1부터 연속되게 유지한다. 병렬 Node의 도착 순서처럼 비결정적인 입력은 이 학습용
+    reducer에 전달하지 않고, 호출자가 먼저 안정적인 순서로 정해야 한다.
+    """
+    _require_contiguous_event_sequence(existing, field="existing events")
+    _require_contiguous_event_sequence(updates, field="event updates")
+    offset = len(existing)
+    normalized_updates = tuple(
+        replace(event, sequence=offset + index)
+        for index, event in enumerate(updates, start=1)
+    )
+    return (*existing, *normalized_updates)
+
+
+def _require_contiguous_event_sequence(
+    events: tuple[WorkflowEvent, ...], *, field: str
+) -> None:
+    """Reducer 입력이 1부터 시작하는 결정론적 로컬 감사 순서인지 확인한다."""
+    for expected_sequence, event in enumerate(events, start=1):
+        if event.sequence != expected_sequence:
+            raise ValueError(f"{field} must have a contiguous sequence starting at 1")
+
+
 @dataclass(frozen=True)
 class StreamUpdate:
     """한 Node 전이 뒤 구독자에게 전달하는 결정론적 상태 업데이트다.
@@ -193,7 +222,7 @@ class WorkflowState:
         attempt_count: int | None = None,
     ) -> WorkflowState:
         """상태 변경과 함께 순서가 정해진 이벤트를 추가한다."""
-        event = WorkflowEvent(sequence=len(self.events) + 1, node=node, detail=detail)
+        event = WorkflowEvent(sequence=1, node=node, detail=detail)
         return replace(
             self,
             status=self.status if status is None else status,
@@ -206,5 +235,5 @@ class WorkflowState:
             selected_route=self.selected_route if selected_route is None else selected_route,
             result=self.result if result is None else result,
             attempt_count=self.attempt_count if attempt_count is None else attempt_count,
-            events=(*self.events, event),
+            events=reduce_events(self.events, (event,)),
         )

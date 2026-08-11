@@ -26,9 +26,11 @@ from ai_platform.graph import (
     StreamingWorkflow,
     SubgraphWorkflow,
     WorkflowApiAdapter,
+    WorkflowEvent,
     WorkflowRunConflictError,
     WorkflowState,
     WorkflowStatus,
+    reduce_events,
 )
 
 
@@ -98,6 +100,34 @@ def test_state_rejects_empty_task() -> None:
     """상태 입력 검증이 빈 작업을 Node까지 전달하지 않는다."""
     with pytest.raises(ValueError, match="task must not be empty"):
         WorkflowState.start(task="  ", action=ActionKind.READ)
+
+
+def test_event_reducer_appends_local_node_updates_in_a_contiguous_audit_order() -> None:
+    """Reducer는 Node별 로컬 이벤트를 기존 감사 로그 뒤에 결정론적으로 병합한다."""
+    existing = (WorkflowEvent(sequence=1, node="plan", detail="계획"),)
+    updates = (
+        WorkflowEvent(sequence=1, node="approval", detail="안전 작업 확인"),
+        WorkflowEvent(sequence=2, node="execute", detail="오프라인 완료"),
+    )
+
+    merged = reduce_events(existing, updates)
+
+    assert [event.sequence for event in merged] == [1, 2, 3]
+    assert [event.node for event in merged] == ["plan", "approval", "execute"]
+    assert [event.detail for event in merged] == ["계획", "안전 작업 확인", "오프라인 완료"]
+
+
+def test_event_reducer_rejects_non_contiguous_existing_or_local_update_sequences() -> None:
+    """모호한 이벤트 순서는 reducer 경계에서 명시적으로 거부한다."""
+    invalid_existing = (WorkflowEvent(sequence=2, node="plan", detail="계획"),)
+    valid_update = (WorkflowEvent(sequence=1, node="approval", detail="확인"),)
+
+    with pytest.raises(ValueError, match="existing events"):
+        reduce_events(invalid_existing, valid_update)
+
+    invalid_updates = (WorkflowEvent(sequence=2, node="approval", detail="확인"),)
+    with pytest.raises(ValueError, match="event updates"):
+        reduce_events((), invalid_updates)
 
 
 def test_high_confidence_router_decision_uses_selected_specialist_node() -> None:

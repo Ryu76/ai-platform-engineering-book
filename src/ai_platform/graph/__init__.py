@@ -19,6 +19,7 @@ from ai_platform.graph.state import (
     WorkflowEvent,
     WorkflowState,
     WorkflowStatus,
+    reduce_events,
 )
 from ai_platform.graph.workflow import (
     DeterministicWorkflow,
@@ -58,4 +59,5 @@ __all__ = [
     "WorkflowRunConflictError",
     "WorkflowState",
     "WorkflowStatus",
+    "reduce_events",
 ]

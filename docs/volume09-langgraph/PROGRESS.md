@@ -436,3 +436,66 @@ $ git diff --check
 ## 다음 작업
 
 - 별도 승인된 프로젝트 의존성 변경이 있을 때 FastAPI를 추가하고, 이 어댑터를 실제 route·TestClient에 연결합니다. 그 전까지 HTTP 서버·네트워크 실행은 하지 않습니다.
+
+## 최신 슬라이스 — State Reducer와 감사 이벤트 병합
+
+- `docs/volume09-langgraph/12-state-reducer-audit-events.md`
+  - PRD의 Reducer 필수 내용을 14개 장 템플릿으로 문서화했습니다. 로컬 Node 이벤트와 전역 감사 sequence의 차이, 결정론성 전제, 병렬 도착 순서의 한계, Approval 경계를 설명했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 열두 번째 장 링크와 Reducer 기반 감사 이벤트 병합 범위를 추가했습니다.
+- `src/ai_platform/graph/state.py`, `src/ai_platform/graph/__init__.py`
+  - `reduce_events()`를 추가하고 `WorkflowState.record()`가 이 Reducer를 거치도록 변경했습니다. 기존·로컬 이벤트는 각각 1부터 연속된 sequence여야 하며, 병합 결과만 전역 연속 sequence를 갖습니다.
+- `examples/volume09/reducer_workflow.py`
+  - `plan | approval | execute` 로컬 이벤트가 `1 | 2 | 3` 감사 순서로 병합되는 오프라인 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 정상 병합과 손상된 기존/로컬 sequence 거부 계약을 추가했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 Reducer와 별개로 엄격한 별도 승인 전에는 `execute` Node로 이동하지 않습니다.
+
+## 최신 검증 기록 — Reducer 슬라이스
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run python examples/volume09/reducer_workflow.py
+events=plan | approval | execute
+sequences=1 | 2 | 3
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+34 passed in 0.33s
+
+$ uv run pytest -q
+95 passed in 1.12s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 다음 작업
+
+- 별도 승인된 의존성·프로젝트 설정 변경이 있을 때에만 실제 `langgraph`와 FastAPI `TestClient` 통합을 추가합니다. 그 전까지는 외부 서버·네트워크·위험 작업을 실행하지 않습니다.
