@@ -19,5 +19,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 9. [MCP Prompt: 고정 allowlist 템플릿을 보간 없이 제공하기](09-mcp-static-prompts.md) — 사용자 입력을 받거나 보간하지 않고 검토된 고정 message만 반환하는 경계
 10. [MCP Tool dispatcher: 검증된 요청을 실행 정책에 묶기](10-mcp-tool-dispatcher.md) — parser·allowlist·승인·timeout/retry·최소 감사를 결합하되 전송 계층은 열지 않는 실행 경계
 11. [MCP STDIO lifecycle: JSON-RPC 한 줄과 handshake를 좁게 검증하기](11-mcp-stdio-lifecycle.md) — 실제 표준 입출력이나 Tool 실행 없이 LF framing·크기·고정 protocol version·initialize 순서를 검증하는 adapter
+12. [MCP STDIO `tools/list`: handshake 뒤 allowlist catalog만 읽기 전용으로 노출하기](12-mcp-stdio-tools-list.md) — READY 뒤 catalog snapshot만 JSON-RPC response로 반환하고 Tool 실행 경계를 열지 않는 adapter
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.

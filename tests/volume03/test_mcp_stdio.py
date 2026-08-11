@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from ai_platform.mcp.catalog import McpServerCatalog, McpToolDefinition
 from ai_platform.mcp.stdio import (
     MCP_PROTOCOL_VERSION,
     McpStdioError,
@@ -51,6 +52,65 @@ def test_stdio_session_requires_initialize_then_notification_and_emits_response(
 
     assert session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n') is None
     assert session.state is McpStdioState.READY
+
+
+def test_stdio_session_projects_fixed_catalog_with_read_only_tools_list() -> None:
+    catalog = McpServerCatalog(
+        (
+            McpToolDefinition(
+                name="safe_echo",
+                description="Returns text without accessing an external system.",
+                input_schema={"type": "object", "properties": {}},
+            ),
+        )
+    )
+    session = McpStdioSession(catalog=catalog)
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"list-001","method":"tools/list","params":{}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line) == {
+        "jsonrpc": "2.0",
+        "id": "list-001",
+        "result": {
+            "tools": [
+                {
+                    "name": "safe_echo",
+                    "description": "Returns text without accessing an external system.",
+                    "inputSchema": {"type": "object", "properties": {}},
+                }
+            ]
+        },
+    }
+    assert session.state is McpStdioState.READY
+
+
+@pytest.mark.parametrize(
+    ("raw_line", "message"),
+    (
+        ('{"jsonrpc":"2.0","method":"tools/list"}\n', "tools/list must include"),
+        (
+            '{"jsonrpc":"2.0","id":"list-002","method":"tools/list",'
+            '"params":{"cursor":"unexpected"}}\n',
+            "tools/list params must be empty",
+        ),
+        ('{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n', "no MCP methods"),
+    ),
+)
+def test_stdio_session_rejects_non_read_only_or_ambiguous_ready_methods(
+    raw_line: str, message: str
+) -> None:
+    session = McpStdioSession()
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    with pytest.raises(McpStdioError, match=message):
+        session.receive_line(raw_line)
+
 
 
 def test_stdio_session_never_dispatches_tool_methods_after_handshake() -> None:

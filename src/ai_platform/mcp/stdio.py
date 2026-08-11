@@ -1,4 +1,4 @@
-"""한 줄 JSON-RPC만 검증하는 교육용 MCP STDIO lifecycle adapter.
+"""한 줄 JSON-RPC와 read-only ``tools/list``만 검증하는 MCP STDIO adapter.
 
 이 모듈은 실제 ``sys.stdin``/``sys.stdout``를 열거나 Tool을 실행하지 않는다. 호출자는
 입력 줄 하나를 ``receive_line()``에 전달하고, 반환된 한 줄만 stdout에 쓸 수 있다.
@@ -11,6 +11,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
+
+from ai_platform.mcp.catalog import McpServerCatalog
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
 DEFAULT_MAX_MESSAGE_BYTES = 16_384
@@ -48,16 +50,22 @@ class McpJsonRpcRequest:
 
 
 class McpStdioSession:
-    """고정 protocol version의 initialize lifecycle만 모델링한다.
+    """고정 lifecycle 뒤 catalog를 read-only ``tools/list``으로만 노출한다.
 
-    이 작은 adapter는 아직 ``tools/list`` 또는 ``tools/call``을 처리하지 않는다. 특히
-    Tool request를 dispatcher에 전달하지 않으므로 transport metadata가 Tool 실행 인자나
-    승인 입력으로 섞일 수 없다.
+    ``tools/list``은 고정된 ``McpServerCatalog`` snapshot만 응답한다. ``tools/call``과
+    다른 모든 method는 dispatcher에 전달하지 않으므로 transport metadata가 Tool 실행
+    인자나 승인 입력으로 섞일 수 없다.
     """
 
-    def __init__(self, *, max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES) -> None:
+    def __init__(
+        self,
+        *,
+        catalog: McpServerCatalog | None = None,
+        max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
+    ) -> None:
         _validate_max_message_bytes(max_message_bytes)
         self._max_message_bytes = max_message_bytes
+        self._catalog = catalog or McpServerCatalog(())
         self._state = McpStdioState.WAITING_FOR_INITIALIZE
 
     @property
@@ -66,7 +74,7 @@ class McpStdioSession:
         return self._state
 
     def receive_line(self, raw_line: str) -> str | None:
-        """한 framed JSON-RPC line을 검증하고 initialize response만 반환한다."""
+        """한 framed line을 검증하고 initialize 또는 read-only catalog response를 반환한다."""
         if self._state is McpStdioState.CLOSED:
             raise McpStdioError("STDIO session is closed")
 
@@ -79,7 +87,7 @@ class McpStdioSession:
         if self._state is McpStdioState.WAITING_FOR_INITIALIZED:
             self._receive_initialized_notification(request)
             return None
-        raise McpStdioError("no MCP methods are enabled after initialization in this adapter")
+        return self._receive_ready_request(request)
 
     def close(self) -> None:
         """새 input을 거부하도록 session을 닫는다; stdout이나 외부 resource는 건드리지 않는다."""
@@ -114,6 +122,25 @@ class McpStdioSession:
         if request.params:
             raise McpStdioError("notifications/initialized must not include params")
         self._state = McpStdioState.READY
+
+    def _receive_ready_request(self, request: McpJsonRpcRequest) -> str:
+        """READY에서는 execution-free ``tools/list`` request 하나만 허용한다."""
+        if request.method != "tools/list":
+            raise McpStdioError(
+                "no MCP methods are enabled besides read-only tools/list in this adapter"
+            )
+        if request.is_notification:
+            raise McpStdioError("tools/list must include a JSON-RPC request id")
+        if request.params:
+            raise McpStdioError("tools/list params must be empty when present")
+        return encode_stdio_jsonrpc_message(
+            {
+                "jsonrpc": "2.0",
+                "id": request.request_id,
+                "result": {"tools": list(self._catalog.list_tools())},
+            },
+            max_message_bytes=self._max_message_bytes,
+        )
 
 
 def parse_stdio_jsonrpc_line(
