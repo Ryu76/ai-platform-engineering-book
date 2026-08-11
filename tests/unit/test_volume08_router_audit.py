@@ -170,6 +170,14 @@ def test_mini_project_report_rejects_wrong_route_specific_audit_value_types() ->
     invalid_reports = (
         {**report, "policy": {**report["policy"], "confidence": 1}},
         {**report, "keyword": {**report["keyword"], "matched_keywords": ("order",)}},
+        {**report, "keyword": {**report["keyword"], "matched_keywords": [" "]}},
+        {
+            **report,
+            "fallback": {
+                **report["fallback"],
+                "attempted_policy_names": ["mini-primary-policy", "mini-primary-policy"],
+            },
+        },
         {**report, "fallback": {**report["fallback"], "fallback_count": True}},
         {**report, "escalation": {**report["escalation"], "attempted_stage_names": []}},
         {**report, "api": {**report["api"], "status_code": True}},

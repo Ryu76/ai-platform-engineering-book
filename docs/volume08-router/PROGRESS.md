@@ -843,3 +843,46 @@ PRD DoD 상태:
 - 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
 - PRD Volume DoD의 공유 `docs/glossary.md` 핵심 용어 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
 - 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-11 — Tick 20: audit 순서 record 고유성 경계
+
+완료한 범위:
+
+- `validate_router_audit_report()`의 keyword·fallback·escalation 순서 field가 비어 있지 않은 문자열 `list`인 데 더해, 공백 전용 항목이나 중복 이름을 fail closed 하게 거부하도록 강화했습니다.
+- 따라서 잘못 조립된 audit report가 같은 policy/stage/keyword를 여러 번 시도한 것처럼 표시하거나 의미 없는 공백 식별자를 export하는 일을 방지합니다. 정상 Router의 결정론적 순서는 그대로 보존합니다.
+- 고정 mini-project fixture 회귀로 공백 전용 keyword와 중복 fallback policy 이름을 `UnsafeRouterAuditRecordError`로 거부함을 검증했습니다.
+- 미니 프로젝트 장과 학습자 체크리스트에 순서 field의 고유·비공백 계약과 복구 방법을 반영했습니다. live Agent·Tool·Model·LLM·embedding·HTTP API·네트워크 호출은 하지 않았습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+34 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 13 source files
+
+uv run pytest tests/unit/test_volume08_*.py -q
+88 passed in 0.62s
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 canonical strict JSON audit report 출력; 순서 field 고유성·비공백, schema·수치 범위·원문 비노출 검사를 통과, 외부 호출 없음
+
+uv run pytest -q
+149 passed in 1.13s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
+- PRD Volume DoD의 공유 `docs/glossary.md` 핵심 용어 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
+- 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.

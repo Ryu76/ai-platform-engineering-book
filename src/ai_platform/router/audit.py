@@ -321,11 +321,12 @@ def _validate_route_target_kind(value: object) -> None:
 
 
 def _validate_list_of_nonempty_strings(value: object) -> None:
-    """audit report의 JSON array field가 비어 있지 않은 문자열 목록인지 확인한다."""
+    """순서 audit field가 고유한 비공백 문자열 JSON array인지 확인한다."""
     if (
         not isinstance(value, list)
         or not value
-        or any(not isinstance(item, str) or not item for item in value)
+        or any(not isinstance(item, str) or not item.strip() for item in value)
+        or len(value) != len(set(value))
     ):
         raise UnsafeRouterAuditRecordError(
             "router audit report record does not match configured route value types"
