@@ -80,6 +80,12 @@ def validate_agent_boundary(name: str, agent: object) -> None:
         )
 
 
+def validate_fixed_script(name: str, script: object) -> None:
+    """Require the finite deterministic mock script to be immutable at setup time."""
+    if not isinstance(script, tuple) or not script:
+        raise WorkflowConfigurationError(f"{name} must be a non-empty immutable tuple")
+
+
 class DeterministicMockAgent:
     """Offline mock agent that consumes a fixed response script in call order.
 
@@ -88,10 +94,9 @@ class DeterministicMockAgent:
     """
 
     def __init__(self, *, role: str, responses: tuple[AgentResponse, ...]) -> None:
-        if not role.strip():
+        if not isinstance(role, str) or not role.strip():
             raise WorkflowConfigurationError("role must not be empty")
-        if not responses:
-            raise WorkflowConfigurationError("responses must not be empty")
+        validate_fixed_script("responses", responses)
         self.role = role
         self._responses = responses
         self.calls: list[AgentContext] = []

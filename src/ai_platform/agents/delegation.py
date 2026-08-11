@@ -12,7 +12,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from ai_platform.agents.workflow import AgentProtocolError, WorkflowConfigurationError
+from ai_platform.agents.workflow import (
+    AgentProtocolError,
+    WorkflowConfigurationError,
+    validate_fixed_script,
+)
 
 
 class DelegationStatus(StrEnum):
@@ -95,8 +99,7 @@ class DeterministicMockCoordinator:
     """Offline coordinator that consumes a fixed plan script in call order."""
 
     def __init__(self, *, plans: tuple[DelegationPlan, ...]) -> None:
-        if not plans:
-            raise WorkflowConfigurationError("plans must not be empty")
+        validate_fixed_script("plans", plans)
         self._plans = plans
         self.calls: list[DelegationContext] = []
 
@@ -115,10 +118,9 @@ class DeterministicMockWorker:
     """Offline worker that consumes fixed outcomes and fails closed on exhaustion."""
 
     def __init__(self, *, role: str, responses: tuple[WorkerResponse, ...]) -> None:
-        if not role.strip():
+        if not isinstance(role, str) or not role.strip():
             raise WorkflowConfigurationError("role must not be empty")
-        if not responses:
-            raise WorkflowConfigurationError("responses must not be empty")
+        validate_fixed_script("responses", responses)
         self.role = role
         self._responses = responses
         self.calls: list[DelegationContext] = []

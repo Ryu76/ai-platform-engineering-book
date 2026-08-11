@@ -12,7 +12,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
-from ai_platform.agents.workflow import AgentProtocolError, WorkflowConfigurationError
+from ai_platform.agents.workflow import (
+    AgentProtocolError,
+    WorkflowConfigurationError,
+    validate_fixed_script,
+)
 
 
 class ConflictApproval(StrEnum):
@@ -69,10 +73,9 @@ class DeterministicMockConflictAgent:
     """Offline proposal agent that consumes a fixed local script in call order."""
 
     def __init__(self, *, role: str, proposals: tuple[ConflictProposal, ...]) -> None:
-        if not role.strip():
+        if not isinstance(role, str) or not role.strip():
             raise WorkflowConfigurationError("role must not be empty")
-        if not proposals:
-            raise WorkflowConfigurationError("proposals must not be empty")
+        validate_fixed_script("proposals", proposals)
         self.role = role
         self._proposals = proposals
         self.calls: list[ConflictContext] = []

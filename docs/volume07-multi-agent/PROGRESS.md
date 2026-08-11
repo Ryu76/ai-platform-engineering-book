@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 09: 결정론적 Mock script 불변성
+
+- `DeterministicMockAgent`, `DeterministicMockCoordinator`, `DeterministicMockWorker`, `DeterministicMockConflictAgent`는 response/plan/proposal script로 비어 있지 않은 immutable tuple만 구성 단계에서 허용한다. mutable list는 실행 전 `WorkflowConfigurationError`로 fail-closed한다.
+- 모든 role 기반 결정론적 Mock은 role을 비어 있지 않은 문자열로 검사하여 문자열이 아닌 값도 `AttributeError` 없이 명시적인 구성 오류로 종료한다.
+- `tests/volume07/test_immutable_mock_scripts.py`는 네 Mock이 mutable script와 잘못된 role을 실행 전 거절하고, tuple script의 소진은 fallback 없이 기존 `AgentProtocolError` 경계를 유지하는지 고정한다.
+- `docs/volume07-multi-agent/06-immutable-mock-scripts.md`에 script container 불변성과 bounded 호출 예산의 관계를 기록했다.
+
 ## 2026-08-11 — Slice 08: 구성 단계 Agent 경계 검증
 
 - `src/ai_platform/agents/workflow.py`와 `release_handoff.py`는 모든 named role에 호출 가능한 `act(context)` 경계가 있는지 생성 시 검사한다. 잘못된 역할은 첫 Agent 호출 전에 `WorkflowConfigurationError`로 fail-closed한다.
