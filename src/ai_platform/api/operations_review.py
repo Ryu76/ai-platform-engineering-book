@@ -43,6 +43,12 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     hpa = (repository_root / "k8s/volume11/autoscaling/hpa.yaml").read_text(encoding="utf-8")
     ingress = (repository_root / "k8s/volume11/ingress.yaml").read_text(encoding="utf-8")
     pvc = (repository_root / "k8s/volume11/storage/pvc.yaml").read_text(encoding="utf-8")
+    namespace = (repository_root / "k8s/volume11/namespace.yaml").read_text(
+        encoding="utf-8"
+    )
+    configmap = (repository_root / "k8s/volume11/configmap.yaml").read_text(
+        encoding="utf-8"
+    )
     _before_startup, startup_marker, after_startup = deployment.partition("startupProbe:")
     startup_probe, _before_readiness, _after_readiness = after_startup.partition(
         "readinessProbe:"
@@ -77,6 +83,14 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             "      app.kubernetes.io/name: ai-platform-api" in deployment
             and "template:\n    metadata:\n      labels:\n"
             "        app.kubernetes.io/name: ai-platform-api" in deployment
+        ),
+        "base_resources_share_example_namespace": (
+            "name: ai-platform-example" in namespace
+            and all(
+                "namespace: ai-platform-example" in resource
+                for resource in (configmap, deployment, service, ingress)
+            )
+            and "- namespace.yaml" in base_kustomization
         ),
         "deployment_declares_startup_probe_boundary": bool(startup_marker)
         and all(
