@@ -120,6 +120,31 @@ def test_upsert_replaces_same_id_and_keeps_collection_size(
     assert [(result.id, result.payload["version"]) for result in results] == [("retry-guide", 2)]
 
 
+def test_upsert_defensively_copies_caller_owned_vector_and_payload() -> None:
+    """색인 뒤 caller가 입력 객체를 바꿔도 저장된 point가 바뀌면 안 된다."""
+    store = InMemoryVectorStore()
+    store.create_collection("copy_boundary", vector_size=2)
+    vector = [1.0, 0.0]
+    payload = {"topic": "api", "version": 1}
+
+    store.upsert(
+        "copy_boundary",
+        [VectorPoint(id="retry-guide", vector=vector, payload=payload)],
+    )
+    vector[0] = 0.0
+    vector[1] = 1.0
+    payload["topic"] = "mutated"
+    payload["version"] = 2
+
+    results = store.search("copy_boundary", [1.0, 0.0])
+
+    assert [(result.id, result.score, dict(result.payload)) for result in results] == [
+        ("retry-guide", 1.0, {"topic": "api", "version": 1})
+    ]
+    with pytest.raises(TypeError):
+        results[0].payload["topic"] = "changed"  # type: ignore[index]
+
+
 def test_upsert_is_atomic_when_a_batch_contains_an_invalid_vector(
     populated_store: tuple[InMemoryVectorStore, DeterministicEmbeddingModel],
 ) -> None:

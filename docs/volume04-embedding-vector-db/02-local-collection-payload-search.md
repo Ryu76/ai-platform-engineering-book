@@ -88,7 +88,7 @@ collection_size=3
 
 Only one result is printed because the `topic=api` filter excludes the vector and infrastructure documents. `retry-guide` should be first because it shares the deterministic mock's query tokens. The decimal score is illustrative; verify the collection size, returned ID, payload topic, and order instead of hard-coding a rounded score.
 
-The test command must report all tests passed. It covers ranking and payload return, metadata filtering, ID replacement, atomic batch rejection, deletion, validation errors, and deterministic tie ordering.
+The test command must report all tests passed. It covers ranking and payload return, metadata filtering, ID replacement, caller-mutation isolation, atomic batch rejection, deletion, validation errors, and deterministic tie ordering.
 
 ## 9. Troubleshooting
 
@@ -98,6 +98,7 @@ The test command must report all tests passed. It covers ranking and payload ret
 | `vector must have dimension 64` | A different model dimension was used for a point or query | Use the same embedding configuration for creation, indexing, and search. |
 | `vector must not be a zero vector` | A manually supplied empty-signal vector was used | Embed non-empty text or supply a meaningful, non-zero numeric vector. |
 | No results | The metadata filter does not exactly match any payload key, value, and scalar type | Print the stored payload keys, values, and types; a missing key does not match `None`, and `true` does not match integer `1`. |
+| An indexed record unexpectedly changed after `upsert` | Caller code mutated the original vector or payload object | Do not rely on caller-owned mutable input after writing. The local store copies inputs into immutable stored records; query again and inspect the returned payload. |
 | The expected document is not first | This is a token-hash educational mock, not semantic AI | Check shared tokens and use a real evaluated embedding model only in a later explicit integration. |
 
 ## 10. Extension exercise

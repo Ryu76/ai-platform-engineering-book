@@ -503,3 +503,41 @@ git diff --check
 ## 다음 slice
 
 실제 vector database DoD는 현재 cron 범위 밖입니다. 별도 허가된 local integration에서 pinned Qdrant의 schema, payload filter, ID upsert/delete, versioned reindex parity를 실행·기록합니다. 그 전에는 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않습니다.
+
+## 2026-08-11 — Slice 19 완료: indexed point의 caller mutation 격리
+
+### 추가한 결과물
+
+- `test_volume04_vector_store.py`에 upsert 뒤 원본 mutable vector와 payload를 바꿔도 indexed point의 vector, metadata, score가 바뀌지 않는 회귀 테스트를 추가했습니다.
+- 검색 결과 payload가 불변 mapping으로 반환되어 결과를 통해 저장된 metadata를 수정할 수 없음을 검증했습니다.
+- 02장에 defensive-copy 저장 경계의 검증 범위와 caller mutation 오류 해결 항목을 보강했습니다.
+
+### 검증 결과
+
+```bash
+# 실행 위치: 저장소 루트
+uv run pytest tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py tests/unit/test_volume04_learning_materials.py -q
+# 49 passed in 0.31s
+uv run ruff check src/ai_platform/embeddings examples/volume04 tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py tests/unit/test_volume04_learning_materials.py
+# All checks passed!
+uv run mypy src/ai_platform/embeddings
+# Success: no issues found in 5 source files
+uv run python examples/volume04/embedding_similarity.py
+# retry 문서 score=0.548, 1위
+uv run python examples/volume04/vector_store_search.py
+# collection_size=3; retry-guide score=0.548, topic=api
+uv run python examples/volume04/retrieval_quality.py
+# precision_at_1=1.0; recall_at_1=1.0; mrr=1.0; answerable=True
+uv run python examples/volume04/reindex_lifecycle.py
+# deleted_count=1; reindexed_version=2; collection_size=3; top_1_recovered=True
+git diff --check
+# 공백 오류 없음
+```
+
+`uv`는 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고가 있었지만, uv가 프로젝트 환경을 사용해 검증을 완료했습니다.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+- Commit: `test(volume04): isolate indexed point inputs`.
