@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 같은 `JsonFileCheckpointer` 인스턴스를 공유하는 8개의 동시 `DEPLOY` 승인 요청에서도 정확히 하나만 승인 대기 Checkpoint를 소비하고, 하나의 오프라인 `COMPLETED` 결과만 기록함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 `execute` 이벤트를 추가하지 않습니다. JSON의 Lock 보장은 단일 인스턴스의 스레드 범위에 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다. 예제·Volume 09 테스트(37개)·전체 테스트(98개)·정적 검사·문서 검증을 통과했습니다.
+- 이번 슬라이스: 같은 `JsonFileCheckpointer` 인스턴스를 공유하는 8개의 동시 `DEPLOY` 시작 요청에서도 정확히 하나만 위험 작업의 `WAITING_FOR_APPROVAL` Checkpoint를 생성함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 기존 Action·승인 대기·감사 이벤트를 바꾸거나 `execute` 이벤트를 추가하지 않습니다. JSON의 Lock 보장은 단일 인스턴스의 스레드 범위에 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
@@ -514,6 +514,63 @@ $ git diff --check
   - 동시 승인 요청의 단일 완료·7개 충돌·단일 `execute` 이벤트와 메모리·JSON Checkpointer의 비교-교체 보존 계약을 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 모든 위험 ActionKind는 엄격한 별도 Boolean 승인 전에는 `WAITING_FOR_APPROVAL`을 벗어나지 않습니다.
+
+## 최신 슬라이스 — JSON 동시 시작 단일 생성
+
+- `docs/volume09-langgraph/15-json-checkpoint-concurrent-start.md`
+  - 같은 `JsonFileCheckpointer` 인스턴스에서 `save_if_absent()`가 동시 run 생성 하나만 허용하는 계약, 인스턴스 Lock의 범위, 운영용 조건부 삽입·멱등성 경계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 열다섯 번째 장 링크와 JSON 동시 시작 단일 생성 출고 범위를 추가했습니다.
+- `examples/volume09/json_concurrent_start_workflow.py`
+  - 8개의 동시 `DEPLOY` 시작 재전송에서 `waiting_for_approval=1`, `conflicts=7`, `plan | approval`만 출력하는 오프라인 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 같은 JSON Checkpointer 인스턴스의 8개 동시 시작에서 하나의 위험 Action·승인 대기만 보존하고 `execute`가 없음을 검증하는 계약을 추가했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 별도의 엄격한 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+
+## 최신 검증 기록 — JSON 동시 시작 단일 생성 슬라이스
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run python examples/volume09/json_concurrent_start_workflow.py
+waiting_for_approval=1
+conflicts=7
+checkpoint=waiting_for_approval
+events=plan | approval
+
+$ uv run pytest tests/unit/test_volume09_graph.py::test_concurrent_json_checkpoint_starts_create_one_pending_risky_run -q  # 10회 반복
+각 반복: 1 passed (0.27s~0.90s), 총 10/10 통과
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+38 passed in 0.65s
+
+$ uv run pytest -q
+99 passed in 1.78s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
 
 ## 최신 검증 기록 — 동시 승인 단일 소비 슬라이스
 
