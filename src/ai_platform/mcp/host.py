@@ -6,14 +6,31 @@ server selector는 exact allowlist lookup에만 쓰이며, 반환하는 immutabl
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from math import isfinite
 from types import MappingProxyType
+from typing import Protocol
 
 
 class McpStdioHostError(ValueError):
     """MCP STDIO host launch configuration 또는 allowlist selector가 유효하지 않을 때 발생한다."""
+
+
+class McpStdioChildProcess(Protocol):
+    """host가 소유한 child의 최소 종료 계약이다; 이 module은 process를 만들지 않는다."""
+
+    def poll(self) -> int | None:
+        """종료했다면 exit code를, 아직 실행 중이면 ``None``을 반환한다."""
+
+    def terminate(self) -> None:
+        """OS별 graceful termination 요청을 child에 한 번 전달한다."""
+
+    def wait(self, timeout: float) -> int | None:
+        """최대 ``timeout``만 기다리고 종료하지 않으면 ``None``을 반환한다."""
+
+    def kill(self) -> None:
+        """grace period 뒤 최후 수단으로 child를 강제 종료한다."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +69,25 @@ class McpStdioHostLaunchPlan:
     shutdown_grace_seconds: float
     restart_limit: int
 
+    def __post_init__(self) -> None:
+        """public snapshot constructor도 spec과 같은 finite host boundary를 유지한다."""
+        _validate_server_name(self.server_name)
+        _validate_argv(self.argv)
+        _validate_stream_limit(self.max_stdout_bytes, field_name="max_stdout_bytes")
+        _validate_stream_limit(self.max_stderr_bytes, field_name="max_stderr_bytes")
+        _validate_shutdown_grace_seconds(self.shutdown_grace_seconds)
+        _validate_restart_limit(self.restart_limit)
+
+
+@dataclass(frozen=True, slots=True)
+class McpStdioHostShutdownResult:
+    """한 child shutdown에서 요청한 단계와 최종 exit code의 immutable 기록이다."""
+
+    server_name: str
+    exit_code: int
+    termination_requested: bool
+    force_killed: bool
+
 
 class McpStdioHostAllowlist:
     """untrusted selector가 새 command, shell flag, resource limit을 주입하지 못하게 한다."""
@@ -86,6 +122,47 @@ class McpStdioHostAllowlist:
             shutdown_grace_seconds=server.shutdown_grace_seconds,
             restart_limit=server.restart_limit,
         )
+
+
+def shutdown_mcp_stdio_child(
+    plan: McpStdioHostLaunchPlan, child: McpStdioChildProcess
+) -> McpStdioHostShutdownResult:
+    """injected child를 유한한 grace period 뒤 한 번만 force-kill 한다.
+
+    실제 OS process 생성, shell parsing, signal 선택, pipe drain, restart는 이 함수의
+    범위 밖이다. 호출자는 allowlist에서 얻은 plan과 이미 소유한 child만 전달해야 한다.
+    """
+    initial_exit_code = _read_exit_code(child.poll, operation_name="poll")
+    if initial_exit_code is not None:
+        return McpStdioHostShutdownResult(
+            server_name=plan.server_name,
+            exit_code=initial_exit_code,
+            termination_requested=False,
+            force_killed=False,
+        )
+
+    _request_child_action(child.terminate, operation_name="terminate")
+    graceful_exit_code = _read_exit_code(
+        lambda: child.wait(plan.shutdown_grace_seconds), operation_name="graceful wait"
+    )
+    if graceful_exit_code is not None:
+        return McpStdioHostShutdownResult(
+            server_name=plan.server_name,
+            exit_code=graceful_exit_code,
+            termination_requested=True,
+            force_killed=False,
+        )
+
+    _request_child_action(child.kill, operation_name="kill")
+    forced_exit_code = _read_exit_code(lambda: child.wait(0.0), operation_name="forced wait")
+    if forced_exit_code is None:
+        raise McpStdioHostError("MCP STDIO child did not exit after forced shutdown")
+    return McpStdioHostShutdownResult(
+        server_name=plan.server_name,
+        exit_code=forced_exit_code,
+        termination_requested=True,
+        force_killed=True,
+    )
 
 
 def _validate_server_name(name: object) -> None:
@@ -130,3 +207,26 @@ def _validate_restart_limit(value: object) -> None:
     """crash/disconnect restart가 무한 loop가 되지 않도록 작은 retry budget을 강제한다."""
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 3:
         raise McpStdioHostError("restart_limit must be an integer between 0 and 3")
+
+
+def _read_exit_code(operation: Callable[[], int | None], *, operation_name: str) -> int | None:
+    """child adapter 오류나 모호한 exit code를 generic host error로 좁힌다."""
+    try:
+        exit_code = operation()
+    except Exception:
+        raise McpStdioHostError(f"MCP STDIO child {operation_name} failed") from None
+    if exit_code is None:
+        return None
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        raise McpStdioHostError(
+            f"MCP STDIO child {operation_name} returned an invalid exit code"
+        )
+    return exit_code
+
+
+def _request_child_action(action: Callable[[], None], *, operation_name: str) -> None:
+    """terminate/kill adapter의 예외 상세를 외부 caller에 노출하지 않는다."""
+    try:
+        action()
+    except Exception:
+        raise McpStdioHostError(f"MCP STDIO child {operation_name} failed") from None

@@ -3,10 +3,13 @@
 from ai_platform.mcp.catalog import McpCatalogError, McpServerCatalog, McpToolDefinition
 from ai_platform.mcp.dispatcher import McpDispatchError, dispatch_mcp_tool_call
 from ai_platform.mcp.host import (
+    McpStdioChildProcess,
     McpStdioHostAllowlist,
     McpStdioHostError,
     McpStdioHostLaunchPlan,
+    McpStdioHostShutdownResult,
     McpStdioServerSpec,
+    shutdown_mcp_stdio_child,
 )
 from ai_platform.mcp.prompts import (
     McpPromptCatalog,
@@ -39,9 +42,11 @@ __all__ = [
     "McpCallRequestError",
     "McpCatalogError",
     "McpDispatchError",
+    "McpStdioChildProcess",
     "McpStdioHostAllowlist",
     "McpStdioHostError",
     "McpStdioHostLaunchPlan",
+    "McpStdioHostShutdownResult",
     "McpPromptCatalog",
     "McpPromptError",
     "McpPromptMessage",
@@ -66,5 +71,6 @@ __all__ = [
     "parse_mcp_tool_call_request",
     "parse_stdio_jsonrpc_line",
     "run_mcp_stdio_session",
+    "shutdown_mcp_stdio_child",
     "dispatch_mcp_tool_call",
 ]
