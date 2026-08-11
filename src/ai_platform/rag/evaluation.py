@@ -254,6 +254,33 @@ class RetrievalEvaluationReport:
             "results": [result.to_payload() for result in self.results],
         }
 
+    def to_record_payload(self) -> dict[str, object]:
+        """로컬 재검증 파일용으로 질의를 포함한 완전한 평가 기록을 반환한다.
+
+        ``to_payload()``와 달리 이 값은 허용된 로컬 평가 기록 파일에만 저장한다.
+        회귀 비교 시 사례 호환성을 다시 확인할 수 있도록 각 사례의 질의를 포함한다.
+        """
+        return {
+            "top_k": self.top_k,
+            "evaluated_cases": self.evaluated_cases,
+            "recall_at_k": self.recall_at_k,
+            "hit_rate": self.hit_rate,
+            "mean_reciprocal_rank": self.mean_reciprocal_rank,
+            "results": [
+                {
+                    "case_id": result.case_id,
+                    "query": result.query,
+                    "expected_chunk_ids": list(result.expected_chunk_ids),
+                    "retrieved_chunk_ids": list(result.retrieved_chunk_ids),
+                    "first_relevant_rank": result.first_relevant_rank,
+                    "passed": result.passed,
+                    "recall_at_k": result.recall_at_k,
+                    "reciprocal_rank": result.reciprocal_rank,
+                }
+                for result in self.results
+            ],
+        }
+
 
 class RetrievalEvaluator:
     """주입된 로컬 검색기를 고정 기대 청크 ID로 평가한다.
@@ -631,6 +658,201 @@ class LocalRetrievalRegressionBaselineLoader:
 
 
 @dataclass(frozen=True, slots=True)
+class RetrievalEvaluationReportFileConfig:
+    """명시한 로컬 평가 기록 파일의 크기와 사례 수 제한이다."""
+
+    max_file_bytes: int = 100_000
+    max_cases: int = 100
+
+    def __post_init__(self) -> None:
+        for field_name, value, maximum in (
+            ("max_file_bytes", self.max_file_bytes, 1_000_000),
+            ("max_cases", self.max_cases, 1_000),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise RagConfigurationError(
+                    "evaluation report file "
+                    f"{field_name} must be an integer between 1 and {maximum}"
+                )
+
+
+class LocalRetrievalEvaluationReportStore:
+    """허용 루트의 명시 JSON 파일에 고정 평가 보고서를 기록하고 재검증한다.
+
+    이 경계는 자동 탐색, 검색, 생성, 네트워크, 제공자 SDK를 사용하지 않는다. ``record``는
+    기존 파일을 덮어쓰지 않으며, ``load``는 정확한 스키마와 사례별·집계 지표의 파생값을
+    다시 검증한다. 따라서 변경되었거나 다른 평가 세트에서 온 기록을 기준선 비교에
+    조용히 사용하지 않는다.
+    """
+
+    def __init__(
+        self, *, root: Path, config: RetrievalEvaluationReportFileConfig | None = None
+    ) -> None:
+        if not isinstance(root, Path):
+            raise RagConfigurationError("evaluation report root must be a pathlib.Path")
+        if not root.is_dir():
+            raise RagConfigurationError("evaluation report root must be an existing directory")
+        self._root = root.resolve()
+        self._config = config or RetrievalEvaluationReportFileConfig()
+
+    def record(self, relative_path: Path, report: RetrievalEvaluationReport) -> Path:
+        """검증된 보고서를 새 UTF-8 JSON 파일 하나로 결정론적으로 기록한다."""
+        _validate_evaluation_report(report)
+        candidate = self._resolve_path(relative_path, operation="record")
+        if candidate.exists():
+            raise RagConfigurationError(
+                "evaluation report file must not overwrite an existing file"
+            )
+        encoded = (
+            json.dumps(
+                report.to_record_payload(),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+        if len(encoded) > self._config.max_file_bytes:
+            raise RagConfigurationError("evaluation report file exceeds the configured size limit")
+        try:
+            with candidate.open("xb") as report_file:
+                report_file.write(encoded)
+        except FileExistsError as error:
+            raise RagConfigurationError(
+                "evaluation report file must not overwrite an existing file"
+            ) from error
+        except OSError as error:
+            raise RagConfigurationError("evaluation report file could not be recorded") from error
+        return candidate
+
+    def load(self, relative_path: Path) -> RetrievalEvaluationReport:
+        """명시한 UTF-8 JSON 평가 기록 하나를 완전히 재검증해 반환한다."""
+        candidate = self._resolve_path(relative_path, operation="load")
+        if not candidate.is_file():
+            raise RagConfigurationError("evaluation report file does not exist")
+        try:
+            raw_bytes = candidate.read_bytes()
+        except OSError as error:
+            raise RagConfigurationError("evaluation report file could not be read") from error
+        if not raw_bytes:
+            raise RagConfigurationError("evaluation report file must not be empty")
+        if len(raw_bytes) > self._config.max_file_bytes:
+            raise RagConfigurationError("evaluation report file exceeds the configured size limit")
+        try:
+            payload = json.loads(
+                raw_bytes.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_json_keys,
+                parse_constant=_reject_nonstandard_json_constant,
+            )
+        except UnicodeDecodeError as error:
+            raise RagConfigurationError("evaluation report file must be UTF-8 encoded") from error
+        except (json.JSONDecodeError, ValueError) as error:
+            raise RagConfigurationError("evaluation report file must contain valid JSON") from error
+        return self._report_from_json(payload)
+
+    def _resolve_path(self, relative_path: Path, *, operation: str) -> Path:
+        if not isinstance(relative_path, Path):
+            raise RagConfigurationError("evaluation report relative_path must be a pathlib.Path")
+        if relative_path.is_absolute() or not relative_path.parts:
+            raise RagConfigurationError(
+                "evaluation report relative_path must be a non-empty relative path"
+            )
+        if relative_path.suffix.casefold() != ".json":
+            raise RagConfigurationError("only JSON evaluation report files (.json) are supported")
+        candidate = (self._root / relative_path).resolve()
+        if not candidate.is_relative_to(self._root):
+            raise RagConfigurationError("evaluation report relative_path must stay within root")
+        if operation == "record" and not candidate.parent.is_dir():
+            raise RagConfigurationError("evaluation report parent directory does not exist")
+        return candidate
+
+    def _report_from_json(self, payload: object) -> RetrievalEvaluationReport:
+        if not isinstance(payload, dict):
+            raise RagConfigurationError("evaluation report JSON root must be an object")
+        required_fields = {
+            "top_k",
+            "evaluated_cases",
+            "recall_at_k",
+            "hit_rate",
+            "mean_reciprocal_rank",
+            "results",
+        }
+        if set(payload) != required_fields:
+            raise RagConfigurationError(
+                "evaluation report JSON root contains unsupported or missing fields"
+            )
+        raw_results = payload["results"]
+        if not isinstance(raw_results, list) or not raw_results:
+            raise RagConfigurationError("evaluation report results must be a non-empty array")
+        if len(raw_results) > self._config.max_cases:
+            raise RagConfigurationError("evaluation report contains more cases than configured")
+        results = tuple(self._result_from_json(raw_result) for raw_result in raw_results)
+        report = RetrievalEvaluationReport(
+            top_k=payload["top_k"],
+            results=results,
+            recall_at_k=payload["recall_at_k"],
+            hit_rate=payload["hit_rate"],
+            mean_reciprocal_rank=payload["mean_reciprocal_rank"],
+        )
+        evaluated_cases = payload["evaluated_cases"]
+        if isinstance(evaluated_cases, bool) or not isinstance(evaluated_cases, int):
+            raise RagConfigurationError("evaluation report evaluated_cases must be an integer")
+        if evaluated_cases != report.evaluated_cases:
+            raise RagConfigurationError("evaluation report evaluated_cases must match results")
+        _validate_evaluation_report(report)
+        return report
+
+    @staticmethod
+    def _result_from_json(raw_result: object) -> RetrievalEvaluationResult:
+        if not isinstance(raw_result, dict):
+            raise RagConfigurationError("evaluation report results must be objects")
+        required_fields = {
+            "case_id",
+            "query",
+            "expected_chunk_ids",
+            "retrieved_chunk_ids",
+            "first_relevant_rank",
+            "passed",
+            "recall_at_k",
+            "reciprocal_rank",
+        }
+        if set(raw_result) != required_fields:
+            raise RagConfigurationError(
+                "evaluation report results contain unsupported or missing fields"
+            )
+        expected_chunk_ids = raw_result["expected_chunk_ids"]
+        retrieved_chunk_ids = raw_result["retrieved_chunk_ids"]
+        if not isinstance(expected_chunk_ids, list) or not isinstance(retrieved_chunk_ids, list):
+            raise RagConfigurationError("evaluation report chunk IDs must be arrays")
+        if not all(
+            isinstance(chunk_id, str) for chunk_id in expected_chunk_ids + retrieved_chunk_ids
+        ):
+            raise RagConfigurationError("evaluation report chunk IDs must contain strings")
+        first_relevant_rank = raw_result["first_relevant_rank"]
+        if first_relevant_rank is not None and (
+            isinstance(first_relevant_rank, bool) or not isinstance(first_relevant_rank, int)
+        ):
+            raise RagConfigurationError(
+                "evaluation report first_relevant_rank must be an integer or null"
+            )
+        if not isinstance(raw_result["passed"], bool):
+            raise RagConfigurationError("evaluation report passed must be a boolean")
+        result = RetrievalEvaluationResult(
+            case_id=raw_result["case_id"],
+            query=raw_result["query"],
+            expected_chunk_ids=tuple(expected_chunk_ids),
+            retrieved_chunk_ids=tuple(retrieved_chunk_ids),
+            first_relevant_rank=first_relevant_rank,
+            recall_at_k=raw_result["recall_at_k"],
+            reciprocal_rank=raw_result["reciprocal_rank"],
+        )
+        if raw_result["passed"] != result.passed:
+            raise RagConfigurationError("evaluation report passed must match first_relevant_rank")
+        return result
+
+
+@dataclass(frozen=True, slots=True)
 class RetrievalRegressionMetricResult:
     """한 집계 지표의 기준선·현재 값·허용 하락 폭을 기록한다."""
 
@@ -784,9 +1006,87 @@ def _validate_evaluation_report(report: object) -> None:
     case_ids = [result.case_id for result in report.results]
     if len(set(case_ids)) != len(case_ids):
         raise RagConfigurationError("regression report case_id values must be unique")
+    if len(report.results) > 1_000:
+        raise RagConfigurationError("regression report contains more cases than supported")
     for field_name, value in (
         ("regression report recall_at_k", report.recall_at_k),
         ("regression report hit_rate", report.hit_rate),
         ("regression report mean_reciprocal_rank", report.mean_reciprocal_rank),
     ):
         _validate_unit_interval_score(field_name=field_name, value=value)
+    expected_count = 0
+    recovered_count = 0
+    hit_count = 0
+    reciprocal_rank_total = 0.0
+    for result in report.results:
+        RetrievalEvaluationCase(
+            case_id=result.case_id,
+            query=result.query,
+            expected_chunk_ids=result.expected_chunk_ids,
+        )
+        if not isinstance(result.retrieved_chunk_ids, tuple):
+            raise RagConfigurationError("regression report retrieved_chunk_ids must be a tuple")
+        if len(result.retrieved_chunk_ids) > report.top_k:
+            raise RagConfigurationError("regression report returned more hits than top_k")
+        if any(
+            not isinstance(chunk_id, str) or not chunk_id.strip()
+            for chunk_id in result.retrieved_chunk_ids
+        ):
+            raise RagConfigurationError(
+                "regression report retrieved_chunk_ids must contain non-empty strings"
+            )
+        if len(set(result.retrieved_chunk_ids)) != len(result.retrieved_chunk_ids):
+            raise RagConfigurationError(
+                "regression report retrieved_chunk_ids must not contain duplicates"
+            )
+        _validate_unit_interval_score(
+            field_name="regression report recall_at_k", value=result.recall_at_k
+        )
+        _validate_unit_interval_score(
+            field_name="regression report reciprocal_rank", value=result.reciprocal_rank
+        )
+        expected_ids = set(result.expected_chunk_ids)
+        first_relevant_rank = next(
+            (
+                rank
+                for rank, chunk_id in enumerate(result.retrieved_chunk_ids, start=1)
+                if chunk_id in expected_ids
+            ),
+            None,
+        )
+        if result.first_relevant_rank != first_relevant_rank:
+            raise RagConfigurationError(
+                "regression report first_relevant_rank must match retrieved chunk IDs"
+            )
+        expected_recall = len(expected_ids.intersection(result.retrieved_chunk_ids)) / len(
+            expected_ids
+        )
+        expected_reciprocal_rank = 0.0 if first_relevant_rank is None else 1.0 / first_relevant_rank
+        if not math.isclose(result.recall_at_k, expected_recall, rel_tol=0.0, abs_tol=1e-12):
+            raise RagConfigurationError(
+                "regression report recall_at_k must match retrieved chunk IDs"
+            )
+        if not math.isclose(
+            result.reciprocal_rank, expected_reciprocal_rank, rel_tol=0.0, abs_tol=1e-12
+        ):
+            raise RagConfigurationError(
+                "regression report reciprocal_rank must match first_relevant_rank"
+            )
+        expected_count += len(expected_ids)
+        recovered_count += len(expected_ids.intersection(result.retrieved_chunk_ids))
+        hit_count += first_relevant_rank is not None
+        reciprocal_rank_total += expected_reciprocal_rank
+    expected_recall_at_k = recovered_count / expected_count
+    expected_hit_rate = hit_count / len(report.results)
+    expected_mean_reciprocal_rank = reciprocal_rank_total / len(report.results)
+    if not math.isclose(report.recall_at_k, expected_recall_at_k, rel_tol=0.0, abs_tol=1e-12):
+        raise RagConfigurationError("regression report recall_at_k must match its results")
+    if not math.isclose(report.hit_rate, expected_hit_rate, rel_tol=0.0, abs_tol=1e-12):
+        raise RagConfigurationError("regression report hit_rate must match its results")
+    if not math.isclose(
+        report.mean_reciprocal_rank,
+        expected_mean_reciprocal_rank,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise RagConfigurationError("regression report mean_reciprocal_rank must match its results")

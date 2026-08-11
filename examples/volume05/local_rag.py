@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from ai_platform.rag import (
     ConfidenceThresholdConfig,
@@ -18,6 +19,7 @@ from ai_platform.rag import (
     LocalPdfLoader,
     LocalRagApi,
     LocalRagIndex,
+    LocalRetrievalEvaluationReportStore,
     LocalRetrievalEvaluationSetLoader,
     LocalRetrievalRegressionBaselineLoader,
     QueryTransformingIndex,
@@ -126,12 +128,16 @@ def main() -> None:
     evaluation_report = RetrievalEvaluator(
         index=index, config=RetrievalEvaluationConfig(top_k=1)
     ).evaluate(evaluation_cases)
+    with TemporaryDirectory(prefix="volume05-rag-report-") as report_directory:
+        report_store = LocalRetrievalEvaluationReportStore(root=Path(report_directory))
+        report_store.record(Path("fixed-retrieval-report.json"), evaluation_report)
+        revalidated_report = report_store.load(Path("fixed-retrieval-report.json"))
     regression_file = LocalRetrievalRegressionBaselineLoader(root=sample_root).load(
         Path("retrieval-regression-baseline.json")
     )
     regression = RetrievalRegressionChecker(
         baseline=regression_file.baseline, policy=regression_file.policy
-    ).evaluate(evaluation_report)
+    ).evaluate(revalidated_report)
     if not regression.passed:
         raise RuntimeError("sample RAG retrieval quality regressed from its fixed baseline")
     print(
@@ -140,6 +146,7 @@ def main() -> None:
         f"Hit rate={evaluation_report.hit_rate:.2f}, "
         f"MRR={evaluation_report.mean_reciprocal_rank:.2f}"
     )
+    print("고정 로컬 평가 보고서 기록·재검증: 통과 (임시 허용 루트, 기존 파일 덮어쓰기 없음)")
     print("검색 회귀 판정: 통과 (고정 기준선 대비 지표 하락 없음)")
     print()
 

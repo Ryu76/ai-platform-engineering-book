@@ -1,5 +1,44 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 고정 로컬 평가 보고서 기록·재검증 슬라이스 완료
+
+### 완료
+
+- `LocalRetrievalEvaluationReportStore`와 `RetrievalEvaluationReportFileConfig`를 추가했습니다. 이 경계는 호출자가 명시한 허용 루트의 UTF-8 `.json` 파일 하나에 검증된 고정 검색 평가 보고서만 기록·재로딩하며, 자동 탐색·검색·생성·네트워크·제공자 SDK를 호출하지 않습니다.
+- 기록은 기존 파일을 덮어쓰지 않고, 보고서의 `top_k`·사례 수·집계 지표·사례별 질의·기대/회수 청크 ID·첫 관련 순위·지표를 결정론적으로 저장합니다. 재로딩은 경로/심볼릭 링크 탈출·빈/과대 파일·비 UTF-8·비표준 JSON·중복 키·지원하지 않는 필드를 거부합니다.
+- 재검증은 `passed`, 첫 관련 순위, 사례별 Recall@k·MRR, 전체 Recall@k·Hit rate·MRR를 회수 청크 ID에서 다시 계산합니다. 따라서 편집되거나 호환성 정보가 누락된 기록은 파일 기반 기준선과 비교하기 전에 거부됩니다.
+- 로컬 예제는 임시 허용 루트에 고정 평가 보고서를 기록·재로딩한 뒤 기존 파일 기반 기준선과 결정론적으로 비교합니다. 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 172 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 7 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 5 source files
+uv run python examples/volume05/local_rag.py
+# 고정 JSON 평가 세트 Recall@1·Hit rate·MRR 모두 1.00, 임시 로컬 보고서 기록·재검증 및 파일 기반 기준선 회귀 판정 통과, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 고정 로컬 보고서와 기준선의 승인·보존 수명 및 비교 대상 변경을 명시하는 감사 메타데이터 계약을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 파일 기반 고정 회귀 기준선·정책 슬라이스 완료
 
 ### 완료

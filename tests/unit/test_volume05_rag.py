@@ -21,6 +21,7 @@ from ai_platform.rag import (
     LocalPdfLoader,
     LocalRagApi,
     LocalRagIndex,
+    LocalRetrievalEvaluationReportStore,
     LocalRetrievalEvaluationSetLoader,
     LocalRetrievalRegressionBaselineLoader,
     PdfLoadingConfig,
@@ -36,6 +37,7 @@ from ai_platform.rag import (
     RetrievalEvaluationBaselineCase,
     RetrievalEvaluationCase,
     RetrievalEvaluationConfig,
+    RetrievalEvaluationReportFileConfig,
     RetrievalEvaluationSetLoadingConfig,
     RetrievalEvaluator,
     RetrievalRegressionBaselineLoadingConfig,
@@ -1520,3 +1522,106 @@ def test_pipeline_rejects_blank_mock_answer() -> None:
 
     with pytest.raises(RagConfigurationError, match="empty answer"):
         pipeline.answer("배송")
+
+
+def test_local_evaluation_report_store_round_trips_a_fixed_report_for_baseline_comparison(
+    tmp_path: Path,
+) -> None:
+    report = RetrievalEvaluator(
+        index=RecordingSearchIndex(
+            (_hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),)
+        ),
+        config=RetrievalEvaluationConfig(top_k=1),
+    ).evaluate((RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),))
+    baseline = RetrievalEvaluationBaseline.from_report(report)
+    store = LocalRetrievalEvaluationReportStore(root=tmp_path)
+
+    stored_path = store.record(Path("fixed-report.json"), report)
+    reloaded_report = store.load(Path("fixed-report.json"))
+
+    assert stored_path == tmp_path / "fixed-report.json"
+    assert reloaded_report == report
+    assert '"query": "배송"' in stored_path.read_text(encoding="utf-8")
+    assert RetrievalRegressionChecker(baseline=baseline).evaluate(reloaded_report).passed is True
+    with pytest.raises(RagConfigurationError, match="must not overwrite"):
+        store.record(Path("fixed-report.json"), report)
+
+
+@pytest.mark.parametrize(
+    "relative_path, content, message",
+    [
+        (Path("../outside.json"), "", "must stay within root"),
+        (Path("notes.txt"), "", "only JSON evaluation report files"),
+        (Path("empty.json"), "", "must not be empty"),
+        (Path("legacy.json"), "", "UTF-8"),
+        (Path("duplicate.json"), '{"top_k":1,"top_k":1}', "valid JSON"),
+        (
+            Path("mismatched-count.json"),
+            """{
+  "top_k": 1,
+  "evaluated_cases": 2,
+  "recall_at_k": 1.0,
+  "hit_rate": 1.0,
+  "mean_reciprocal_rank": 1.0,
+  "results": [{
+    "case_id": "shipping",
+    "query": "배송",
+    "expected_chunk_ids": ["shipping#1"],
+    "retrieved_chunk_ids": ["shipping#1"],
+    "first_relevant_rank": 1,
+    "passed": true,
+    "recall_at_k": 1.0,
+    "reciprocal_rank": 1.0
+  }]
+}""",
+            "evaluated_cases must match results",
+        ),
+        (
+            Path("forged-metric.json"),
+            """{
+  "top_k": 1,
+  "evaluated_cases": 1,
+  "recall_at_k": 1.0,
+  "hit_rate": 1.0,
+  "mean_reciprocal_rank": 1.0,
+  "results": [{
+    "case_id": "shipping",
+    "query": "배송",
+    "expected_chunk_ids": ["shipping#1"],
+    "retrieved_chunk_ids": [],
+    "first_relevant_rank": null,
+    "passed": false,
+    "recall_at_k": 1.0,
+    "reciprocal_rank": 0.0
+  }]
+}""",
+            "recall_at_k must match retrieved chunk IDs",
+        ),
+    ],
+)
+def test_local_evaluation_report_store_rejects_unsafe_or_forged_records(
+    tmp_path: Path, relative_path: Path, content: str, message: str
+) -> None:
+    if relative_path.parts[0] != ".." and relative_path.suffix == ".json":
+        path = tmp_path / relative_path
+        if relative_path.name == "legacy.json":
+            path.write_bytes(b"\xff")
+        else:
+            path.write_text(content, encoding="utf-8")
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalRetrievalEvaluationReportStore(root=tmp_path).load(relative_path)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: RetrievalEvaluationReportFileConfig(max_file_bytes=0),
+        lambda: RetrievalEvaluationReportFileConfig(max_cases=True),
+    ],
+)
+def test_evaluation_report_file_config_rejects_invalid_limits(
+    factory: Callable[[], object],
+) -> None:
+    with pytest.raises(RagConfigurationError):
+        factory()

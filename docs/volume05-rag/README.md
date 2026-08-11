@@ -25,8 +25,9 @@
 14. `RetrievalEvaluator`는 명시한 고정 로컬 `RetrievalEvaluationCase`만 `SearchableIndex`에 전달해 생성기 호출 없이 Recall@k·Hit rate·MRR을 계산합니다. 각 사례는 하나 이상의 기대 청크 ID를 가져야 하며, 평가기는 tuple 이외 결과·요청 수 초과 결과·중복 청크 ID를 거부해 신뢰할 수 없는 검색기 출력이 지표를 왜곡하지 못하게 합니다.
 15. `LocalRetrievalEvaluationSetLoader`는 허용된 로컬 루트 안에서 호출자가 명시한 UTF-8 `.json` 평가 세트 하나만 읽습니다. 경로 탈출·심볼릭 링크 탈출·빈/과대 파일·비 UTF-8·비표준 JSON·중복 JSON 키를 거부하고, 엄격한 `{"cases": [...]}` 스키마를 `RetrievalEvaluationCase` tuple로 변환합니다. 자동 디렉터리 탐색, 네트워크, 제공자 SDK는 사용하지 않습니다.
 16. `RetrievalEvaluationBaseline`과 `RetrievalRegressionChecker`는 같은 고정 평가 세트의 이전 집계 기준선과 현재 `RetrievalEvaluationReport`를 결정론적으로 비교합니다. `LocalRetrievalRegressionBaselineLoader`는 호출자가 명시한 로컬 UTF-8 `.json` 파일 하나에서 기준선의 사례 순서·ID·질문·기대 청크 ID·집계 지표와 지표별 하락 정책을 함께 엄격히 검증합니다. 경로 탈출·심볼릭 링크 탈출·중복 JSON 키·비표준 JSON·지원하지 않는 필드·과대 파일은 거부하며 자동 탐색·검색·생성·네트워크·제공자 SDK를 사용하지 않습니다. `top_k`, 사례 순서·ID·질문, 기대 청크 ID가 같지 않으면 비교를 거부하며, Recall@k·Hit rate·MRR별 허용 하락 폭을 명시적으로 판정합니다.
-17. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
-18. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
+17. `LocalRetrievalEvaluationReportStore`는 평가 보고서를 허용된 로컬 루트의 명시 UTF-8 `.json` 파일 하나에 결정론적으로 기록하고 다시 읽습니다. 기록은 기존 파일을 덮어쓰지 않으며, 재로딩 시 정확한 스키마·중복 JSON 키·경로·파일 크기·사례 ID·청크 ID·순위·사례별 지표·집계 지표의 파생값을 모두 검증합니다. 기록용 payload는 기준선 호환성 확인에 필요한 질문을 포함하지만, 일반 `to_payload()`에는 질문 원문을 넣지 않습니다. 이 경계는 자동 탐색·검색·생성·네트워크·제공자 SDK를 사용하지 않습니다.
+18. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
+19. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
 
 생성기 경계는 `Protocol`이므로 실습과 테스트는 항상 Mock 구현만 사용합니다. 이 슬라이스는 외부 제공자, 라이브 API, 비밀값, 배포를 사용하지 않습니다.
 
@@ -112,6 +113,26 @@ assert decision.passed
 ```
 
 이 비교 경계는 파일을 읽거나, 검색기·생성기·제공자 SDK·네트워크를 호출하지 않습니다. 기준선과 판정 payload에는 질의 원문, 문서 원문, 생성 답변을 넣지 않습니다.
+
+## 고정 평가 보고서 기록·재검증 계약
+
+`LocalRetrievalEvaluationReportStore`는 `RetrievalEvaluator`가 만든 고정 보고서를 나중에 기준선과 비교하기 전에 검증할 수 있는 로컬 파일 경계입니다. `record()`는 기존 파일을 덮어쓰지 않고, 이미 존재하는 디렉터리 안의 명시 상대 `.json` 경로에만 UTF-8 JSON을 씁니다. `load()`는 같은 경로 규칙으로 한 파일만 읽습니다. 디렉터리 탐색, 검색, 생성, 네트워크, 제공자 SDK는 호출하지 않습니다.
+
+기록 파일은 `top_k`, `evaluated_cases`, 세 집계 지표, `results`만 가져야 합니다. 각 결과는 `case_id`, `query`, 기대/회수 청크 ID, 첫 관련 순위, `passed`, Recall@k, 역순위만 정확히 가져야 합니다. 로더는 중복 키와 알 수 없는 필드를 거부하고, `passed`·첫 관련 순위·사례별 Recall@k/MRR·전체 Recall@k/Hit rate/MRR이 회수 청크 ID에서 실제로 다시 계산되는지 확인합니다. 따라서 사람이 지표를 편집하거나 호환성 질의를 빼면 회귀 비교 전에 거부됩니다.
+
+```python
+from pathlib import Path
+
+from ai_platform.rag import LocalRetrievalEvaluationReportStore, RetrievalRegressionChecker
+
+store = LocalRetrievalEvaluationReportStore(root=Path("local-evaluation-records"))
+store.record(Path("approved-run.json"), report)  # 새 파일만 기록
+revalidated_report = store.load(Path("approved-run.json"))
+decision = RetrievalRegressionChecker(baseline=baseline, policy=policy).evaluate(revalidated_report)
+assert decision.passed
+```
+
+기록 파일은 사례 호환성을 확인하기 위해 질의를 포함하는 로컬 감사 산출물입니다. 반면 외부로 반환하기 위한 `report.to_payload()`·기준선·판정 payload는 계속 질의 원문과 문서 원문, 생성 답변을 포함하지 않습니다. 예제는 저장소를 더럽히지 않도록 임시 허용 루트에 파일을 기록·재로딩한 뒤 파일 기반 기준선과 비교합니다.
 
 ## 장 목록
 
