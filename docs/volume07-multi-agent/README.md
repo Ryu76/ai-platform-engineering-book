@@ -17,6 +17,7 @@ Planner, Researcher, Developer, Reviewer, QA 역할의 메시지·상태·도구
 9. [역할 범위 검토 권한](09-role-scoped-review-authority.md) — Reviewer 외 역할의 review 결정은 audit/후속 역할 전에 fail-closed
 10. [Hermes Agent Runtime과 직접 구현 비교](10-hermes-runtime-comparison.md) — role, memory, tool, bounded loop, human approval의 책임 경계 비교
 11. [결정론적 Mock 역할 바인딩](11-declared-mock-role-binding.md) — 고정 Mock의 선언 role과 workflow 경계의 구성 단계 일치 검증
+12. [접근 불가 Agent 경계의 구성 단계 차단](12-inaccessible-agent-boundaries.md) — 실패하는 act/propose accessor를 호출 전 fail-closed
 
 ## 진행 상태
 

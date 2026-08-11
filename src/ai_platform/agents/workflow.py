@@ -99,11 +99,27 @@ def validate_declared_role(expected_role: str, boundary_name: str, agent: object
 
 def validate_agent_boundary(name: str, agent: object) -> None:
     """Reject a role without a callable, correctly labelled local boundary at setup."""
-    if not callable(getattr(agent, "act", None)):
-        raise WorkflowConfigurationError(
-            f"{name} must provide a callable act(context) method"
-        )
+    validate_callable_boundary(name, "act", agent)
     validate_declared_role(name, name, agent)
+
+
+def validate_callable_boundary(name: str, method_name: str, boundary: object) -> None:
+    """Read one protocol method safely and reject inaccessible setup boundaries.
+
+    A boundary may expose its protocol method through a property.  Reading that property
+    is still configuration work, not permission to run an Agent, so an accessor failure
+    must become a stable configuration error before any workflow invocation.
+    """
+    try:
+        method = getattr(boundary, method_name, None)
+    except Exception as error:
+        raise WorkflowConfigurationError(
+            f"{name} {method_name} boundary could not be read"
+        ) from error
+    if not callable(method):
+        raise WorkflowConfigurationError(
+            f"{name} must provide a callable {method_name}(context) method"
+        )
 
 
 def validate_fixed_script(name: str, script: object) -> None:

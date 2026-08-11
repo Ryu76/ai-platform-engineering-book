@@ -15,6 +15,7 @@ from typing import Protocol
 from ai_platform.agents.workflow import (
     AgentProtocolError,
     WorkflowConfigurationError,
+    validate_callable_boundary,
     validate_declared_role,
     validate_fixed_script,
 )
@@ -141,10 +142,7 @@ class BoundedConflictResolutionWorkflow:
         if any(not isinstance(role, str) or not role.strip() for role in agents):
             raise WorkflowConfigurationError("agent roles must not be empty")
         for role, agent in agents.items():
-            if not callable(getattr(agent, "propose", None)):
-                raise WorkflowConfigurationError(
-                    f"agent for {role} must provide a callable propose(context) method"
-                )
+            validate_callable_boundary(f"agent for {role}", "propose", agent)
             validate_declared_role(role, f"agent for {role}", agent)
         self._agents = dict(agents)
         self._max_rounds = max_rounds

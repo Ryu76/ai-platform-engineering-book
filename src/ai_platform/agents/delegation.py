@@ -15,6 +15,7 @@ from typing import Protocol
 from ai_platform.agents.workflow import (
     AgentProtocolError,
     WorkflowConfigurationError,
+    validate_callable_boundary,
     validate_declared_role,
     validate_fixed_script,
 )
@@ -224,15 +225,9 @@ class ApprovalGatedDelegationWorkflow:
             raise WorkflowConfigurationError(
                 "workers must contain exactly one worker for each allowed assignee"
             )
-        if not callable(getattr(coordinator, "propose", None)):
-            raise WorkflowConfigurationError(
-                "coordinator must provide a callable propose(context) method"
-            )
+        validate_callable_boundary("coordinator", "propose", coordinator)
         for assignee, worker in workers.items():
-            if not callable(getattr(worker, "act", None)):
-                raise WorkflowConfigurationError(
-                    f"worker for {assignee} must provide a callable act(context) method"
-                )
+            validate_callable_boundary(f"worker for {assignee}", "act", worker)
             validate_declared_role(assignee, f"worker for {assignee}", worker)
         self._coordinator = coordinator
         self._workers = dict(workers)

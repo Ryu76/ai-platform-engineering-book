@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 15: 접근 불가 Agent 경계의 구성 단계 차단
+
+- 공통 `validate_callable_boundary()`는 `act(context)` 또는 `propose(context)` attribute를 읽는 중 local adapter/property가 예외를 내면, 원래 예외를 원인으로 보존하는 `WorkflowConfigurationError`로 fail-closed한다. protocol method는 이 검사에서 호출하지 않는다.
+- `BoundedReviewWorkflow`, `ApprovalGatedReleaseHandoffWorkflow`, `ApprovalGatedDelegationWorkflow`, `BoundedConflictResolutionWorkflow`가 공통 발견 경계를 사용한다. 접근 불가 boundary는 어떤 Planner·Coordinator·Worker·peer·QA·DevOps 호출과 audit trail 생성보다 먼저 구성을 중단한다.
+- `tests/volume07/test_inaccessible_agent_boundaries.py`는 네 workflow에서 local `act`/`propose` property accessor 예외가 안정적인 구성 오류로 변환되고, 유효한 local Mock peer도 호출되지 않는지 고정한다. 모든 검증은 network, live API, secret, 도구 실행, 배포 없이 local Mock/test double만 사용한다.
+- `docs/volume07-multi-agent/12-inaccessible-agent-boundaries.md`에 protocol method discovery를 구성 단계 안전 경계로 기록했다.
+
 ## 2026-08-11 — Slice 14: 결정론적 Mock 역할 바인딩
 
 - `DeterministicMockAgent`, `DeterministicMockWorker`, `DeterministicMockConflictAgent`가 선언하는 `role`은 이제 workflow 구성 slot 또는 mapping key와 정확히 일치해야 한다. 잘못 배선된 role label은 첫 Agent 호출 전에 `WorkflowConfigurationError`로 fail-closed한다.
