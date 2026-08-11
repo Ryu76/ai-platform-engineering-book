@@ -64,3 +64,4 @@
 | 2026-08-11 | `prompt_template_demo.py` / `structured_output_demo.py` / `injection_defense_demo.py` / `prompt_mini_project_demo.py` | 네 데모를 API 키·네트워크·라이브 LLM·Tool 실행 없이 재실행했고, 고위험 입력 보류와 v1/v2 고정 회귀 집계를 확인함 |
 | 2026-08-11 | `uv run ruff check .` / `uv run mypy src` / `validate_docs.py` / `validate_links.py` / `validate_code_blocks.py` / `check_secrets.py` / `uv run pytest` | Ruff 통과, mypy(16개 소스) 통과, 11개 Volume 문서·링크·코드 블록·비밀값 검사 통과, 전체 pytest 120 passed |
 | 2026-08-11 | `examples/volume02/*_demo.py` 8개 | Prompt 템플릿, shot, 구조화 출력·추론, Injection 방어, 버전 비교, fixture, 회귀 미니 프로젝트 데모를 모두 API 키·네트워크·라이브 LLM·Tool 실행 없이 재실행함 |
+| 2026-08-11 | 완료 표식 재검증 | PRD의 Volume 02 목표·필수 내용·8개 실습·결과물 경로를 현재 문서 계약과 대조했고, Ruff·mypy(9개 Prompt 소스)·Volume 02 단위/통합 테스트 59개·문서/링크/코드 블록/비밀값 검사 및 8개 오프라인 데모를 재실행해 통과함. `VOLUME02_COMPLETE=true`를 유지함 |
