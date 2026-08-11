@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 22: Chapter 03 PRD 학습 문서 완성도 확장
+
+- `03-bounded-conflict-resolution.md`를 PRD Chapter template의 14개 항목(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 실제 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다.
+- 문서는 `ConflictProposal`/immutable audit trail, `max_agents`·`max_rounds`의 곱으로 제한되는 proposal 호출 예산, option exact equality와 무합의 시 다수결·정규화·fallback 없이 `conflict_limit_reached`로 멈추는 경계를 현재 `conflict.py`와 예제 동작에 맞춰 설명한다.
+- `PENDING` consensus recommendation과 `APPROVED` local completion을 분리하고 `REJECTED`가 모든 Agent 호출 전에 종료됨을 명시했다. deterministic fixed tuple Mock만 사용하며 live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+- `uv run python examples/volume07/offline_conflict_resolution.py`와 `--approve` 경로를 실제 실행해 각각 `awaiting_human_approval`과 `completed`를 확인했다. `uv run pytest tests/volume07/test_bounded_conflict_resolution.py -q`는 7 passed, 전체 `uv run pytest tests/volume07 -q`는 58 passed였다.
+
 ## 2026-08-11 — Slice 21: Chapter 02 PRD 학습 문서 완성도 확장
 
 - `02-approved-bounded-delegation.md`를 PRD Chapter template의 14개 항목(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 실제 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다.
