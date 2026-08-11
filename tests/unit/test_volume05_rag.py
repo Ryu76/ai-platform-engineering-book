@@ -43,6 +43,7 @@ from ai_platform.rag import (
     RetrievalEvaluationReportFileConfig,
     RetrievalEvaluationSetLoadingConfig,
     RetrievalEvaluator,
+    RetrievalRegressionBaselineAuditMetadata,
     RetrievalRegressionBaselineLoadingConfig,
     RetrievalRegressionChecker,
     RetrievalRegressionPolicy,
@@ -145,10 +146,20 @@ def _hit(*, chunk_id: str, document_id: str, text: str, score: float = 1.0) -> S
     )
 
 
+def _baseline_audit() -> RetrievalRegressionBaselineAuditMetadata:
+    return RetrievalRegressionBaselineAuditMetadata(
+        baseline_id="volume05-retrieval-baseline-001",
+        approval_reference="baseline-approval-001",
+        approved_on=date(2026, 8, 11),
+        retained_until=date(2030, 1, 1),
+    )
+
+
 def _approved_audit() -> RetrievalEvaluationAuditMetadata:
     return RetrievalEvaluationAuditMetadata(
         record_id="volume05-fixed-report-001",
         comparison_target_id="volume05-retrieval-baseline-001",
+        comparison_approval_reference="baseline-approval-001",
         approval_state="approved",
         retained_until=date(2030, 1, 1),
         approval_reference="local-approval-001",
@@ -1220,6 +1231,12 @@ def test_local_regression_baseline_loader_reads_explicit_baseline_and_policy(
     "maximum_recall_at_k_drop": 0.1,
     "maximum_hit_rate_drop": 0.2,
     "maximum_mean_reciprocal_rank_drop": 0.3
+  },
+  "audit": {
+    "baseline_id": "volume05-retrieval-baseline-001",
+    "approval_reference": "baseline-approval-001",
+    "approved_on": "2026-08-11",
+    "retained_until": "2030-01-01"
   }
 }""",
         encoding="utf-8",
@@ -1239,6 +1256,7 @@ def test_local_regression_baseline_loader_reads_explicit_baseline_and_policy(
     assert loaded.policy.maximum_recall_at_k_drop == 0.1
     assert loaded.policy.maximum_hit_rate_drop == 0.2
     assert loaded.policy.maximum_mean_reciprocal_rank_drop == 0.3
+    assert loaded.audit == _baseline_audit()
     assert (
         RetrievalRegressionChecker(baseline=loaded.baseline, policy=loaded.policy)
         .evaluate(report)
@@ -1283,7 +1301,7 @@ def test_local_regression_baseline_loader_rejects_unsafe_or_invalid_files(
     "content, config, message",
     [
         (b"[]", None, "root must be an object"),
-        (b'{"baseline":{}}', None, "only baseline and policy"),
+        (b'{"baseline":{}}', None, "only baseline, policy, and audit"),
         (
             b'{"baseline":{"top_k":1,"cases":[],"recall_at_k":1.0,"hit_rate":1.0,"mean_reciprocal_rank":1.0},"policy":{"maximum_recall_at_k_drop":0.0,"maximum_hit_rate_drop":0.0,"maximum_mean_reciprocal_rank_drop":0.0}}',
             None,
@@ -1560,11 +1578,13 @@ def test_local_evaluation_report_store_round_trips_a_fixed_report_for_baseline_c
     assert reloaded_record.audit == audit
     assert '"query": "배송"' in stored_path.read_text(encoding="utf-8")
     assert (
-        RetrievalRegressionChecker(baseline=baseline)
+        RetrievalRegressionChecker(baseline=baseline, baseline_audit=_baseline_audit())
         .evaluate_record(
             reloaded_record,
             audit_requirement=RetrievalEvaluationAuditRequirement(
-                comparison_target_id="volume05-retrieval-baseline-001", as_of_date=date(2026, 8, 11)
+                comparison_target_id="volume05-retrieval-baseline-001",
+                comparison_approval_reference="baseline-approval-001",
+                as_of_date=date(2026, 8, 11),
             ),
         )
         .passed
@@ -1583,11 +1603,14 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
         ),
         config=RetrievalEvaluationConfig(top_k=1),
     ).evaluate((RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),))
-    checker = RetrievalRegressionChecker(baseline=RetrievalEvaluationBaseline.from_report(report))
+    checker = RetrievalRegressionChecker(
+        baseline=RetrievalEvaluationBaseline.from_report(report), baseline_audit=_baseline_audit()
+    )
     store = LocalRetrievalEvaluationReportStore(root=tmp_path)
     pending_audit = RetrievalEvaluationAuditMetadata(
         record_id="pending-report",
         comparison_target_id="volume05-retrieval-baseline-001",
+        comparison_approval_reference="baseline-approval-001",
         approval_state="pending",
         retained_until=date(2030, 1, 1),
     )
@@ -1598,7 +1621,9 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
         checker.evaluate_record(
             pending_record,
             audit_requirement=RetrievalEvaluationAuditRequirement(
-                comparison_target_id="volume05-retrieval-baseline-001", as_of_date=date(2026, 8, 11)
+                comparison_target_id="volume05-retrieval-baseline-001",
+                comparison_approval_reference="baseline-approval-001",
+                as_of_date=date(2026, 8, 11),
             ),
         )
 
@@ -1607,24 +1632,38 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
         audit=RetrievalEvaluationAuditMetadata(
             record_id="approved-report",
             comparison_target_id="volume05-retrieval-baseline-001",
+            comparison_approval_reference="baseline-approval-001",
             approval_state="approved",
             retained_until=date(2026, 8, 11),
             approval_reference="local-approval-002",
             approved_on=date(2026, 8, 11),
         ),
     )
-    with pytest.raises(RagConfigurationError, match="comparison_target_id must match"):
+    with pytest.raises(RagConfigurationError, match="must match the requested target"):
         checker.evaluate_record(
             approved_record,
             audit_requirement=RetrievalEvaluationAuditRequirement(
-                comparison_target_id="volume05-retrieval-baseline-002", as_of_date=date(2026, 8, 11)
+                comparison_target_id="volume05-retrieval-baseline-002",
+                comparison_approval_reference="baseline-approval-001",
+                as_of_date=date(2026, 8, 11),
+            ),
+        )
+    with pytest.raises(RagConfigurationError, match="approval_reference must match"):
+        checker.evaluate_record(
+            approved_record,
+            audit_requirement=RetrievalEvaluationAuditRequirement(
+                comparison_target_id="volume05-retrieval-baseline-001",
+                comparison_approval_reference="different-baseline-approval",
+                as_of_date=date(2026, 8, 11),
             ),
         )
     with pytest.raises(RagConfigurationError, match="retention has expired"):
         checker.evaluate_record(
             approved_record,
             audit_requirement=RetrievalEvaluationAuditRequirement(
-                comparison_target_id="volume05-retrieval-baseline-001", as_of_date=date(2026, 8, 12)
+                comparison_target_id="volume05-retrieval-baseline-001",
+                comparison_approval_reference="baseline-approval-001",
+                as_of_date=date(2026, 8, 12),
             ),
         )
 
@@ -1666,6 +1705,7 @@ def test_audit_metadata_rejects_invalid_lifecycle_combinations(
     fields: dict[str, object] = {
         "record_id": "record-1",
         "comparison_target_id": "target-1",
+        "comparison_approval_reference": "target-approval-1",
         "approval_state": "pending",
         "retained_until": date(2030, 1, 1),
     }
@@ -1737,7 +1777,9 @@ def test_local_evaluation_report_store_rejects_unsafe_or_forged_records(
                 content = content.replace(
                     '"results":',
                     '"audit": {"record_id": "record-1", '
-                    '"comparison_target_id": "target-1", "approval_state": "pending", '
+                    '"comparison_target_id": "target-1", '
+                    '"comparison_approval_reference": "target-approval-1", '
+                    '"approval_state": "pending", '
                     '"retained_until": "2030-01-01", "approval_reference": null, '
                     '"approved_on": null, "superseded_by": null}, "results":',
                 )

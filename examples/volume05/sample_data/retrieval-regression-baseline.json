@@ -26,5 +26,11 @@
     "maximum_recall_at_k_drop": 0.0,
     "maximum_hit_rate_drop": 0.0,
     "maximum_mean_reciprocal_rank_drop": 0.0
+  },
+  "audit": {
+    "baseline_id": "volume05-sample-retrieval-baseline-001",
+    "approval_reference": "volume05-local-sample-baseline-approval-001",
+    "approved_on": "2026-08-11",
+    "retained_until": "2030-01-01"
   }
 }

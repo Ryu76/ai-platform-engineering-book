@@ -509,11 +509,60 @@ class RetrievalRegressionBaselineLoadingConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class RetrievalRegressionBaselineAuditMetadata:
+    """승인된 고정 기준선의 불변 식별자·승인 참조·보존 수명이다."""
+
+    baseline_id: str
+    approval_reference: str
+    approved_on: date
+    retained_until: date
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("baseline_id", self.baseline_id),
+            ("approval_reference", self.approval_reference),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise RagConfigurationError(
+                    f"regression baseline audit {field_name} must be a non-empty string"
+                )
+        if not isinstance(self.approved_on, date) or not isinstance(self.retained_until, date):
+            raise RagConfigurationError(
+                "regression baseline audit approved_on and retained_until "
+                "must be datetime.date values"
+            )
+        if self.approved_on > self.retained_until:
+            raise RagConfigurationError(
+                "regression baseline audit approved_on must not be after retained_until"
+            )
+
+    def assert_matches_requirement(self, requirement: RetrievalEvaluationAuditRequirement) -> None:
+        """요청한 대상·승인 참조·기준일이 이 승인 기준선과 일치하는지 확인한다."""
+        if self.baseline_id != requirement.comparison_target_id:
+            raise RagConfigurationError(
+                "regression baseline audit baseline_id must match the requested target"
+            )
+        if self.approval_reference != requirement.comparison_approval_reference:
+            raise RagConfigurationError(
+                "regression baseline audit approval_reference must match the requested target"
+            )
+        if requirement.as_of_date < self.approved_on:
+            raise RagConfigurationError(
+                "regression baseline audit was not approved for the requested date"
+            )
+        if requirement.as_of_date > self.retained_until:
+            raise RagConfigurationError(
+                "regression baseline audit retention has expired for the requested date"
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class RetrievalRegressionBaselineFile:
-    """로컬 파일에서 함께 검증한 기준선과 회귀 정책이다."""
+    """로컬 파일에서 함께 검증한 승인 기준선·정책·감사 참조다."""
 
     baseline: RetrievalEvaluationBaseline
     policy: RetrievalRegressionPolicy
+    audit: RetrievalRegressionBaselineAuditMetadata
 
 
 class LocalRetrievalRegressionBaselineLoader:
@@ -583,13 +632,21 @@ class LocalRetrievalRegressionBaselineLoader:
     def _validated_file(self, payload: object) -> RetrievalRegressionBaselineFile:
         if not isinstance(payload, dict):
             raise RagConfigurationError("regression baseline JSON root must be an object")
-        if set(payload) != {"baseline", "policy"}:
+        required_fields = {"baseline", "policy", "audit"}
+        if not {"baseline", "policy"}.issubset(payload) or not set(payload).issubset(
+            required_fields
+        ):
             raise RagConfigurationError(
-                "regression baseline JSON root must contain only baseline and policy"
+                "regression baseline JSON root must contain only baseline, policy, and audit"
             )
         baseline = self._baseline_from_json(payload["baseline"])
         policy = self._policy_from_json(payload["policy"])
-        return RetrievalRegressionBaselineFile(baseline=baseline, policy=policy)
+        if "audit" not in payload:
+            raise RagConfigurationError(
+                "regression baseline JSON root must contain only baseline, policy, and audit"
+            )
+        audit = self._audit_from_json(payload["audit"])
+        return RetrievalRegressionBaselineFile(baseline=baseline, policy=policy, audit=audit)
 
     def _baseline_from_json(self, raw_baseline: object) -> RetrievalEvaluationBaseline:
         if not isinstance(raw_baseline, dict):
@@ -657,6 +714,24 @@ class LocalRetrievalRegressionBaselineLoader:
             maximum_mean_reciprocal_rank_drop=raw_policy["maximum_mean_reciprocal_rank_drop"],
         )
 
+    @staticmethod
+    def _audit_from_json(raw_audit: object) -> RetrievalRegressionBaselineAuditMetadata:
+        if not isinstance(raw_audit, dict):
+            raise RagConfigurationError("regression baseline audit must be an object")
+        required_fields = {"baseline_id", "approval_reference", "approved_on", "retained_until"}
+        if set(raw_audit) != required_fields:
+            raise RagConfigurationError(
+                "regression baseline audit contains unsupported or missing fields"
+            )
+        return RetrievalRegressionBaselineAuditMetadata(
+            baseline_id=raw_audit["baseline_id"],
+            approval_reference=raw_audit["approval_reference"],
+            approved_on=_date_from_baseline_audit_json(raw_audit["approved_on"], "approved_on"),
+            retained_until=_date_from_baseline_audit_json(
+                raw_audit["retained_until"], "retained_until"
+            ),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class RetrievalEvaluationReportFileConfig:
@@ -686,11 +761,19 @@ class RetrievalEvaluationAuditRequirement:
     """
 
     comparison_target_id: str
+    comparison_approval_reference: str
     as_of_date: date
 
     def __post_init__(self) -> None:
         if not isinstance(self.comparison_target_id, str) or not self.comparison_target_id.strip():
             raise RagConfigurationError("audit comparison_target_id must be a non-empty string")
+        if (
+            not isinstance(self.comparison_approval_reference, str)
+            or not self.comparison_approval_reference.strip()
+        ):
+            raise RagConfigurationError(
+                "audit comparison_approval_reference must be a non-empty string"
+            )
         if not isinstance(self.as_of_date, date):
             raise RagConfigurationError("audit as_of_date must be a datetime.date")
 
@@ -706,6 +789,7 @@ class RetrievalEvaluationAuditMetadata:
 
     record_id: str
     comparison_target_id: str
+    comparison_approval_reference: str
     approval_state: str
     retained_until: date
     approval_reference: str | None = None
@@ -718,6 +802,7 @@ class RetrievalEvaluationAuditMetadata:
         for field_name, value in (
             ("record_id", self.record_id),
             ("comparison_target_id", self.comparison_target_id),
+            ("comparison_approval_reference", self.comparison_approval_reference),
         ):
             if not isinstance(value, str) or not value.strip():
                 raise RagConfigurationError(f"audit {field_name} must be a non-empty string")
@@ -776,6 +861,7 @@ class RetrievalEvaluationAuditMetadata:
         return {
             "record_id": self.record_id,
             "comparison_target_id": self.comparison_target_id,
+            "comparison_approval_reference": self.comparison_approval_reference,
             "approval_state": self.approval_state,
             "retained_until": self.retained_until.isoformat(),
             "approval_reference": self.approval_reference,
@@ -792,6 +878,10 @@ class RetrievalEvaluationAuditMetadata:
         if self.comparison_target_id != requirement.comparison_target_id:
             raise RagConfigurationError(
                 "audit comparison_target_id must match the requested target"
+            )
+        if self.comparison_approval_reference != requirement.comparison_approval_reference:
+            raise RagConfigurationError(
+                "audit comparison_approval_reference must match the requested target"
             )
         if self.approval_state != "approved":
             raise RagConfigurationError("audit record must be approved for regression comparison")
@@ -958,6 +1048,7 @@ class LocalRetrievalEvaluationReportStore:
         required_fields = {
             "record_id",
             "comparison_target_id",
+            "comparison_approval_reference",
             "approval_state",
             "retained_until",
             "approval_reference",
@@ -978,6 +1069,7 @@ class LocalRetrievalEvaluationReportStore:
         return RetrievalEvaluationAuditMetadata(
             record_id=raw_audit["record_id"],
             comparison_target_id=raw_audit["comparison_target_id"],
+            comparison_approval_reference=raw_audit["comparison_approval_reference"],
             approval_state=raw_audit["approval_state"],
             retained_until=retained_until,
             approval_reference=raw_audit["approval_reference"],
@@ -1097,11 +1189,19 @@ class RetrievalRegressionChecker:
         *,
         baseline: RetrievalEvaluationBaseline,
         policy: RetrievalRegressionPolicy | None = None,
+        baseline_audit: RetrievalRegressionBaselineAuditMetadata | None = None,
     ) -> None:
         if not isinstance(baseline, RetrievalEvaluationBaseline):
             raise RagConfigurationError("baseline must be a RetrievalEvaluationBaseline")
+        if baseline_audit is not None and not isinstance(
+            baseline_audit, RetrievalRegressionBaselineAuditMetadata
+        ):
+            raise RagConfigurationError(
+                "baseline_audit must be a RetrievalRegressionBaselineAuditMetadata or null"
+            )
         self._baseline = baseline
         self._policy = policy or RetrievalRegressionPolicy()
+        self._baseline_audit = baseline_audit
 
     def evaluate(self, report: RetrievalEvaluationReport) -> RetrievalRegressionDecision:
         """현재 보고서가 같은 기준선의 품질 하락 정책을 통과하는지 판정한다."""
@@ -1151,9 +1251,14 @@ class RetrievalRegressionChecker:
         *,
         audit_requirement: RetrievalEvaluationAuditRequirement,
     ) -> RetrievalRegressionDecision:
-        """승인·보존·대상이 확인된 불변 기록만 기준선과 비교한다."""
+        """승인·보존·대상·승인 참조가 연결된 불변 기록만 기준선과 비교한다."""
         if not isinstance(record, RetrievalEvaluationRecord):
             raise RagConfigurationError("regression record must be a RetrievalEvaluationRecord")
+        if self._baseline_audit is None:
+            raise RagConfigurationError(
+                "audited regression comparison requires a RetrievalRegressionBaselineAuditMetadata"
+            )
+        self._baseline_audit.assert_matches_requirement(audit_requirement)
         record.audit.assert_comparable(audit_requirement)
         return self.evaluate(record.report)
 
@@ -1168,6 +1273,25 @@ class RetrievalRegressionChecker:
             drop=max(0.0, baseline_score - current_score),
             maximum_drop=maximum_drop,
         )
+
+
+def _date_from_baseline_audit_json(value: object, field_name: str) -> date:
+    """승인 기준선 파일의 ISO-8601 날짜가 날짜형 경계값인지 확인한다."""
+    if not isinstance(value, str):
+        raise RagConfigurationError(
+            f"regression baseline audit {field_name} must be an ISO date string"
+        )
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise RagConfigurationError(
+            f"regression baseline audit {field_name} must be an ISO date string"
+        ) from error
+    if parsed.isoformat() != value:
+        raise RagConfigurationError(
+            f"regression baseline audit {field_name} must be an ISO date string"
+        )
+    return parsed
 
 
 def _date_from_audit_json(value: object, field_name: str) -> date:

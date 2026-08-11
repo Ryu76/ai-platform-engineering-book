@@ -134,6 +134,7 @@ def main() -> None:
     audit = RetrievalEvaluationAuditMetadata(
         record_id="volume05-sample-retrieval-report-001",
         comparison_target_id="volume05-sample-retrieval-baseline-001",
+        comparison_approval_reference="volume05-local-sample-baseline-approval-001",
         approval_state="approved",
         retained_until=date(2030, 1, 1),
         approval_reference="volume05-local-sample-approval-001",
@@ -147,11 +148,14 @@ def main() -> None:
         Path("retrieval-regression-baseline.json")
     )
     regression = RetrievalRegressionChecker(
-        baseline=regression_file.baseline, policy=regression_file.policy
+        baseline=regression_file.baseline,
+        policy=regression_file.policy,
+        baseline_audit=regression_file.audit,
     ).evaluate_record(
         revalidated_record,
         audit_requirement=RetrievalEvaluationAuditRequirement(
             comparison_target_id="volume05-sample-retrieval-baseline-001",
+            comparison_approval_reference="volume05-local-sample-baseline-approval-001",
             as_of_date=date(2026, 8, 11),
         ),
     )

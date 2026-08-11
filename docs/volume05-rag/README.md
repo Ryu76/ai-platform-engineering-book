@@ -24,9 +24,9 @@
 13. `LocalRagApi`는 프레임워크·HTTP 서버 없이 `{"query": string, "top_k"?: 1..20}` 로컬 JSON 요청을 검증합니다. 지원하지 않는 필드·빈 질문·범위 밖/boolean `top_k`는 생성기나 검색기를 호출하지 않고 안정된 `400 {"error": {"code": "invalid_request", "message": ...}}`로 반환합니다. 유효 요청은 `200`과 답변·No-answer·인용 JSON을 반환합니다.
 14. `RetrievalEvaluator`는 명시한 고정 로컬 `RetrievalEvaluationCase`만 `SearchableIndex`에 전달해 생성기 호출 없이 Recall@k·Hit rate·MRR을 계산합니다. 각 사례는 하나 이상의 기대 청크 ID를 가져야 하며, 평가기는 tuple 이외 결과·요청 수 초과 결과·중복 청크 ID를 거부해 신뢰할 수 없는 검색기 출력이 지표를 왜곡하지 못하게 합니다.
 15. `LocalRetrievalEvaluationSetLoader`는 허용된 로컬 루트 안에서 호출자가 명시한 UTF-8 `.json` 평가 세트 하나만 읽습니다. 경로 탈출·심볼릭 링크 탈출·빈/과대 파일·비 UTF-8·비표준 JSON·중복 JSON 키를 거부하고, 엄격한 `{"cases": [...]}` 스키마를 `RetrievalEvaluationCase` tuple로 변환합니다. 자동 디렉터리 탐색, 네트워크, 제공자 SDK는 사용하지 않습니다.
-16. `RetrievalEvaluationBaseline`과 `RetrievalRegressionChecker`는 같은 고정 평가 세트의 이전 집계 기준선과 현재 `RetrievalEvaluationReport`를 결정론적으로 비교합니다. `LocalRetrievalRegressionBaselineLoader`는 호출자가 명시한 로컬 UTF-8 `.json` 파일 하나에서 기준선의 사례 순서·ID·질문·기대 청크 ID·집계 지표와 지표별 하락 정책을 함께 엄격히 검증합니다. 경로 탈출·심볼릭 링크 탈출·중복 JSON 키·비표준 JSON·지원하지 않는 필드·과대 파일은 거부하며 자동 탐색·검색·생성·네트워크·제공자 SDK를 사용하지 않습니다. `top_k`, 사례 순서·ID·질문, 기대 청크 ID가 같지 않으면 비교를 거부하며, Recall@k·Hit rate·MRR별 허용 하락 폭을 명시적으로 판정합니다.
-17. `LocalRetrievalEvaluationReportStore`는 평가 보고서를 허용된 로컬 루트의 명시 UTF-8 `.json` 파일 하나에 결정론적으로 기록하고 다시 읽습니다. 기록은 기존 파일을 덮어쓰지 않으며, 재로딩 시 정확한 스키마·중복 JSON 키·경로·파일 크기·사례 ID·청크 ID·순위·사례별 지표·집계 지표의 파생값을 모두 검증합니다. 모든 기록은 `RetrievalEvaluationAuditMetadata`의 불변 `record_id`·비교 대상 ID·승인 상태/참조/일자·보존 종료일을 함께 가져야 합니다.
-18. `RetrievalEvaluationAuditRequirement`은 회귀 비교 시 대상 기준선 ID와 명시 기준일을 요구합니다. `RetrievalRegressionChecker.evaluate_record()`는 `approved` 기록만, 대상이 같고 보존 종료일이 지나지 않은 경우에만 비교합니다. `pending`·`superseded`·`revoked` 기록, 묵시적 대상 변경, 만료 기록은 회귀 비교 전에 거부합니다.
+16. `RetrievalEvaluationBaseline`과 `RetrievalRegressionChecker`는 같은 고정 평가 세트의 이전 집계 기준선과 현재 `RetrievalEvaluationReport`를 결정론적으로 비교합니다. `LocalRetrievalRegressionBaselineLoader`는 호출자가 명시한 로컬 UTF-8 `.json` 파일 하나에서 기준선의 사례 순서·ID·질문·기대 청크 ID·집계 지표와 지표별 하락 정책, 그리고 불변 기준선 ID·승인 참조·승인일·보존 종료일을 함께 엄격히 검증합니다. 경로 탈출·심볼릭 링크 탈출·중복 JSON 키·비표준 JSON·지원하지 않는 필드·과대 파일은 거부하며 자동 탐색·검색·생성·네트워크·제공자 SDK를 사용하지 않습니다. `top_k`, 사례 순서·ID·질문, 기대 청크 ID가 같지 않으면 비교를 거부하며, Recall@k·Hit rate·MRR별 허용 하락 폭을 명시적으로 판정합니다.
+17. `LocalRetrievalEvaluationReportStore`는 평가 보고서를 허용된 로컬 루트의 명시 UTF-8 `.json` 파일 하나에 결정론적으로 기록하고 다시 읽습니다. 기록은 기존 파일을 덮어쓰지 않으며, 재로딩 시 정확한 스키마·중복 JSON 키·경로·파일 크기·사례 ID·청크 ID·순위·사례별 지표·집계 지표의 파생값을 모두 검증합니다. 모든 기록은 `RetrievalEvaluationAuditMetadata`의 불변 `record_id`·비교 대상 기준선 ID·대상 기준선 승인 참조·기록 승인 상태/참조/일자·보존 종료일을 함께 가져야 합니다.
+18. `RetrievalEvaluationAuditRequirement`은 회귀 비교 시 대상 기준선 ID·그 기준선의 승인 참조·명시 기준일을 요구합니다. `RetrievalRegressionChecker.evaluate_record()`는 감사된 승인 기준선과 `approved` 기록의 두 참조가 모두 일치하고, 양쪽 보존 종료일이 지나지 않은 경우에만 비교합니다. `pending`·`superseded`·`revoked` 기록, 묵시적 대상/승인 참조 변경, 승인 전 기준일, 만료 기록은 회귀 비교 전에 거부합니다.
 19. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
 20. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
 
@@ -95,7 +95,7 @@ assert report.mean_reciprocal_rank == 1.0
 
 정책 기본값은 각 지표의 하락을 `0.0`만큼만 허용합니다. 실험에서 제한된 하락을 허용해야 하면 `RetrievalRegressionPolicy`에 지표별 0~1의 최대 하락 폭을 명시합니다. 판정은 예외로 품질 실패를 숨기지 않습니다. 호환되는 보고서의 품질 하락은 `RetrievalRegressionDecision.passed == false` 및 기준선 점수·현재 점수·하락 폭·허용 폭을 포함한 payload로 반환합니다. 호환되지 않는 보고서는 `RagConfigurationError`로 거부합니다.
 
-승인한 기준선과 정책을 파일로 고정해야 하면 `LocalRetrievalRegressionBaselineLoader`에 평가 세트와 같은 허용 로컬 루트 및 명시 상대 경로를 전달합니다. 파일은 정확히 `{"baseline": {...}, "policy": {...}}`여야 합니다. `baseline`은 `top_k`, `cases`, `recall_at_k`, `hit_rate`, `mean_reciprocal_rank`만 가지며, 각 사례는 `case_id`, `query`, `expected_chunk_ids`만 가집니다. `policy`는 세 `maximum_*_drop` 값을 모두 가집니다. 파일 저장용 사례에는 회귀 호환성 검증을 위해 질문이 포함되지만, `to_payload()`로 외부에 내보내는 기준선·판정 payload에는 질문 원문을 넣지 않습니다.
+승인한 기준선과 정책을 파일로 고정해야 하면 `LocalRetrievalRegressionBaselineLoader`에 평가 세트와 같은 허용 로컬 루트 및 명시 상대 경로를 전달합니다. 파일은 정확히 `{"baseline": {...}, "policy": {...}, "audit": {...}}`여야 합니다. `baseline`은 `top_k`, `cases`, `recall_at_k`, `hit_rate`, `mean_reciprocal_rank`만 가지며, 각 사례는 `case_id`, `query`, `expected_chunk_ids`만 가집니다. `policy`는 세 지표의 `maximum_*_drop` 값을 모두 가집니다. `audit`은 불변 `baseline_id`, 기준선 승인 `approval_reference`, ISO `approved_on`, ISO `retained_until`만 가져야 합니다. 파일 저장용 사례에는 회귀 호환성 검증을 위해 질문이 포함되지만, `to_payload()`로 외부에 내보내는 기준선·판정 payload에는 질문 원문을 넣지 않습니다.
 
 ```python
 from ai_platform.rag import (
@@ -119,7 +119,7 @@ assert decision.passed
 
 `LocalRetrievalEvaluationReportStore`는 `RetrievalEvaluator`가 만든 고정 보고서를 나중에 기준선과 비교하기 전에 검증할 수 있는 로컬 파일 경계입니다. `record()`는 기존 파일을 덮어쓰지 않고, 이미 존재하는 디렉터리 안의 명시 상대 `.json` 경로에만 UTF-8 JSON을 씁니다. 기록할 때마다 불변 감사 메타데이터를 명시해야 하며 `load_record()`는 보고서와 메타데이터를 함께 재검증합니다. 기존 `load()`는 재검증된 보고서만 필요한 호출자에게 유지됩니다. 디렉터리 탐색, 검색, 생성, 네트워크, 제공자 SDK는 호출하지 않습니다.
 
-기록 파일은 `top_k`, `evaluated_cases`, 세 집계 지표, `results`, `audit`만 가져야 합니다. 각 결과는 `case_id`, `query`, 기대/회수 청크 ID, 첫 관련 순위, `passed`, Recall@k, 역순위만 정확히 가져야 합니다. `audit`은 `record_id`, `comparison_target_id`, `approval_state`, `retained_until`, 승인 참조·일자, 대체 기록 ID를 정확히 가져야 합니다. 상태는 `pending`, `approved`, `superseded`, `revoked`만 허용하며, 승인/대체 상태별 필수 필드 조합도 검증합니다. 로더는 중복 키와 알 수 없는 필드를 거부하고, `passed`·첫 관련 순위·사례별 Recall@k/MRR·전체 Recall@k/Hit rate/MRR이 회수 청크 ID에서 실제로 다시 계산되는지 확인합니다. 따라서 사람이 지표·감사 수명·비교 대상을 편집하거나 호환성 질의를 빼면 회귀 비교 전에 거부됩니다.
+기록 파일은 `top_k`, `evaluated_cases`, 세 집계 지표, `results`, `audit`만 가져야 합니다. 각 결과는 `case_id`, `query`, 기대/회수 청크 ID, 첫 관련 순위, `passed`, Recall@k, 역순위만 정확히 가져야 합니다. `audit`은 `record_id`, 비교 대상 기준선 ID, 그 기준선의 승인 참조, 승인 상태, 보존 종료일, 기록 승인 참조·일자, 대체 기록 ID를 정확히 가져야 합니다. 상태는 `pending`, `approved`, `superseded`, `revoked`만 허용하며, 승인/대체 상태별 필수 필드 조합도 검증합니다. 로더는 중복 키와 알 수 없는 필드를 거부하고, `passed`·첫 관련 순위·사례별 Recall@k/MRR·전체 Recall@k/Hit rate/MRR이 회수 청크 ID에서 실제로 다시 계산되는지 확인합니다. 따라서 사람이 지표·감사 수명·비교 대상·대상 승인 참조를 편집하거나 호환성 질의를 빼면 회귀 비교 전에 거부됩니다.
 
 ```python
 from datetime import date
@@ -135,6 +135,7 @@ from ai_platform.rag import (
 audit = RetrievalEvaluationAuditMetadata(
     record_id="retrieval-run-001",
     comparison_target_id="approved-baseline-001",
+    comparison_approval_reference="local-baseline-approval-001",
     approval_state="approved",
     approval_reference="local-approval-001",
     approved_on=date(2026, 8, 11),
@@ -143,16 +144,22 @@ audit = RetrievalEvaluationAuditMetadata(
 store = LocalRetrievalEvaluationReportStore(root=Path("local-evaluation-records"))
 store.record(Path("approved-run.json"), report, audit=audit)  # 새 파일만 기록
 record = store.load_record(Path("approved-run.json"))
-decision = RetrievalRegressionChecker(baseline=baseline, policy=policy).evaluate_record(
+decision = RetrievalRegressionChecker(
+    baseline=baseline,
+    policy=policy,
+    baseline_audit=baseline_file.audit,
+).evaluate_record(
     record,
     audit_requirement=RetrievalEvaluationAuditRequirement(
-        comparison_target_id="approved-baseline-001", as_of_date=date(2026, 8, 11)
+        comparison_target_id="approved-baseline-001",
+        comparison_approval_reference="local-baseline-approval-001",
+        as_of_date=date(2026, 8, 11),
     ),
 )
 assert decision.passed
 ```
 
-기록 파일은 사례 호환성을 확인하기 위해 질의를 포함하는 로컬 감사 산출물입니다. 반면 외부로 반환하기 위한 `report.to_payload()`·기준선·판정 payload는 계속 질의 원문과 문서 원문, 생성 답변을 포함하지 않습니다. 예제는 저장소를 더럽히지 않도록 임시 허용 루트에 파일을 기록·재로딩합니다. 기록에는 고정 `record_id`, 파일 기반 승인 기준선의 `comparison_target_id`, `approved` 상태, 로컬 승인 참조와 일자, 보존 종료일을 명시합니다. 비교에는 `RetrievalEvaluationAuditRequirement`으로 같은 대상 ID와 고정 기준일을 넘기므로, 대상 변경·미승인/종료 상태·만료 기록은 기준선 비교 전에 거부됩니다. 그 뒤 파일 기반 기준선과 비교합니다.
+기록 파일은 사례 호환성을 확인하기 위해 질의를 포함하는 로컬 감사 산출물입니다. 반면 외부로 반환하기 위한 `report.to_payload()`·기준선·판정 payload는 계속 질의 원문과 문서 원문, 생성 답변을 포함하지 않습니다. 예제는 저장소를 더럽히지 않도록 임시 허용 루트에 파일을 기록·재로딩합니다. 파일 기반 기준선은 불변 ID와 승인 참조를 함께 가지며, 기록은 같은 `comparison_target_id`와 `comparison_approval_reference`를 명시합니다. 비교에는 `RetrievalEvaluationAuditRequirement`으로 같은 두 참조와 고정 기준일을 넘기고 `RetrievalRegressionChecker`에는 로드한 기준선 감사 메타데이터를 넘깁니다. 따라서 대상/승인 참조 변경, 미승인/종료 상태, 승인 전 기준일, 만료 기록은 기준선 비교 전에 거부됩니다. 그 뒤 파일 기반 기준선과 비교합니다.
 
 ## 장 목록
 

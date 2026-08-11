@@ -1,5 +1,44 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 승인 기준선·평가 기록 참조 무결성 슬라이스 완료
+
+### 완료
+
+- `RetrievalRegressionBaselineAuditMetadata`를 추가하고 고정 로컬 기준선 파일에 불변 `baseline_id`, 승인 참조, 승인일, 보존 종료일을 엄격히 요구했습니다. 기준선 JSON은 이제 정확한 `baseline`·`policy`·`audit` 루트 구조만 허용합니다.
+- 평가 기록의 `RetrievalEvaluationAuditMetadata`와 비교 요청의 `RetrievalEvaluationAuditRequirement`에 대상 기준선 승인 참조를 추가했습니다. 따라서 평가 기록은 단순 대상 ID뿐 아니라 승인된 기준선의 정확한 승인 참조도 명시해야 합니다.
+- `RetrievalRegressionChecker.evaluate_record()`는 감사된 기준선 메타데이터 없이 실행되지 않으며, 요청·기준선·평가 기록의 대상 ID와 승인 참조, 승인일·보존 기간을 모두 결정론적으로 검증한 뒤에만 품질 비교를 수행합니다. 대상/승인 참조 변경, 승인 전 기준일, 만료 및 미승인 기록은 비교 전에 거부됩니다.
+- 샘플 기준선·예제·문서를 새 계약으로 갱신했습니다. 예제는 local/sample data, 임시 로컬 기록 및 Mock 제공자 경계만 사용하며 라이브 API·비밀값·배포를 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 178 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 7 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 5 source files
+uv run python examples/volume05/local_rag.py
+# 고정 JSON 평가 세트 Recall@1·Hit rate·MRR 모두 1.00, 승인 기준선/기록 참조 무결성 및 회귀 판정 통과, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 승인된 기준선 파일의 변경 감지용 결정론적 콘텐츠 식별자와 평가 기록의 기준선 콘텐츠 참조를 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 불변 평가 기록 감사 메타데이터 슬라이스 완료
 
 ### 완료
