@@ -9,7 +9,7 @@
 - 모든 결정론적 Mock의 script는 비어 있지 않은 `tuple`이어야 한다. list 등 mutable sequence는 `WorkflowConfigurationError`로 거절된다.
 - 역할 이름은 비어 있지 않은 문자열이어야 한다. 문자열이 아닌 값은 `AttributeError`가 아니라 구성 오류로 fail-closed한다.
 - tuple은 호출 순서와 script 길이를 실행 전에 고정한다. script가 소진되면 Mock은 fallback, 재생성, 추가 호출 없이 `AgentProtocolError`를 낸다.
-- 이 규칙은 script **컨테이너**의 불변성을 보장한다. 각 항목의 `AgentResponse`, `WorkerResponse`, `DelegationPlan`, `ConflictProposal` 형식과 내용은 기존 workflow의 실행 시점 protocol 검증이 담당한다.
+- 이 규칙은 script **컨테이너와 항목의 기본 계약**을 구성 단계에서 보장한다. 즉 각 항목은 올바른 response/plan/proposal 타입이어야 하고, 필수 문자열은 비어 있지 않아야 하며, Worker 성공 여부는 boolean이어야 한다. task 수 상한, assignee allow-list, reviewer의 승인 결정처럼 workflow 정책에 의존하는 검증은 실행 시점 protocol 검증이 담당한다.
 - 사람 승인은 그대로 별도 경계다. immutable Mock도 `PENDING`에서 QA·Worker·DevOps를 실행할 수 없고, 영향 있는 다음 단계에는 명시적 `APPROVED`가 필요하다.
 
 ## 왜 구성 단계에서 중단하는가

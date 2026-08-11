@@ -147,13 +147,11 @@ def test_unsafe_configuration_and_invalid_proposal_fail_before_later_calls() -> 
             agents={"planner": planner, "reviewer": planner}, max_rounds=0
         )
 
-    invalid_flow, _, reviewer = workflow(
-        planner_proposals=(ConflictProposal("", "No option supplied."),),
-        reviewer_proposals=(proposal("offline tutorial"),),
-    )
-    with pytest.raises(AgentProtocolError, match="option and rationale must not be empty"):
-        invalid_flow.run(objective="Choose a tutorial plan.")
-    assert reviewer.calls == []
+    with pytest.raises(WorkflowConfigurationError, match="must not be empty in a fixed script"):
+        workflow(
+            planner_proposals=(ConflictProposal("", "No option supplied."),),
+            reviewer_proposals=(proposal("offline tutorial"),),
+        )
 
 
 def test_malformed_objective_and_proposal_types_fail_closed_before_later_calls() -> None:
@@ -167,24 +165,18 @@ def test_malformed_objective_and_proposal_types_fail_closed_before_later_calls()
     assert planner.calls == []
     assert reviewer.calls == []
 
-    malformed_flow, malformed_planner, malformed_reviewer = workflow(
-        planner_proposals=(object(),),  # type: ignore[arg-type]
-        reviewer_proposals=(proposal("offline tutorial"),),
-    )
-    with pytest.raises(AgentProtocolError, match="must be a ConflictProposal"):
-        malformed_flow.run(objective="Choose a tutorial plan.")
-    assert len(malformed_planner.calls) == 1
-    assert malformed_reviewer.calls == []
+    with pytest.raises(WorkflowConfigurationError, match="only ConflictProposal"):
+        DeterministicMockConflictAgent(
+            role="planner", proposals=(object(),)  # type: ignore[arg-type]
+        )
 
-    malformed_field_flow, _, malformed_field_reviewer = workflow(
-        planner_proposals=(
-            ConflictProposal(object(), "A rationale."),  # type: ignore[arg-type]
-        ),
-        reviewer_proposals=(proposal("offline tutorial"),),
-    )
-    with pytest.raises(AgentProtocolError, match="option and rationale must be strings"):
-        malformed_field_flow.run(objective="Choose a tutorial plan.")
-    assert malformed_field_reviewer.calls == []
+    with pytest.raises(WorkflowConfigurationError, match="must be strings in a fixed script"):
+        DeterministicMockConflictAgent(
+            role="planner",
+            proposals=(
+                ConflictProposal(object(), "A rationale."),  # type: ignore[arg-type]
+            ),
+        )
 
 
 def test_mock_script_exhaustion_has_no_fallback_round() -> None:

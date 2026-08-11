@@ -174,28 +174,8 @@ def test_invalid_task_and_early_agent_output_stop_before_later_roles() -> None:
         [],
     ]
 
-    invalid_planner = mock("planner", AgentResponse("   "))
-    valid_researcher = mock("researcher", AgentResponse("evidence"))
-    valid_developer = mock("developer", AgentResponse("draft"))
-    valid_reviewer = mock("reviewer", AgentResponse("approved", ReviewDecision.APPROVE))
-    valid_qa = mock("qa", AgentResponse("qa passed"))
-    invalid_output_flow = BoundedReviewWorkflow(
-        planner=invalid_planner,
-        researcher=valid_researcher,
-        developer=valid_developer,
-        reviewer=valid_reviewer,
-        qa=valid_qa,
-    )
-
-    with pytest.raises(AgentProtocolError, match="content must be a non-empty string"):
-        invalid_output_flow.run(task="write an offline example")
-    assert len(invalid_planner.calls) == 1
-    assert [
-        valid_researcher.calls,
-        valid_developer.calls,
-        valid_reviewer.calls,
-        valid_qa.calls,
-    ] == [[], [], [], []]
+    with pytest.raises(WorkflowConfigurationError, match="non-empty string in a fixed script"):
+        mock("planner", AgentResponse("   "))
 
 
 def test_mock_script_exhaustion_prevents_unbounded_fallback_work() -> None:

@@ -99,9 +99,43 @@ class DeterministicMockCoordinator:
     """Offline coordinator that consumes a fixed plan script in call order."""
 
     def __init__(self, *, plans: tuple[DelegationPlan, ...]) -> None:
-        validate_fixed_script("plans", plans)
+        self._validate_plan_script(plans)
         self._plans = plans
         self.calls: list[DelegationContext] = []
+
+    @staticmethod
+    def _validate_plan_script(plans: tuple[object, ...]) -> None:
+        """Reject structurally malformed fixed manifests during mock configuration."""
+        validate_fixed_script("plans", plans)
+        for plan in plans:
+            if not isinstance(plan, DelegationPlan):
+                raise WorkflowConfigurationError("plans must contain only DelegationPlan values")
+            if not isinstance(plan.summary, str) or not plan.summary.strip():
+                raise WorkflowConfigurationError(
+                    "DelegationPlan summary must be a non-empty string in a fixed script"
+                )
+            if not isinstance(plan.tasks, tuple) or not plan.tasks:
+                raise WorkflowConfigurationError(
+                    "DelegationPlan tasks must be a non-empty immutable tuple in a fixed script"
+                )
+            task_ids: set[str] = set()
+            for task in plan.tasks:
+                if not isinstance(task, DelegationTask):
+                    raise WorkflowConfigurationError(
+                        "DelegationPlan tasks must contain only DelegationTask values"
+                    )
+                if any(
+                    not isinstance(value, str) or not value.strip()
+                    for value in (task.task_id, task.assignee, task.instruction)
+                ):
+                    raise WorkflowConfigurationError(
+                        "DelegationTask fields must be non-empty strings in a fixed script"
+                    )
+                if task.task_id in task_ids:
+                    raise WorkflowConfigurationError(
+                        "DelegationPlan task ids must be unique in a fixed script"
+                    )
+                task_ids.add(task.task_id)
 
     def propose(self, context: DelegationContext) -> DelegationPlan:
         """Record the local planning call and return the next fixed manifest."""
@@ -120,10 +154,28 @@ class DeterministicMockWorker:
     def __init__(self, *, role: str, responses: tuple[WorkerResponse, ...]) -> None:
         if not isinstance(role, str) or not role.strip():
             raise WorkflowConfigurationError("role must not be empty")
-        validate_fixed_script("responses", responses)
+        self._validate_response_script(responses)
         self.role = role
         self._responses = responses
         self.calls: list[DelegationContext] = []
+
+    @staticmethod
+    def _validate_response_script(responses: tuple[object, ...]) -> None:
+        """Reject malformed fixed worker outcomes during mock configuration."""
+        validate_fixed_script("responses", responses)
+        for response in responses:
+            if not isinstance(response, WorkerResponse):
+                raise WorkflowConfigurationError(
+                    "responses must contain only WorkerResponse values"
+                )
+            if not isinstance(response.content, str) or not response.content.strip():
+                raise WorkflowConfigurationError(
+                    "WorkerResponse content must be a non-empty string in a fixed script"
+                )
+            if not isinstance(response.succeeded, bool):
+                raise WorkflowConfigurationError(
+                    "WorkerResponse succeeded must be a boolean in a fixed script"
+                )
 
     def act(self, context: DelegationContext) -> WorkerResponse:
         """Record a local worker call and return the next preconfigured outcome."""

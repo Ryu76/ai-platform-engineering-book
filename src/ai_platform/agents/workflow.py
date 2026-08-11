@@ -86,6 +86,22 @@ def validate_fixed_script(name: str, script: object) -> None:
         raise WorkflowConfigurationError(f"{name} must be a non-empty immutable tuple")
 
 
+def validate_agent_response_script(responses: tuple[object, ...]) -> None:
+    """Reject malformed fixed responses before a deterministic role can be invoked."""
+    validate_fixed_script("responses", responses)
+    for response in responses:
+        if not isinstance(response, AgentResponse):
+            raise WorkflowConfigurationError("responses must contain only AgentResponse values")
+        if not isinstance(response.content, str) or not response.content.strip():
+            raise WorkflowConfigurationError(
+                "AgentResponse content must be a non-empty string in a fixed script"
+            )
+        if response.review is not None and not isinstance(response.review, ReviewDecision):
+            raise WorkflowConfigurationError(
+                "AgentResponse review must be a ReviewDecision or None in a fixed script"
+            )
+
+
 class DeterministicMockAgent:
     """Offline mock agent that consumes a fixed response script in call order.
 
@@ -96,7 +112,7 @@ class DeterministicMockAgent:
     def __init__(self, *, role: str, responses: tuple[AgentResponse, ...]) -> None:
         if not isinstance(role, str) or not role.strip():
             raise WorkflowConfigurationError("role must not be empty")
-        validate_fixed_script("responses", responses)
+        validate_agent_response_script(responses)
         self.role = role
         self._responses = responses
         self.calls: list[AgentContext] = []

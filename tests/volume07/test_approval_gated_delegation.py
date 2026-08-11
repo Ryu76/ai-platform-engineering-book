@@ -146,13 +146,8 @@ def test_human_rejection_fails_closed_before_coordinator_or_workers_are_called()
 
 
 def test_unsafe_manifest_and_configuration_fail_closed_before_worker_execution() -> None:
-    unsafe_flow, _, writer, _ = workflow(
-        coordinator_plan=plan(task("draft", "writer"), task("draft", "checker"))
-    )
-
-    with pytest.raises(AgentProtocolError, match="task ids must be unique"):
-        unsafe_flow.run(objective="Prepare a local tutorial.")
-    assert writer.calls == []
+    with pytest.raises(WorkflowConfigurationError, match="task ids must be unique"):
+        workflow(coordinator_plan=plan(task("draft", "writer"), task("draft", "checker")))
 
     coordinator = DeterministicMockCoordinator(plans=(plan(task("draft", "writer")),))
     writer_worker = DeterministicMockWorker(
@@ -177,23 +172,13 @@ def test_malformed_objective_and_agent_outputs_fail_closed() -> None:
     assert writer.calls == []
     assert checker.calls == []
 
-    malformed_plan_flow, _, malformed_plan_writer, _ = workflow(
-        coordinator_plan=object()  # type: ignore[arg-type]
-    )
-    with pytest.raises(AgentProtocolError, match="must be a DelegationPlan"):
-        malformed_plan_flow.run(objective="Prepare a local tutorial.")
-    assert malformed_plan_writer.calls == []
+    with pytest.raises(WorkflowConfigurationError, match="only DelegationPlan"):
+        DeterministicMockCoordinator(plans=(object(),))  # type: ignore[arg-type]
 
-    malformed_response_flow, _, malformed_response_writer, malformed_response_checker = workflow(
-        coordinator_plan=plan(task("draft", "writer")),
-        writer_responses=(object(),),  # type: ignore[arg-type]
-    )
-    with pytest.raises(AgentProtocolError, match="must be a WorkerResponse"):
-        malformed_response_flow.run(
-            objective="Prepare a local tutorial.", human_approval=DelegationApproval.APPROVED
+    with pytest.raises(WorkflowConfigurationError, match="only WorkerResponse"):
+        DeterministicMockWorker(
+            role="writer", responses=(object(),)  # type: ignore[arg-type]
         )
-    assert len(malformed_response_writer.calls) == 1
-    assert malformed_response_checker.calls == []
 
 
 def test_worker_script_exhaustion_has_no_fallback_attempt() -> None:

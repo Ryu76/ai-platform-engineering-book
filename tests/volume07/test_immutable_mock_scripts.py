@@ -74,6 +74,26 @@ def test_role_mocks_reject_non_string_role_names(factory: object) -> None:
         factory()  # type: ignore[operator]
 
 
+def test_deterministic_mocks_reject_malformed_fixed_entries_during_configuration() -> None:
+    """A local script is valid only when every fixed entry satisfies its base contract."""
+    with pytest.raises(WorkflowConfigurationError, match="AgentResponse content"):
+        DeterministicMockAgent(
+            role="planner", responses=(AgentResponse(object()),)  # type: ignore[arg-type]
+        )
+    with pytest.raises(WorkflowConfigurationError, match="DelegationPlan summary"):
+        DeterministicMockCoordinator(
+            plans=(DelegationPlan(" ", (DelegationTask("task", "writer", "write"),)),)
+        )
+    with pytest.raises(WorkflowConfigurationError, match="WorkerResponse succeeded"):
+        DeterministicMockWorker(
+            role="writer", responses=(WorkerResponse("done", 1),)  # type: ignore[arg-type]
+        )
+    with pytest.raises(WorkflowConfigurationError, match="ConflictProposal option and rationale"):
+        DeterministicMockConflictAgent(
+            role="reviewer", proposals=(ConflictProposal("option", " "),)
+        )
+
+
 def test_tuple_script_stays_bounded_and_exhaustion_has_no_fallback() -> None:
     """The accepted immutable script exposes every unexpected extra local invocation."""
     mock = DeterministicMockAgent(role="planner", responses=(AgentResponse("plan"),))

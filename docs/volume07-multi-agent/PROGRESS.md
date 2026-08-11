@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 10: 고정 Mock script 항목 계약
+
+- `DeterministicMockAgent`, `DeterministicMockCoordinator`, `DeterministicMockWorker`, `DeterministicMockConflictAgent`는 immutable tuple 컨테이너뿐 아니라 모든 고정 response/plan/proposal 항목의 타입과 기본 필드를 구성 단계에서 검사한다. 빈 문자열, 잘못된 type, Worker boolean 위반, 중복 delegated task ID는 첫 Agent 호출 전에 `WorkflowConfigurationError`로 fail-closed한다.
+- workflow별 정책인 task 수 상한, assignee allow-list, reviewer의 명시적 승인 결정과 사람 승인 게이트는 실행 시점 검증으로 유지한다. 유효한 fixture도 `PENDING`에서 QA·Worker·DevOps 실행을 허용하지 않는다.
+- `tests/volume07/test_immutable_mock_scripts.py`와 기존 Volume 07 contract tests는 이 구성 경계와 기존 bounded-loop/approval 경계를 함께 고정한다.
+- `docs/volume07-multi-agent/07-fixed-script-entry-contracts.md`에 구성 계약과 실행 정책의 책임 분리를 기록했고, 06장의 설명을 현재 동작으로 갱신했다.
+
 ## 2026-08-11 — Slice 09: 결정론적 Mock script 불변성
 
 - `DeterministicMockAgent`, `DeterministicMockCoordinator`, `DeterministicMockWorker`, `DeterministicMockConflictAgent`는 response/plan/proposal script로 비어 있지 않은 immutable tuple만 구성 단계에서 허용한다. mutable list는 실행 전 `WorkflowConfigurationError`로 fail-closed한다.

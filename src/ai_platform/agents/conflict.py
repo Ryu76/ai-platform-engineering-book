@@ -75,10 +75,28 @@ class DeterministicMockConflictAgent:
     def __init__(self, *, role: str, proposals: tuple[ConflictProposal, ...]) -> None:
         if not isinstance(role, str) or not role.strip():
             raise WorkflowConfigurationError("role must not be empty")
-        validate_fixed_script("proposals", proposals)
+        self._validate_proposal_script(proposals)
         self.role = role
         self._proposals = proposals
         self.calls: list[ConflictContext] = []
+
+    @staticmethod
+    def _validate_proposal_script(proposals: tuple[object, ...]) -> None:
+        """Reject malformed fixed proposals during mock configuration."""
+        validate_fixed_script("proposals", proposals)
+        for proposal in proposals:
+            if not isinstance(proposal, ConflictProposal):
+                raise WorkflowConfigurationError(
+                    "proposals must contain only ConflictProposal values"
+                )
+            if not isinstance(proposal.option, str) or not isinstance(proposal.rationale, str):
+                raise WorkflowConfigurationError(
+                    "ConflictProposal option and rationale must be strings in a fixed script"
+                )
+            if not proposal.option.strip() or not proposal.rationale.strip():
+                raise WorkflowConfigurationError(
+                    "ConflictProposal option and rationale must not be empty in a fixed script"
+                )
 
     def propose(self, context: ConflictContext) -> ConflictProposal:
         """Record one local call and fail closed when the script is exhausted."""

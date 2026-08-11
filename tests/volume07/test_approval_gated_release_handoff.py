@@ -173,11 +173,5 @@ def test_configuration_and_agent_response_contracts_fail_closed() -> None:
             max_review_cycles=True,
         )
 
-    flow, _, _, reviewer, qa, devops = build_workflow(
-        reviewer_responses=(response("   ", ReviewDecision.APPROVE),)
-    )
-    with pytest.raises(AgentProtocolError, match="content must be a non-empty string"):
-        flow.run(task="Prepare a local handoff.")
-    assert len(reviewer.calls) == 1
-    assert qa.calls == []
-    assert devops.calls == []
+    with pytest.raises(WorkflowConfigurationError, match="non-empty string in a fixed script"):
+        build_workflow(reviewer_responses=(response("   ", ReviewDecision.APPROVE),))
