@@ -3,9 +3,16 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from json import dumps
+from logging import Logger, getLogger
 from os import getenv
 from typing import TypeAlias
 
+from ai_platform.api.correlation import (
+    CorrelationIdFactory,
+    new_request_id,
+    request_completion_event,
+    request_id_from_environ,
+)
 from ai_platform.api.dependencies import environment_dependency_readiness
 
 StartResponse: TypeAlias = Callable[[str, list[tuple[str, str]]], object]  # noqa: UP040
@@ -39,13 +46,21 @@ def _response(*, status: str, payload: dict[str, str]) -> tuple[str, list[tuple[
 class HealthApplication:
     """Serve liveness and readiness endpoints from an injectable readiness boundary."""
 
-    def __init__(self, readiness_check: Callable[[], bool] = readiness_from_environment) -> None:
+    def __init__(
+        self,
+        readiness_check: Callable[[], bool] = readiness_from_environment,
+        logger: Logger | None = None,
+        request_id_factory: CorrelationIdFactory = new_request_id,
+    ) -> None:
         self._readiness_check = readiness_check
+        self._logger = logger if logger is not None else getLogger(__name__)
+        self._request_id_factory = request_id_factory
 
     def __call__(
         self, environ: dict[str, object], start_response: StartResponse
     ) -> Iterable[bytes]:
         """Return JSON for GET health routes and never expose environment values."""
+        request_id = request_id_from_environ(environ, self._request_id_factory)
         method = str(environ.get("REQUEST_METHOD", "GET"))
         path = str(environ.get("PATH_INFO", "/"))
         if method != "GET":
@@ -76,6 +91,12 @@ class HealthApplication:
                 status="404 Not Found",
                 payload={"status": "error", "detail": "not found"},
             )
+        headers.append(("X-Request-ID", request_id))
+        self._logger.info(
+            request_completion_event(
+                request_id=request_id, path=path, status_code=int(status.split(maxsplit=1)[0])
+            )
+        )
         start_response(status, headers)
         return [body]
 

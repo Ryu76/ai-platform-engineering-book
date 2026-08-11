@@ -2,6 +2,44 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 09: 구조화된 request correlation logging의 로컬 관측 경계
+
+### 완료한 범위
+
+- `src/ai_platform/api/correlation.py`에 표준 라이브러리만 쓰는 correlation 계약을 추가했습니다.
+  - `X-Request-ID`는 영문·숫자로 시작하고 영문·숫자·`.`·`_`·`-`만 쓰는 1~64자 allow-list에 맞을 때만 수용합니다.
+  - header가 없거나 형식이 맞지 않으면 안전한 UUID hex 기반 ID를 생성하며, 테스트용 factory도 안전한 값을 돌려주지 않으면 거절합니다.
+  - 완료 이벤트는 `event`, `request_id`, 알려진 probe route 또는 `unmatched`, HTTP status code만 JSON으로 기록합니다.
+  - query string, body, 임의 header, raw 미지 path, environment, dependency detail, exception text, endpoint, credential은 이벤트에 넣지 않습니다.
+- `HealthApplication`이 응답의 `X-Request-ID`와 한 개의 `http_request_completed` 구조화 로그에 같은 ID를 사용하도록 확장했습니다.
+  - `/livez`와 `/readyz`의 기존 liveness/readiness 계약은 유지했습니다.
+  - trace exporter, metric endpoint, telemetry backend, network 연결 또는 cluster 동작은 추가하지 않았습니다.
+- `examples/volume11/correlation_logging_demo.py` 및 Volume 11 단위·통합 테스트를 추가했습니다.
+  - 메모리 WSGI 호출로 accepted, generated, malformed-header replacement를 보여 주며 TCP listener나 외부 backend를 열지 않습니다.
+  - 테스트는 응답 header·JSON event 연결과 raw 입력 미기록을 검사합니다.
+- [구조화된 request correlation logging: 관측 경계를 로컬에서 읽기](09-structured-correlation-logging-boundary.md) 장과 README를 추가·갱신했습니다.
+  - 실제 telemetry 수집, privacy·retention·access control, metrics·tracing, alert와 incident 대응은 운영 전 검토 경계로 분리했습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/correlation_logging_demo.py` | 통과 — in-memory `/livez` 완료 이벤트 3개, 수용된 ID 1개와 생성·대체 ID 2개를 stdout에만 출력; TCP, backend, cluster 연결 없음 |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 24 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 12 source files 문제 없음, 전체 85 passed |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- metrics·tracing의 데이터 최소화와 exporter 실패 경계 작성하기
+- 장애 대응과 비용 관리 장 작성하기
+- Volume 미니 프로젝트, 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 값과 로컬·메모리 기반 코드만 사용해 metric·trace 데이터 최소화와 exporter failure 경계를 설명하고, 실제 telemetry backend, endpoint, credential, cluster 연결 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 08: Rolling Update·Rollback revision 계약의 오프라인 경계
 
 ### 완료한 범위
