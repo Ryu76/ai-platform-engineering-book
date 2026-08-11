@@ -18,12 +18,15 @@ from ai_platform.mcp.stdio import (
     MCP_PROTOCOL_VERSION,
     McpJsonRpcRequest,
     McpStdioError,
+    McpStdioRunStats,
     McpStdioSession,
     McpStdioState,
+    McpStdioTransportError,
     McpToolCallBoundary,
     encode_stdio_jsonrpc_message,
     mcp_stdio_request_correlation_id,
     parse_stdio_jsonrpc_line,
+    run_mcp_stdio_session,
 )
 
 __all__ = [
@@ -39,8 +42,10 @@ __all__ = [
     "McpStaticPrompt",
     "McpStaticResource",
     "McpStdioError",
+    "McpStdioRunStats",
     "McpStdioSession",
     "McpStdioState",
+    "McpStdioTransportError",
     "McpToolCallBoundary",
     "McpServerCatalog",
     "McpToolCallRequest",
@@ -50,5 +55,6 @@ __all__ = [
     "mcp_stdio_request_correlation_id",
     "parse_mcp_tool_call_request",
     "parse_stdio_jsonrpc_line",
+    "run_mcp_stdio_session",
     "dispatch_mcp_tool_call",
 ]

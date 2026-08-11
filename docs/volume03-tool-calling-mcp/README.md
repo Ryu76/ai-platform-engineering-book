@@ -26,5 +26,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 16. [MCP STDIO `resources/read`: 고정 allowlist Resource만 반환하기](16-mcp-stdio-resources-read.md) — READY 뒤 exact Resource URI만 검증해 내장 text snapshot을 반환하고 URI 해석 경계를 열지 않는 adapter
 17. [MCP STDIO `tools/call`: 명시적 실행 경계로 순수 Tool만 연결하기](17-mcp-stdio-tools-call.md) — explicit boundary가 있을 때만 transport params를 기존 parser·allowlist·승인·timeout/retry·감사 dispatcher로 다시 전달하는 adapter
 18. [MCP STDIO 승인 상관관계: JSON-RPC ID의 타입까지 요청에 묶기](18-mcp-stdio-approval-correlation.md) — trusted host가 typed request ID·Tool·canonical arguments를 승인에 묶고 string/integer ID 혼동을 거부하는 경계
+19. [MCP STDIO stream loop: EOF·전송 실패·안전한 JSON-RPC error 분리하기](19-mcp-stdio-stream-runner.md) — injected text stream만 EOF까지 연결하고 invalid request를 고정 error로 분리하며 read/write failure에서 재시도 없이 닫는 경계
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.

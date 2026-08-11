@@ -12,7 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import cast
+from typing import TextIO, cast
 
 from ai_platform.mcp.catalog import McpServerCatalog
 from ai_platform.mcp.dispatcher import McpDispatchError, dispatch_mcp_tool_call
@@ -31,6 +31,10 @@ MAX_TOOL_RESULT_TEXT_BYTES = 4_096
 
 class McpStdioError(ValueError):
     """교육용 STDIO JSON-RPC framing 또는 lifecycle 계약이 맞지 않을 때 발생한다."""
+
+
+class McpStdioTransportError(McpStdioError):
+    """주입된 STDIO stream의 read/write/flush가 실패해 안전하게 계속할 수 없을 때 발생한다."""
 
 
 class McpStdioState(StrEnum):
@@ -58,6 +62,15 @@ class McpJsonRpcRequest:
     def is_notification(self) -> bool:
         """ID가 없어서 response를 만들지 않는 JSON-RPC notification인지 반환한다."""
         return self.request_id is None
+
+
+@dataclass(frozen=True, slots=True)
+class McpStdioRunStats:
+    """주입된 stream loop가 소비·기록한 framed message 수만 반환한다."""
+
+    messages_read: int
+    responses_written: int
+    invalid_request_responses: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,6 +275,109 @@ class McpStdioSession:
             return self._prompt_catalog.get_prompt(name)
         except McpPromptError as error:
             raise McpStdioError("prompts/get name is not allowlisted") from error
+
+
+def run_mcp_stdio_session(
+    input_stream: TextIO,
+    output_stream: TextIO,
+    session: McpStdioSession,
+) -> McpStdioRunStats:
+    """주입된 text stream을 EOF까지 연결하고 invalid request만 고정 error로 응답한다.
+
+    이 함수는 ``sys.stdin``이나 ``sys.stdout``을 직접 열지 않는다. Host가 명시적으로
+    전달한 text stream만 한 line씩 읽는다. EOF, read failure, write failure에서 session을
+    닫으며 write가 실패했을 때는 같은 response/error를 재시도하지 않는다. 전송 가능한
+    request/lifecycle 오류는 원문·예외 세부정보 없이 JSON-RPC ``-32600``으로 응답한다.
+    """
+    messages_read = 0
+    responses_written = 0
+    invalid_request_responses = 0
+
+    while True:
+        try:
+            raw_line = input_stream.readline()
+        except Exception as error:
+            session.close()
+            raise McpStdioTransportError("STDIO input read failed") from error
+        if raw_line == "":
+            session.close()
+            return McpStdioRunStats(
+                messages_read=messages_read,
+                responses_written=responses_written,
+                invalid_request_responses=invalid_request_responses,
+            )
+        if not isinstance(raw_line, str):
+            session.close()
+            raise McpStdioTransportError("STDIO input stream must return text lines")
+
+        messages_read += 1
+        try:
+            response_line = session.receive_line(raw_line)
+        except McpStdioError:
+            response_line = _encode_invalid_request_response(raw_line, session=session)
+            invalid_request_responses += 1
+
+        if response_line is not None:
+            try:
+                _write_stdio_response(output_stream, response_line)
+            except McpStdioTransportError:
+                session.close()
+                raise
+            responses_written += 1
+
+
+def _encode_invalid_request_response(raw_line: str, *, session: McpStdioSession) -> str:
+    """검증 가능한 ID만 반사하고 원문·예외를 숨긴 고정 JSON-RPC error를 만든다."""
+    response_id = _safe_response_id_from_raw_line(raw_line)
+    payload: dict[str, object] = {
+        "jsonrpc": "2.0",
+        "id": response_id,
+        "error": {"code": -32600, "message": "Invalid request."},
+    }
+    try:
+        return encode_stdio_jsonrpc_message(
+            payload,
+            max_message_bytes=session._max_message_bytes,
+        )
+    except McpStdioError:
+        payload["id"] = None
+        return encode_stdio_jsonrpc_message(
+            payload,
+            max_message_bytes=session._max_message_bytes,
+        )
+
+
+def _safe_response_id_from_raw_line(raw_line: str) -> str | int | None:
+    """불완전 request의 ID도 duplicate key·비정규 ID 없이만 error response에 사용한다."""
+    try:
+        payload: object = json.loads(
+            raw_line,
+            object_pairs_hook=_json_object_without_duplicate_keys,
+            parse_constant=_reject_non_standard_json_constant,
+        )
+    except (McpStdioError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or "id" not in payload:
+        return None
+    candidate = payload["id"]
+    try:
+        _validate_stdio_request_id(candidate)
+    except McpStdioError:
+        return None
+    return cast("str | int", candidate)
+
+
+def _write_stdio_response(output_stream: TextIO, response_line: str) -> None:
+    """한 response를 정확히 한 번 write하고 flush하며 partial write도 실패로 다룬다."""
+    try:
+        characters_written = output_stream.write(response_line)
+        if isinstance(characters_written, bool) or characters_written != len(response_line):
+            raise McpStdioTransportError("STDIO output write was incomplete")
+        output_stream.flush()
+    except McpStdioTransportError:
+        raise
+    except Exception as error:
+        raise McpStdioTransportError("STDIO output write failed") from error
 
 
 def parse_stdio_jsonrpc_line(

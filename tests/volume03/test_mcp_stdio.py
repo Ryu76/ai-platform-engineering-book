@@ -1,6 +1,7 @@
 """Volume 03의 좁은 MCP STDIO JSON-RPC framing·lifecycle 경계를 검사한다."""
 from __future__ import annotations
 
+import io
 import json
 from collections.abc import Mapping
 
@@ -14,10 +15,12 @@ from ai_platform.mcp.stdio import (
     McpStdioError,
     McpStdioSession,
     McpStdioState,
+    McpStdioTransportError,
     McpToolCallBoundary,
     encode_stdio_jsonrpc_message,
     mcp_stdio_request_correlation_id,
     parse_stdio_jsonrpc_line,
+    run_mcp_stdio_session,
 )
 from ai_platform.tools.audit import InMemoryToolAuditSink, ToolAuditOutcome
 from ai_platform.tools.authorization import ApprovalGrant, ToolAuthorizationPolicy, ToolRisk
@@ -643,3 +646,83 @@ def test_closed_stdio_session_rejects_new_input() -> None:
 
     with pytest.raises(McpStdioError, match="session is closed"):
         session.receive_line(_initialize_line())
+
+
+def test_stdio_runner_processes_injected_lines_until_eof_and_returns_safe_error() -> None:
+    session = McpStdioSession()
+    input_stream = io.StringIO(
+        _initialize_line()
+        + '{"jsonrpc":"2.0","method":"notifications/initialized"}\n'
+        + '{"jsonrpc":"1.0","id":"invalid-001","method":"tools/list","params":{}}\n'
+        + '{"jsonrpc":"2.0","id":"list-001","method":"tools/list","params":{}}\n'
+    )
+    output_stream = io.StringIO()
+
+    stats = run_mcp_stdio_session(input_stream, output_stream, session)
+
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+    assert stats.messages_read == 4
+    assert stats.responses_written == 3
+    assert stats.invalid_request_responses == 1
+    assert responses[0]["id"] == "initialize-001"
+    assert responses[1] == {
+        "jsonrpc": "2.0",
+        "id": "invalid-001",
+        "error": {"code": -32600, "message": "Invalid request."},
+    }
+    assert responses[2] == {"jsonrpc": "2.0", "id": "list-001", "result": {"tools": []}}
+    assert session.state is McpStdioState.CLOSED
+
+
+def test_stdio_runner_uses_null_id_for_ambiguous_input_and_does_not_leak_exception_detail() -> None:
+    session = McpStdioSession(max_message_bytes=256)
+    long_id = "x" * 200
+    input_stream = io.StringIO(
+        '{"jsonrpc":"1.0","id":true,"method":"initialize"}\n'
+        + '{"jsonrpc":"1.0","id":"'
+        + long_id
+        + '","method":"initialize"}\n'
+    )
+    output_stream = io.StringIO()
+
+    stats = run_mcp_stdio_session(input_stream, output_stream, session)
+
+    responses = [json.loads(line) for line in output_stream.getvalue().splitlines()]
+    assert stats.invalid_request_responses == 2
+    assert [response["id"] for response in responses] == [None, None]
+    assert all(response["error"]["message"] == "Invalid request." for response in responses)
+    assert "version must be exactly" not in output_stream.getvalue()
+    assert session.state is McpStdioState.CLOSED
+
+
+def test_stdio_runner_closes_session_and_never_retries_failed_output_write() -> None:
+    class FailingOutput(io.StringIO):
+        def __init__(self) -> None:
+            super().__init__()
+            self.write_calls = 0
+
+        def write(self, text: str) -> int:
+            self.write_calls += 1
+            raise OSError("test-only output failure")
+
+    session = McpStdioSession()
+    output_stream = FailingOutput()
+
+    with pytest.raises(McpStdioTransportError, match="output write failed"):
+        run_mcp_stdio_session(io.StringIO(_initialize_line()), output_stream, session)
+
+    assert output_stream.write_calls == 1
+    assert session.state is McpStdioState.CLOSED
+
+
+def test_stdio_runner_closes_session_when_injected_input_read_fails() -> None:
+    class FailingInput(io.StringIO):
+        def readline(self, size: int | None = -1) -> str:
+            raise OSError("test-only input failure")
+
+    session = McpStdioSession()
+
+    with pytest.raises(McpStdioTransportError, match="input read failed"):
+        run_mcp_stdio_session(FailingInput(), io.StringIO(), session)
+
+    assert session.state is McpStdioState.CLOSED
