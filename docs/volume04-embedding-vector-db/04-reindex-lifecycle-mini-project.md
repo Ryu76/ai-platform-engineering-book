@@ -66,7 +66,7 @@ uv run pytest tests/unit/test_volume04_reindex_lifecycle.py -q
 
 ## 7. 코드 설명
 
-`run_reindex_lifecycle`은 예제와 테스트가 공유하는 단일 workflow입니다. `ReindexLifecycleReport`는 각 단계의 순위 ID, 삭제 수, collection 크기, version, top-1 지표를 불변 값으로 반환합니다. 따라서 출력 문자열만 검사하지 않고 lifecycle의 상태 전이를 단위 테스트할 수 있습니다.
+`run_reindex_lifecycle`은 예제와 테스트가 공유하는 단일 workflow입니다. `ReindexLifecycleReport`는 각 단계의 순위 ID, 삭제 수, collection 크기, version, top-1 지표를 불변 값으로 반환합니다. 보고서를 직접 만들 때도 순위는 caller가 바꿀 수 없는 중복 없는 `tuple[str, ...]`, 지표는 `RetrievalMetrics`, 삭제 수·크기는 bool이 아닌 0 이상의 정수, version은 양의 정수여야 합니다. 따라서 출력 문자열만 검사하지 않고 lifecycle의 상태 전이를 단위 테스트할 수 있습니다.
 
 초기 검색과 재색인 검색은 모두 `evaluate_ranking(..., {"retry-guide"}, k=1)`로 평가합니다. 삭제 단계에서는 정답 ID가 결과에 없어야 하므로 순위 목록에서 `retry-guide`의 부재를 직접 확인합니다. 실제 no-answer 정책은 검색 점수뿐 아니라 문서 최신성, 출처, ACL을 함께 검토해야 합니다.
 
@@ -91,6 +91,7 @@ reindexed_version=2; collection_size=3; top_1_recovered=True
 | `retry-guide`가 삭제 뒤에도 보임 | 삭제 대상 ID가 다르거나 검색을 삭제 전에 수행함 | stable ID를 확인하고 `delete` 뒤에 새 `search`를 실행합니다. |
 | collection 크기가 4가 됨 | 새 버전에 다른 ID를 사용함 | 문서 정체성에는 같은 ID를 사용하고 version은 payload로 관리합니다. |
 | `reindexed_ranked_ids`가 비어 있음 | `version=2` filter와 payload가 맞지 않음 | upsert payload와 filter의 key/value를 함께 점검합니다. |
+| `ReindexLifecycleError` | 수동으로 만든 보고서에 list 순위, 중복 ID, 잘못된 metric·count·version을 넣음 | 순위는 중복 없는 tuple로, 지표는 `RetrievalMetrics`로, count는 0 이상의 정수로, version은 양의 정수로 만듭니다. |
 | `VectorDimensionError` | document와 query가 다른 차원 또는 다른 모델 공간을 사용함 | collection vector size와 embedding model dimensions를 동일하게 맞춥니다. |
 | 결과 순서가 다름 | 운영 DB의 동점·index 동작이 local mock과 다름 | 운영 이행 전 stable ID, filter, score 정책으로 별도 통합 테스트를 작성합니다. |
 

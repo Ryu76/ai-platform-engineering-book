@@ -1,4 +1,5 @@
 """결정적 local mock으로 삭제와 재색인을 검증하는 Volume 04 미니 프로젝트."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,6 +7,10 @@ from dataclasses import dataclass
 from ai_platform.embeddings.embedding_service import DeterministicEmbeddingModel
 from ai_platform.embeddings.retrieval_evaluation import RetrievalMetrics, evaluate_ranking
 from ai_platform.embeddings.vector_store import InMemoryVectorStore, VectorPoint
+
+
+class ReindexLifecycleError(ValueError):
+    """재색인 lifecycle 보고서 계약이 유효하지 않을 때 발생한다."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +26,27 @@ class ReindexLifecycleReport:
     collection_size_after_delete: int
     collection_size: int
     reindexed_version: int
+
+    def __post_init__(self) -> None:
+        """공개 보고서가 불변 lifecycle 상태만 노출하도록 검증한다."""
+        _require_ranked_ids(self.initial_ranked_ids, name="initial_ranked_ids")
+        _require_ranked_ids(self.ranked_ids_after_delete, name="ranked_ids_after_delete")
+        _require_ranked_ids(self.reindexed_ranked_ids, name="reindexed_ranked_ids")
+        if not isinstance(self.initial_metrics, RetrievalMetrics):
+            raise ReindexLifecycleError("initial_metrics must be a RetrievalMetrics instance")
+        if not isinstance(self.reindexed_metrics, RetrievalMetrics):
+            raise ReindexLifecycleError("reindexed_metrics must be a RetrievalMetrics instance")
+        _require_nonnegative_integer(self.deleted_count, name="deleted_count")
+        _require_nonnegative_integer(
+            self.collection_size_after_delete, name="collection_size_after_delete"
+        )
+        _require_nonnegative_integer(self.collection_size, name="collection_size")
+        if (
+            isinstance(self.reindexed_version, bool)
+            or not isinstance(self.reindexed_version, int)
+            or self.reindexed_version < 1
+        ):
+            raise ReindexLifecycleError("reindexed_version must be a positive integer")
 
 
 def run_reindex_lifecycle() -> ReindexLifecycleReport:
@@ -99,3 +125,19 @@ def run_reindex_lifecycle() -> ReindexLifecycleReport:
         collection_size=store.collection_size(collection_name),
         reindexed_version=reindexed_version,
     )
+
+
+def _require_ranked_ids(ranked_ids: tuple[str, ...], *, name: str) -> None:
+    """보고서 순위가 caller가 바꿀 수 없는 유효한 tuple인지 검증한다."""
+    if not isinstance(ranked_ids, tuple):
+        raise ReindexLifecycleError(f"{name} must be a tuple of non-empty strings")
+    if any(not isinstance(point_id, str) or not point_id.strip() for point_id in ranked_ids):
+        raise ReindexLifecycleError(f"{name} must contain non-empty strings")
+    if len(set(ranked_ids)) != len(ranked_ids):
+        raise ReindexLifecycleError(f"{name} must not contain duplicates")
+
+
+def _require_nonnegative_integer(value: int, *, name: str) -> None:
+    """삭제 수와 collection 크기가 bool이 아닌 0 이상의 정수인지 검증한다."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ReindexLifecycleError(f"{name} must be a non-negative integer")

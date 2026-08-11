@@ -10,6 +10,7 @@ from ai_platform.embeddings.embedding_service import (
     euclidean_distance,
 )
 from ai_platform.embeddings.reindex_lifecycle import (
+    ReindexLifecycleError,
     ReindexLifecycleReport,
     run_reindex_lifecycle,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "RetrievalEvaluationError",
     "RetrievalMetrics",
     "RetrievalSummary",
+    "ReindexLifecycleError",
     "ReindexLifecycleReport",
     "SearchResult",
     "VectorDimensionError",
