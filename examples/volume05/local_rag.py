@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -26,6 +27,8 @@ from ai_platform.rag import (
     RagPipeline,
     RerankingIndex,
     RerankResult,
+    RetrievalEvaluationAuditMetadata,
+    RetrievalEvaluationAuditRequirement,
     RetrievalEvaluationConfig,
     RetrievalEvaluator,
     RetrievalRegressionChecker,
@@ -128,16 +131,30 @@ def main() -> None:
     evaluation_report = RetrievalEvaluator(
         index=index, config=RetrievalEvaluationConfig(top_k=1)
     ).evaluate(evaluation_cases)
+    audit = RetrievalEvaluationAuditMetadata(
+        record_id="volume05-sample-retrieval-report-001",
+        comparison_target_id="volume05-sample-retrieval-baseline-001",
+        approval_state="approved",
+        retained_until=date(2030, 1, 1),
+        approval_reference="volume05-local-sample-approval-001",
+        approved_on=date(2026, 8, 11),
+    )
     with TemporaryDirectory(prefix="volume05-rag-report-") as report_directory:
         report_store = LocalRetrievalEvaluationReportStore(root=Path(report_directory))
-        report_store.record(Path("fixed-retrieval-report.json"), evaluation_report)
-        revalidated_report = report_store.load(Path("fixed-retrieval-report.json"))
+        report_store.record(Path("fixed-retrieval-report.json"), evaluation_report, audit=audit)
+        revalidated_record = report_store.load_record(Path("fixed-retrieval-report.json"))
     regression_file = LocalRetrievalRegressionBaselineLoader(root=sample_root).load(
         Path("retrieval-regression-baseline.json")
     )
     regression = RetrievalRegressionChecker(
         baseline=regression_file.baseline, policy=regression_file.policy
-    ).evaluate(revalidated_report)
+    ).evaluate_record(
+        revalidated_record,
+        audit_requirement=RetrievalEvaluationAuditRequirement(
+            comparison_target_id="volume05-sample-retrieval-baseline-001",
+            as_of_date=date(2026, 8, 11),
+        ),
+    )
     if not regression.passed:
         raise RuntimeError("sample RAG retrieval quality regressed from its fixed baseline")
     print(

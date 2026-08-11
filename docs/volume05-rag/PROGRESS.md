@@ -1,5 +1,44 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 불변 평가 기록 감사 메타데이터 슬라이스 완료
+
+### 완료
+
+- `RetrievalEvaluationAuditMetadata`와 `RetrievalEvaluationAuditRequirement`를 추가했습니다. 고정 로컬 평가 기록은 불변 `record_id`, 명시 비교 대상 ID, 승인 상태·승인 참조·승인 일자·보존 종료일을 함께 기록하며, `pending`·`approved`·`superseded`·`revoked` 수명 상태별 필수 필드 조합을 엄격히 검증합니다.
+- `LocalRetrievalEvaluationReportStore.record()`는 감사 메타데이터 없이는 새 파일을 기록하지 않고, `load_record()`는 기존 지표 재계산 검증과 함께 감사 JSON의 정확한 스키마·ISO 날짜·상태 전이를 검증한 `RetrievalEvaluationRecord`를 반환합니다. 기존 `load()`는 보고서만 필요한 호출자를 위해 재검증 결과의 report를 반환합니다.
+- `RetrievalRegressionChecker.evaluate_record()`는 명시 `RetrievalEvaluationAuditRequirement`의 비교 대상 ID·기준일을 적용합니다. 승인되지 않은 기록, 대상 변경, 보존 만료는 검색 품질 비교 전에 결정론적으로 거부합니다. 현재 시각·네트워크·제공자 SDK·생성기 호출은 사용하지 않습니다.
+- 로컬 예제는 임시 허용 루트에서 승인된 고정 감사 메타데이터를 포함한 보고서를 기록·재로딩하고, 동일 대상/고정 기준일로 파일 기반 기준선과 비교합니다. 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 178 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 7 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 5 source files
+uv run python examples/volume05/local_rag.py
+# 고정 JSON 평가 세트 Recall@1·Hit rate·MRR 모두 1.00, 승인된 감사 기록·재검증 및 기준선 회귀 판정 통과, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 고정 감사 메타데이터의 승인 기준선 파일과 평가 기록 사이의 참조 무결성(대상 ID 및 승인 참조)을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 고정 로컬 평가 보고서 기록·재검증 슬라이스 완료
 
 ### 완료

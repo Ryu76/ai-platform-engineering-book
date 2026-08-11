@@ -12,6 +12,7 @@ import json
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import NoReturn
 
@@ -676,6 +677,136 @@ class RetrievalEvaluationReportFileConfig:
                 )
 
 
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationAuditRequirement:
+    """보고서를 회귀 비교할 때 명시하는 대상과 기준 일자다.
+
+    현재 시각을 읽지 않아 같은 입력은 언제나 같은 비교 가능 여부를 낸다. 호출자는
+    비교하려는 승인 기준선의 안정적인 식별자와 보존 수명을 판단할 날짜를 명시한다.
+    """
+
+    comparison_target_id: str
+    as_of_date: date
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.comparison_target_id, str) or not self.comparison_target_id.strip():
+            raise RagConfigurationError("audit comparison_target_id must be a non-empty string")
+        if not isinstance(self.as_of_date, date):
+            raise RagConfigurationError("audit as_of_date must be a datetime.date")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationAuditMetadata:
+    """불변 평가 기록의 승인·보존·비교 대상 감사 메타데이터다.
+
+    ``pending`` 기록은 아직 회귀 비교에 사용할 수 없다. ``approved`` 기록만 지정한
+    비교 대상 및 보존 기한 안에서 비교할 수 있다. ``superseded``와 ``revoked``는
+    과거 기록을 보존하되 새 회귀 판정에 재사용하지 않는 명시적 종료 상태다.
+    """
+
+    record_id: str
+    comparison_target_id: str
+    approval_state: str
+    retained_until: date
+    approval_reference: str | None = None
+    approved_on: date | None = None
+    superseded_by: str | None = None
+
+    _APPROVAL_STATES = frozenset({"pending", "approved", "superseded", "revoked"})
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("record_id", self.record_id),
+            ("comparison_target_id", self.comparison_target_id),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise RagConfigurationError(f"audit {field_name} must be a non-empty string")
+        if self.approval_state not in self._APPROVAL_STATES:
+            raise RagConfigurationError("audit approval_state is not supported")
+        if not isinstance(self.retained_until, date):
+            raise RagConfigurationError("audit retained_until must be a datetime.date")
+        if self.approval_reference is not None and (
+            not isinstance(self.approval_reference, str) or not self.approval_reference.strip()
+        ):
+            raise RagConfigurationError(
+                "audit approval_reference must be a non-empty string or null"
+            )
+        if self.approved_on is not None and not isinstance(self.approved_on, date):
+            raise RagConfigurationError("audit approved_on must be a datetime.date or null")
+        if self.approved_on is not None and self.approved_on > self.retained_until:
+            raise RagConfigurationError("audit approved_on must not be after retained_until")
+        if self.superseded_by is not None and (
+            not isinstance(self.superseded_by, str) or not self.superseded_by.strip()
+        ):
+            raise RagConfigurationError("audit superseded_by must be a non-empty string or null")
+        if self.approval_state == "pending":
+            if any((self.approval_reference, self.approved_on, self.superseded_by)):
+                raise RagConfigurationError(
+                    "pending audit metadata must not contain approval details"
+                )
+        elif self.approval_state == "approved":
+            if (
+                self.approval_reference is None
+                or self.approved_on is None
+                or self.superseded_by is not None
+            ):
+                raise RagConfigurationError(
+                    "approved audit metadata requires approval details and no replacement record"
+                )
+        elif self.approval_state == "superseded":
+            if (
+                self.approval_reference is None
+                or self.approved_on is None
+                or self.superseded_by is None
+            ):
+                raise RagConfigurationError(
+                    "superseded audit metadata requires approval details and a replacement record"
+                )
+        elif (
+            self.approval_reference is None
+            or self.approved_on is None
+            or self.superseded_by is not None
+        ):
+            raise RagConfigurationError(
+                "revoked audit metadata requires approval details and no replacement record"
+            )
+
+    def to_payload(self) -> dict[str, str | None]:
+        """엄격한 로컬 JSON 기록에 쓸 수 있는 감사 메타데이터를 반환한다."""
+        return {
+            "record_id": self.record_id,
+            "comparison_target_id": self.comparison_target_id,
+            "approval_state": self.approval_state,
+            "retained_until": self.retained_until.isoformat(),
+            "approval_reference": self.approval_reference,
+            "approved_on": None if self.approved_on is None else self.approved_on.isoformat(),
+            "superseded_by": self.superseded_by,
+        }
+
+    def assert_comparable(self, requirement: RetrievalEvaluationAuditRequirement) -> None:
+        """승인·대상·보존 수명 조건을 충족하지 않는 비교를 명시적으로 거부한다."""
+        if not isinstance(requirement, RetrievalEvaluationAuditRequirement):
+            raise RagConfigurationError(
+                "audit requirement must be a RetrievalEvaluationAuditRequirement"
+            )
+        if self.comparison_target_id != requirement.comparison_target_id:
+            raise RagConfigurationError(
+                "audit comparison_target_id must match the requested target"
+            )
+        if self.approval_state != "approved":
+            raise RagConfigurationError("audit record must be approved for regression comparison")
+        if requirement.as_of_date > self.retained_until:
+            raise RagConfigurationError("audit record retention has expired for the requested date")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationRecord:
+    """재검증된 평가 보고서와 이를 비교할 수 있는 감사 메타데이터다."""
+
+    report: RetrievalEvaluationReport
+    audit: RetrievalEvaluationAuditMetadata
+
+
 class LocalRetrievalEvaluationReportStore:
     """허용 루트의 명시 JSON 파일에 고정 평가 보고서를 기록하고 재검증한다.
 
@@ -695,9 +826,19 @@ class LocalRetrievalEvaluationReportStore:
         self._root = root.resolve()
         self._config = config or RetrievalEvaluationReportFileConfig()
 
-    def record(self, relative_path: Path, report: RetrievalEvaluationReport) -> Path:
+    def record(
+        self,
+        relative_path: Path,
+        report: RetrievalEvaluationReport,
+        *,
+        audit: RetrievalEvaluationAuditMetadata,
+    ) -> Path:
         """검증된 보고서를 새 UTF-8 JSON 파일 하나로 결정론적으로 기록한다."""
         _validate_evaluation_report(report)
+        if not isinstance(audit, RetrievalEvaluationAuditMetadata):
+            raise RagConfigurationError(
+                "evaluation report audit must be a RetrievalEvaluationAuditMetadata"
+            )
         candidate = self._resolve_path(relative_path, operation="record")
         if candidate.exists():
             raise RagConfigurationError(
@@ -705,7 +846,7 @@ class LocalRetrievalEvaluationReportStore:
             )
         encoded = (
             json.dumps(
-                report.to_record_payload(),
+                {**report.to_record_payload(), "audit": audit.to_payload()},
                 ensure_ascii=False,
                 indent=2,
                 sort_keys=True,
@@ -728,6 +869,10 @@ class LocalRetrievalEvaluationReportStore:
 
     def load(self, relative_path: Path) -> RetrievalEvaluationReport:
         """명시한 UTF-8 JSON 평가 기록 하나를 완전히 재검증해 반환한다."""
+        return self.load_record(relative_path).report
+
+    def load_record(self, relative_path: Path) -> RetrievalEvaluationRecord:
+        """보고서와 승인·보존·비교 대상 메타데이터를 함께 재검증해 반환한다."""
         candidate = self._resolve_path(relative_path, operation="load")
         if not candidate.is_file():
             raise RagConfigurationError("evaluation report file does not exist")
@@ -749,7 +894,7 @@ class LocalRetrievalEvaluationReportStore:
             raise RagConfigurationError("evaluation report file must be UTF-8 encoded") from error
         except (json.JSONDecodeError, ValueError) as error:
             raise RagConfigurationError("evaluation report file must contain valid JSON") from error
-        return self._report_from_json(payload)
+        return self._record_from_json(payload)
 
     def _resolve_path(self, relative_path: Path, *, operation: str) -> Path:
         if not isinstance(relative_path, Path):
@@ -767,7 +912,7 @@ class LocalRetrievalEvaluationReportStore:
             raise RagConfigurationError("evaluation report parent directory does not exist")
         return candidate
 
-    def _report_from_json(self, payload: object) -> RetrievalEvaluationReport:
+    def _record_from_json(self, payload: object) -> RetrievalEvaluationRecord:
         if not isinstance(payload, dict):
             raise RagConfigurationError("evaluation report JSON root must be an object")
         required_fields = {
@@ -777,6 +922,7 @@ class LocalRetrievalEvaluationReportStore:
             "hit_rate",
             "mean_reciprocal_rank",
             "results",
+            "audit",
         }
         if set(payload) != required_fields:
             raise RagConfigurationError(
@@ -801,7 +947,43 @@ class LocalRetrievalEvaluationReportStore:
         if evaluated_cases != report.evaluated_cases:
             raise RagConfigurationError("evaluation report evaluated_cases must match results")
         _validate_evaluation_report(report)
-        return report
+        return RetrievalEvaluationRecord(
+            report=report, audit=self._audit_from_json(payload["audit"])
+        )
+
+    @staticmethod
+    def _audit_from_json(raw_audit: object) -> RetrievalEvaluationAuditMetadata:
+        if not isinstance(raw_audit, dict):
+            raise RagConfigurationError("evaluation report audit must be an object")
+        required_fields = {
+            "record_id",
+            "comparison_target_id",
+            "approval_state",
+            "retained_until",
+            "approval_reference",
+            "approved_on",
+            "superseded_by",
+        }
+        if set(raw_audit) != required_fields:
+            raise RagConfigurationError(
+                "evaluation report audit contains unsupported or missing fields"
+            )
+        retained_until = _date_from_audit_json(raw_audit["retained_until"], "retained_until")
+        approved_on_raw = raw_audit["approved_on"]
+        approved_on = (
+            None
+            if approved_on_raw is None
+            else _date_from_audit_json(approved_on_raw, "approved_on")
+        )
+        return RetrievalEvaluationAuditMetadata(
+            record_id=raw_audit["record_id"],
+            comparison_target_id=raw_audit["comparison_target_id"],
+            approval_state=raw_audit["approval_state"],
+            retained_until=retained_until,
+            approval_reference=raw_audit["approval_reference"],
+            approved_on=approved_on,
+            superseded_by=raw_audit["superseded_by"],
+        )
 
     @staticmethod
     def _result_from_json(raw_result: object) -> RetrievalEvaluationResult:
@@ -963,6 +1145,18 @@ class RetrievalRegressionChecker:
             ),
         )
 
+    def evaluate_record(
+        self,
+        record: RetrievalEvaluationRecord,
+        *,
+        audit_requirement: RetrievalEvaluationAuditRequirement,
+    ) -> RetrievalRegressionDecision:
+        """승인·보존·대상이 확인된 불변 기록만 기준선과 비교한다."""
+        if not isinstance(record, RetrievalEvaluationRecord):
+            raise RagConfigurationError("regression record must be a RetrievalEvaluationRecord")
+        record.audit.assert_comparable(audit_requirement)
+        return self.evaluate(record.report)
+
     @staticmethod
     def _metric_result(
         *, name: str, baseline_score: float, current_score: float, maximum_drop: float
@@ -974,6 +1168,25 @@ class RetrievalRegressionChecker:
             drop=max(0.0, baseline_score - current_score),
             maximum_drop=maximum_drop,
         )
+
+
+def _date_from_audit_json(value: object, field_name: str) -> date:
+    """감사 파일의 ISO-8601 날짜가 날짜형 경계값인지 확인한다."""
+    if not isinstance(value, str):
+        raise RagConfigurationError(
+            f"evaluation report audit {field_name} must be an ISO date string"
+        )
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise RagConfigurationError(
+            f"evaluation report audit {field_name} must be an ISO date string"
+        ) from error
+    if parsed.isoformat() != value:
+        raise RagConfigurationError(
+            f"evaluation report audit {field_name} must be an ISO date string"
+        )
+    return parsed
 
 
 def _validate_unit_interval_score(*, field_name: str, value: object) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,8 @@ from ai_platform.rag import (
     RerankingConfig,
     RerankingIndex,
     RerankResult,
+    RetrievalEvaluationAuditMetadata,
+    RetrievalEvaluationAuditRequirement,
     RetrievalEvaluationBaseline,
     RetrievalEvaluationBaselineCase,
     RetrievalEvaluationCase,
@@ -139,6 +142,17 @@ def _hit(*, chunk_id: str, document_id: str, text: str, score: float = 1.0) -> S
         ),
         score=score,
         matched_terms=("근거",),
+    )
+
+
+def _approved_audit() -> RetrievalEvaluationAuditMetadata:
+    return RetrievalEvaluationAuditMetadata(
+        record_id="volume05-fixed-report-001",
+        comparison_target_id="volume05-retrieval-baseline-001",
+        approval_state="approved",
+        retained_until=date(2030, 1, 1),
+        approval_reference="local-approval-001",
+        approved_on=date(2026, 8, 11),
     )
 
 
@@ -1534,17 +1548,129 @@ def test_local_evaluation_report_store_round_trips_a_fixed_report_for_baseline_c
         config=RetrievalEvaluationConfig(top_k=1),
     ).evaluate((RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),))
     baseline = RetrievalEvaluationBaseline.from_report(report)
+    audit = _approved_audit()
     store = LocalRetrievalEvaluationReportStore(root=tmp_path)
 
-    stored_path = store.record(Path("fixed-report.json"), report)
-    reloaded_report = store.load(Path("fixed-report.json"))
+    stored_path = store.record(Path("fixed-report.json"), report, audit=audit)
+    reloaded_record = store.load_record(Path("fixed-report.json"))
 
     assert stored_path == tmp_path / "fixed-report.json"
-    assert reloaded_report == report
+    assert store.load(Path("fixed-report.json")) == report
+    assert reloaded_record.report == report
+    assert reloaded_record.audit == audit
     assert '"query": "배송"' in stored_path.read_text(encoding="utf-8")
-    assert RetrievalRegressionChecker(baseline=baseline).evaluate(reloaded_report).passed is True
+    assert (
+        RetrievalRegressionChecker(baseline=baseline)
+        .evaluate_record(
+            reloaded_record,
+            audit_requirement=RetrievalEvaluationAuditRequirement(
+                comparison_target_id="volume05-retrieval-baseline-001", as_of_date=date(2026, 8, 11)
+            ),
+        )
+        .passed
+        is True
+    )
     with pytest.raises(RagConfigurationError, match="must not overwrite"):
-        store.record(Path("fixed-report.json"), report)
+        store.record(Path("fixed-report.json"), report, audit=audit)
+
+
+def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_records(
+    tmp_path: Path,
+) -> None:
+    report = RetrievalEvaluator(
+        index=RecordingSearchIndex(
+            (_hit(chunk_id="shipping#1", document_id="shipping", text="shipping evidence"),)
+        ),
+        config=RetrievalEvaluationConfig(top_k=1),
+    ).evaluate((RetrievalEvaluationCase("shipping", "배송", ("shipping#1",)),))
+    checker = RetrievalRegressionChecker(baseline=RetrievalEvaluationBaseline.from_report(report))
+    store = LocalRetrievalEvaluationReportStore(root=tmp_path)
+    pending_audit = RetrievalEvaluationAuditMetadata(
+        record_id="pending-report",
+        comparison_target_id="volume05-retrieval-baseline-001",
+        approval_state="pending",
+        retained_until=date(2030, 1, 1),
+    )
+    store.record(Path("pending.json"), report, audit=pending_audit)
+    pending_record = store.load_record(Path("pending.json"))
+
+    with pytest.raises(RagConfigurationError, match="must be approved"):
+        checker.evaluate_record(
+            pending_record,
+            audit_requirement=RetrievalEvaluationAuditRequirement(
+                comparison_target_id="volume05-retrieval-baseline-001", as_of_date=date(2026, 8, 11)
+            ),
+        )
+
+    approved_record = type(pending_record)(
+        report=report,
+        audit=RetrievalEvaluationAuditMetadata(
+            record_id="approved-report",
+            comparison_target_id="volume05-retrieval-baseline-001",
+            approval_state="approved",
+            retained_until=date(2026, 8, 11),
+            approval_reference="local-approval-002",
+            approved_on=date(2026, 8, 11),
+        ),
+    )
+    with pytest.raises(RagConfigurationError, match="comparison_target_id must match"):
+        checker.evaluate_record(
+            approved_record,
+            audit_requirement=RetrievalEvaluationAuditRequirement(
+                comparison_target_id="volume05-retrieval-baseline-002", as_of_date=date(2026, 8, 11)
+            ),
+        )
+    with pytest.raises(RagConfigurationError, match="retention has expired"):
+        checker.evaluate_record(
+            approved_record,
+            audit_requirement=RetrievalEvaluationAuditRequirement(
+                comparison_target_id="volume05-retrieval-baseline-001", as_of_date=date(2026, 8, 12)
+            ),
+        )
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"approval_state": "unknown"}, "approval_state is not supported"),
+        (
+            {"approval_state": "approved"},
+            "approved audit metadata requires approval details",
+        ),
+        (
+            {
+                "approval_state": "superseded",
+                "approval_reference": "approval-1",
+                "approved_on": date(2026, 8, 11),
+            },
+            "superseded audit metadata requires approval details",
+        ),
+        (
+            {
+                "approval_state": "approved",
+                "approval_reference": "approval-1",
+                "approved_on": date(2030, 1, 2),
+                "retained_until": date(2030, 1, 1),
+            },
+            "approved_on must not be after retained_until",
+        ),
+        (
+            {"approval_reference": "approval-1"},
+            "pending audit metadata must not contain approval details",
+        ),
+    ],
+)
+def test_audit_metadata_rejects_invalid_lifecycle_combinations(
+    kwargs: dict[str, object], message: str
+) -> None:
+    fields: dict[str, object] = {
+        "record_id": "record-1",
+        "comparison_target_id": "target-1",
+        "approval_state": "pending",
+        "retained_until": date(2030, 1, 1),
+    }
+    with pytest.raises(RagConfigurationError, match=message):
+        RetrievalEvaluationAuditMetadata(**(fields | kwargs))  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
@@ -1607,6 +1733,14 @@ def test_local_evaluation_report_store_rejects_unsafe_or_forged_records(
         if relative_path.name == "legacy.json":
             path.write_bytes(b"\xff")
         else:
+            if relative_path.name in {"mismatched-count.json", "forged-metric.json"}:
+                content = content.replace(
+                    '"results":',
+                    '"audit": {"record_id": "record-1", '
+                    '"comparison_target_id": "target-1", "approval_state": "pending", '
+                    '"retained_until": "2030-01-01", "approval_reference": null, '
+                    '"approved_on": null, "superseded_by": null}, "results":',
+                )
             path.write_text(content, encoding="utf-8")
 
     with pytest.raises(RagConfigurationError, match=message):
