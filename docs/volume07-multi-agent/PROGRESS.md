@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 17: Agent 계약·실행 상태·Capability 경계
+
+- `docs/volume07-multi-agent/14-agent-contract-state-and-capability-boundaries.md`에 Agent와 단순 LLM 호출의 차이, role·goal·입출력 schema·capability·authority·stop condition·human gate 계약을 추가했다.
+- 이 장은 `AgentContext`/immutable audit message를 현재 실행 state로 설명하고, 장기 memory의 scope·writer·retention 및 approval record 책임을 실행 state와 분리한다. 메시지 text는 tool capability 또는 deployment 권한이 아니며, Volume 07 deterministic Mock에는 network, secret, tool executor, file mutation, deployment 경로가 없음을 명시했다.
+- review/delegation/conflict/release의 bounded counter, fail-closed status, `PENDING`/`REJECTED`/`APPROVED` 승인 경계를 표와 local-only 실습·오류 해결·과제로 연결했다. README에 새 장 링크를 추가했다.
+- `uv run pytest tests/volume07 -q`로 Volume 07의 deterministic Mock, bounded loop, role authority, approval-gate contract 54개를 검증했다. live API, secret, network Agent, tool 실행, 배포를 사용하지 않았다.
+
 ## 2026-08-11 — Slice 16: 결정론적 Offline Multi-Agent 미니 프로젝트
 
 - `examples/volume07/offline_multi_agent_mini_project.py`는 review, delegation, exact-consensus conflict, local release handoff를 각각 새 deterministic Mock workflow로 구성한다. 모든 script는 immutable tuple이고 review cycle 1, conflict round 1, task 2, Worker attempt 1로 호출 예산이 유한하다.
