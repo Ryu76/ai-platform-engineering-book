@@ -48,6 +48,19 @@ _SAFE_AUDIT_FIELD_NAMES: Final = frozenset(
     }
 )
 
+_ROUTER_AUDIT_REPORT_NAMES: Final = frozenset(
+    {
+        "api",
+        "escalation",
+        "fallback",
+        "keyword",
+        "llm",
+        "policy",
+        "rule",
+        "semantic",
+    }
+)
+
 
 def validate_router_audit_record(
     record: Mapping[str, object], *, sensitive_values: Iterable[str] = ()
@@ -69,6 +82,27 @@ def validate_router_audit_record(
         ) from error
 
 
+def validate_router_audit_report(
+    report: Mapping[str, object], *, sensitive_values_by_route: Mapping[str, Iterable[str]]
+) -> None:
+    """미니 프로젝트의 완전한 audit report와 경로별 원문 비노출을 검증한다.
+
+    Report는 고정된 여덟 Router 경로를 모두 정확히 한 번씩 가져야 한다. 이 경계는
+    record 자체의 field allowlist와 별도로, aggregation 단계에서 새 경로를 추가하거나
+    기존 경로를 누락하는 일을 fail closed 한다.
+    """
+    if not isinstance(report, Mapping):
+        raise UnsafeRouterAuditRecordError("router audit report must be a mapping")
+    _validate_report_names(report, "router audit report")
+    if not isinstance(sensitive_values_by_route, Mapping):
+        raise UnsafeRouterAuditRecordError("router audit sensitive values must be a mapping")
+    _validate_report_names(sensitive_values_by_route, "router audit sensitive values")
+    for route_name, record in report.items():
+        if not isinstance(record, Mapping):
+            raise UnsafeRouterAuditRecordError("router audit report record must be a mapping")
+        validate_router_audit_record(record, sensitive_values=sensitive_values_by_route[route_name])
+
+
 def _normalize_sensitive_values(sensitive_values: Iterable[str]) -> tuple[str, ...]:
     """원문 누락·중복 없이 비교할 수 있는 값 집합을 만든다."""
     if isinstance(sensitive_values, str):
@@ -85,6 +119,15 @@ def _normalize_sensitive_values(sensitive_values: Iterable[str]) -> tuple[str, .
     if len(values) != len(set(values)):
         raise UnsafeRouterAuditRecordError("sensitive audit values must be unique")
     return values
+
+
+def _validate_report_names(values: Mapping[str, object], description: str) -> None:
+    """고정 미니 프로젝트 경로 집합의 누락·추가를 fail closed 한다."""
+    route_names = frozenset(values)
+    if route_names != _ROUTER_AUDIT_REPORT_NAMES:
+        raise UnsafeRouterAuditRecordError(
+            f"{description} must contain exactly the configured router paths"
+        )
 
 
 def _validate_mapping(record: Mapping[str, object], sensitive_values: tuple[str, ...]) -> None:

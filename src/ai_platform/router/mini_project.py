@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 
 from ai_platform.router.api import RouterAPI
-from ai_platform.router.audit import validate_router_audit_record
+from ai_platform.router.audit import validate_router_audit_report
 from ai_platform.router.base import (
     RouteTarget,
     RouteTargetKind,
@@ -90,21 +89,30 @@ class RouterMiniProject:
         fallback_decision = self.fallback_router.route(fallback_request)
         escalation_decision = self.escalation_router.route(escalation_request)
         api_response = self.api.route_post(api_request_body)
-        return {
-            "policy": _audit_record(policy_decision.as_log_record(), policy_request.text),
-            "rule": _audit_record(rule_decision.as_log_record(), rule_request.text),
-            "keyword": _audit_record(keyword_decision.as_log_record(), keyword_request.text),
-            "semantic": _audit_record(semantic_decision.as_log_record(), semantic_request.text),
-            "llm": _audit_record(llm_decision.as_log_record(), llm_request.text),
-            "fallback": _audit_record(fallback_decision.as_log_record(), fallback_request.text),
-            "escalation": _audit_record(
-                escalation_decision.as_log_record(), escalation_request.text
-            ),
-            "api": _audit_record(
-                {"status_code": api_response.status_code, "body": api_response.body},
-                api_request_text,
-            ),
+        report = {
+            "policy": policy_decision.as_log_record(),
+            "rule": rule_decision.as_log_record(),
+            "keyword": keyword_decision.as_log_record(),
+            "semantic": semantic_decision.as_log_record(),
+            "llm": llm_decision.as_log_record(),
+            "fallback": fallback_decision.as_log_record(),
+            "escalation": escalation_decision.as_log_record(),
+            "api": {"status_code": api_response.status_code, "body": api_response.body},
         }
+        validate_router_audit_report(
+            report,
+            sensitive_values_by_route={
+                "policy": (policy_request.text,),
+                "rule": (rule_request.text,),
+                "keyword": (keyword_request.text,),
+                "semantic": (semantic_request.text,),
+                "llm": (llm_request.text,),
+                "fallback": (fallback_request.text,),
+                "escalation": (escalation_request.text,),
+                "api": (api_request_text,),
+            },
+        )
+        return report
 
 
 def build_router_mini_project() -> RouterMiniProject:
@@ -368,10 +376,3 @@ def _stage(name: str, target: RouteTarget) -> RoutingStage:
         policy_router=PolicyRouter(name=f"{name}-policy", targets=(target,)),
         permitted_target_names=frozenset({target.name}),
     )
-
-
-def _audit_record(record: Mapping[str, object], request_text: str) -> dict[str, object]:
-    """고정 fixture report가 allowlist 밖의 field나 해당 요청 원문을 남기지 않게 한다."""
-    audit_record = dict(record)
-    validate_router_audit_record(audit_record, sensitive_values=(request_text,))
-    return audit_record

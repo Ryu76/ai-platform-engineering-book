@@ -7,7 +7,11 @@ from math import inf, nan
 
 import pytest
 
-from ai_platform.router import UnsafeRouterAuditRecordError, validate_router_audit_record
+from ai_platform.router import (
+    UnsafeRouterAuditRecordError,
+    validate_router_audit_record,
+    validate_router_audit_report,
+)
 from ai_platform.router.mini_project import build_router_mini_project
 
 
@@ -84,3 +88,51 @@ def test_audit_record_allows_safe_nested_router_api_response() -> None:
         },
         sensitive_values=("private input",),
     )
+
+
+def test_mini_project_report_requires_all_and_only_configured_paths() -> None:
+    report = build_router_mini_project().run()
+    request_texts = _mini_project_request_texts()
+
+    validate_router_audit_report(report, sensitive_values_by_route=request_texts)
+
+    with pytest.raises(UnsafeRouterAuditRecordError, match="exactly the configured"):
+        validate_router_audit_report(
+            {name: record for name, record in report.items() if name != "api"},
+            sensitive_values_by_route={
+                name: values for name, values in request_texts.items() if name != "api"
+            },
+        )
+    with pytest.raises(UnsafeRouterAuditRecordError, match="exactly the configured"):
+        validate_router_audit_report(
+            report,
+            sensitive_values_by_route={**request_texts, "unexpected": ("private",)},
+        )
+
+
+def test_mini_project_report_rejects_non_mapping_records_and_route_specific_leaks() -> None:
+    report = build_router_mini_project().run()
+    request_texts = _mini_project_request_texts()
+    malformed_report = {**report, "policy": "not-a-record"}
+    with pytest.raises(UnsafeRouterAuditRecordError, match="record must be a mapping"):
+        validate_router_audit_report(malformed_report, sensitive_values_by_route=request_texts)
+    leaked_report = {
+        **report,
+        "policy": {**report["policy"], "reason": "private general support request"},
+    }
+    with pytest.raises(UnsafeRouterAuditRecordError, match="sensitive value"):
+        validate_router_audit_report(leaked_report, sensitive_values_by_route=request_texts)
+
+
+def _mini_project_request_texts() -> dict[str, tuple[str]]:
+    """고정 report 경로와 대응하는 원문 fixture를 반환한다."""
+    return {
+        "policy": ("private general support request",),
+        "rule": ("private billing rule request",),
+        "keyword": ("private order tracking request",),
+        "semantic": ("private refund request",),
+        "llm": ("private priority request",),
+        "fallback": ("private fallback request",),
+        "escalation": ("private escalation request",),
+        "api": ("private API order request",),
+    }

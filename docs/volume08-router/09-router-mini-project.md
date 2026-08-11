@@ -74,7 +74,7 @@ uv run pytest tests/unit/test_volume08_router_audit.py -q
 7. `MultiStageEscalationRouter`는 허용된 Model만 남기는 요청 제약을 그대로 보존하며 unhealthy Agent와 Tool 뒤 Model stage를 선택합니다.
 8. `RouterAPI`는 strict JSON body를 기존 `PolicyRouter`에 한 번 전달하고 `200` body만 report에 포함합니다.
 
-`RouterMiniProject.run()`은 모든 성공 결과에 각 Router의 `as_log_record()`를 사용합니다. 이 메서드는 대상 이름, 정책 이름, 비용, 지연 시간, confidence처럼 조사에 필요한 최소 메타데이터만 반환합니다. 반환 직전에는 `validate_router_audit_record()`가 field allowlist, **strict JSON** 직렬화 가능 여부, 해당 요청 원문의 부분 문자열 비노출을 다시 검사합니다. 따라서 Python의 `NaN`, `Infinity`, `-Infinity`처럼 기본 `json.dumps()`가 관대하게 허용할 수 있는 비표준 숫자도 거부합니다. 새 field를 추가할 때에는 이 경계를 넓히기 전에 해당 field가 운영 조사에 꼭 필요한지와 민감 정보가 아닌지를 검토해야 합니다.
+`RouterMiniProject.run()`은 모든 성공 결과에 각 Router의 `as_log_record()`를 사용합니다. 이 메서드는 대상 이름, 정책 이름, 비용, 지연 시간, confidence처럼 조사에 필요한 최소 메타데이터만 반환합니다. 반환 직전에는 `validate_router_audit_report()`가 고정된 여덟 report 경로의 누락·추가를 fail closed 하고, 각 경로의 `validate_router_audit_record()`가 field allowlist, **strict JSON** 직렬화 가능 여부, 해당 요청 원문의 부분 문자열 비노출을 다시 검사합니다. 따라서 Python의 `NaN`, `Infinity`, `-Infinity`처럼 기본 `json.dumps()`가 관대하게 허용할 수 있는 비표준 숫자도 거부합니다. 새 경로나 field를 추가할 때에는 이 경계를 넓히기 전에 해당 값이 운영 조사에 꼭 필요한지와 민감 정보가 아닌지를 검토해야 합니다.
 
 ## 7. 정상 실행 결과
 

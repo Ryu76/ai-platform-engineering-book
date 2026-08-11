@@ -4,6 +4,7 @@ from ai_platform.router.api import RouterAPI, RouterAPIResponse
 from ai_platform.router.audit import (
     UnsafeRouterAuditRecordError,
     validate_router_audit_record,
+    validate_router_audit_report,
 )
 from ai_platform.router.base import (
     NoEligibleRouteError,
@@ -70,6 +71,7 @@ from ai_platform.router.semantic import (
 __all__ = [
     "UnsafeRouterAuditRecordError",
     "validate_router_audit_record",
+    "validate_router_audit_report",
     "NoEligibleRouteError",
     "NoConfidentKeywordRouteError",
     "NoEscalationFixtureError",
