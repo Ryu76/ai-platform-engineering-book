@@ -8,8 +8,11 @@ Recall@k, Hit rate, MRR을 계산한다. 문서 원문이나 생성 답변을 �
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import NoReturn
 
 from ai_platform.rag.retrieval import RagConfigurationError, SearchableIndex, SearchHit
 
@@ -56,6 +59,142 @@ class RetrievalEvaluationConfig:
                 raise RagConfigurationError(
                     f"evaluation {field_name} must be an integer between 1 and {maximum}"
                 )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationSetLoadingConfig:
+    """명시한 로컬 JSON 평가 세트 파일의 크기와 사례 수 제한이다."""
+
+    max_file_bytes: int = 100_000
+    max_cases: int = 100
+
+    def __post_init__(self) -> None:
+        for field_name, value, maximum in (
+            ("max_file_bytes", self.max_file_bytes, 1_000_000),
+            ("max_cases", self.max_cases, 1_000),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise RagConfigurationError(
+                    f"evaluation set {field_name} must be an integer between 1 and {maximum}"
+                )
+
+
+class LocalRetrievalEvaluationSetLoader:
+    """허용된 로컬 루트 아래의 고정 JSON 평가 사례만 읽는다.
+
+    이 경계는 디렉터리를 탐색하거나 네트워크·제공자 SDK를 사용하지 않는다. 호출자가
+    지정한 UTF-8 ``.json`` 파일 하나만 읽고, 파일 크기·경로·JSON 구조·중복 키·사례
+    식별자를 검증한 뒤 ``RetrievalEvaluationCase`` tuple로 변환한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        root: Path,
+        config: RetrievalEvaluationSetLoadingConfig | None = None,
+    ) -> None:
+        if not isinstance(root, Path):
+            raise RagConfigurationError("evaluation set root must be a pathlib.Path")
+        if not root.is_dir():
+            raise RagConfigurationError("evaluation set root must be an existing directory")
+        self._root = root.resolve()
+        self._config = config or RetrievalEvaluationSetLoadingConfig()
+
+    def load(self, relative_path: Path) -> tuple[RetrievalEvaluationCase, ...]:
+        """고정 JSON 사례 파일을 검증된 평가 사례 tuple로 반환한다."""
+        candidate = self._resolve_path(relative_path)
+        try:
+            raw_bytes = candidate.read_bytes()
+        except OSError as error:
+            raise RagConfigurationError("evaluation set file could not be read") from error
+        if not raw_bytes:
+            raise RagConfigurationError("evaluation set file must not be empty")
+        if len(raw_bytes) > self._config.max_file_bytes:
+            raise RagConfigurationError("evaluation set file exceeds the configured size limit")
+        try:
+            payload = json.loads(
+                raw_bytes.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_json_keys,
+                parse_constant=_reject_nonstandard_json_constant,
+            )
+        except UnicodeDecodeError as error:
+            raise RagConfigurationError("evaluation set file must be UTF-8 encoded") from error
+        except (json.JSONDecodeError, ValueError) as error:
+            raise RagConfigurationError("evaluation set file must contain valid JSON") from error
+        return self._validated_cases(payload)
+
+    def _resolve_path(self, relative_path: Path) -> Path:
+        if not isinstance(relative_path, Path):
+            raise RagConfigurationError("evaluation set relative_path must be a pathlib.Path")
+        if relative_path.is_absolute() or not relative_path.parts:
+            raise RagConfigurationError(
+                "evaluation set relative_path must be a non-empty relative path"
+            )
+        if relative_path.suffix.casefold() != ".json":
+            raise RagConfigurationError("only JSON evaluation set files (.json) are supported")
+        candidate = (self._root / relative_path).resolve()
+        if not candidate.is_relative_to(self._root):
+            raise RagConfigurationError("evaluation set relative_path must stay within root")
+        if not candidate.is_file():
+            raise RagConfigurationError("evaluation set file does not exist")
+        return candidate
+
+    def _validated_cases(self, payload: object) -> tuple[RetrievalEvaluationCase, ...]:
+        if not isinstance(payload, dict):
+            raise RagConfigurationError("evaluation set JSON root must be an object")
+        if set(payload) != {"cases"}:
+            raise RagConfigurationError("evaluation set JSON root must contain only cases")
+        raw_cases = payload["cases"]
+        if not isinstance(raw_cases, list):
+            raise RagConfigurationError("evaluation set cases must be an array")
+        if not raw_cases:
+            raise RagConfigurationError("evaluation set must contain at least one case")
+        if len(raw_cases) > self._config.max_cases:
+            raise RagConfigurationError("evaluation set contains more cases than configured")
+
+        cases = tuple(self._case_from_json(raw_case) for raw_case in raw_cases)
+        case_ids = [case.case_id for case in cases]
+        if len(set(case_ids)) != len(case_ids):
+            raise RagConfigurationError("evaluation set case_id values must be unique")
+        return cases
+
+    @staticmethod
+    def _case_from_json(raw_case: object) -> RetrievalEvaluationCase:
+        if not isinstance(raw_case, dict):
+            raise RagConfigurationError("evaluation set cases must be objects")
+        if set(raw_case) != {"case_id", "query", "expected_chunk_ids"}:
+            raise RagConfigurationError(
+                "evaluation set cases must contain only case_id, query, and expected_chunk_ids"
+            )
+        case_id = raw_case["case_id"]
+        query = raw_case["query"]
+        expected_chunk_ids = raw_case["expected_chunk_ids"]
+        if not isinstance(case_id, str) or not isinstance(query, str):
+            raise RagConfigurationError("evaluation set case_id and query must be strings")
+        if not isinstance(expected_chunk_ids, list):
+            raise RagConfigurationError("evaluation set expected_chunk_ids must be an array")
+        if not all(isinstance(chunk_id, str) for chunk_id in expected_chunk_ids):
+            raise RagConfigurationError("evaluation set expected_chunk_ids must contain strings")
+        return RetrievalEvaluationCase(
+            case_id=case_id,
+            query=query,
+            expected_chunk_ids=tuple(expected_chunk_ids),
+        )
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """중복 키를 덮어쓰지 않아 파일 기반 평가 정의가 모호해지지 않게 한다."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _reject_nonstandard_json_constant(value: str) -> NoReturn:
+    """표준 JSON에 없는 NaN/Infinity 상수를 거부한다."""
+    raise ValueError(f"non-standard JSON constant: {value}")
 
 
 @dataclass(frozen=True, slots=True)

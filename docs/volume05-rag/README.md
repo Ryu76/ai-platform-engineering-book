@@ -23,8 +23,9 @@
 12. `ConfidenceThresholdIndex`는 제한된 후보의 점수가 유한한 0~1 정규화 신뢰도인지 검증하고, 명시한 최소 신뢰도보다 낮은 근거를 제외합니다. 이 경계는 점수 척도를 변환하지 않으므로 `RerankingIndex`처럼 정규화 점수를 만드는 단계 뒤에 둡니다. 모든 근거가 임계값 미만이면 빈 결과를 반환해 생성 전 No-answer를 보장하며, 통과한 청크의 인용 경계는 바꾸지 않습니다.
 13. `LocalRagApi`는 프레임워크·HTTP 서버 없이 `{"query": string, "top_k"?: 1..20}` 로컬 JSON 요청을 검증합니다. 지원하지 않는 필드·빈 질문·범위 밖/boolean `top_k`는 생성기나 검색기를 호출하지 않고 안정된 `400 {"error": {"code": "invalid_request", "message": ...}}`로 반환합니다. 유효 요청은 `200`과 답변·No-answer·인용 JSON을 반환합니다.
 14. `RetrievalEvaluator`는 명시한 고정 로컬 `RetrievalEvaluationCase`만 `SearchableIndex`에 전달해 생성기 호출 없이 Recall@k·Hit rate·MRR을 계산합니다. 각 사례는 하나 이상의 기대 청크 ID를 가져야 하며, 평가기는 tuple 이외 결과·요청 수 초과 결과·중복 청크 ID를 거부해 신뢰할 수 없는 검색기 출력이 지표를 왜곡하지 못하게 합니다.
-15. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
-16. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
+15. `LocalRetrievalEvaluationSetLoader`는 허용된 로컬 루트 안에서 호출자가 명시한 UTF-8 `.json` 평가 세트 하나만 읽습니다. 경로 탈출·심볼릭 링크 탈출·빈/과대 파일·비 UTF-8·비표준 JSON·중복 JSON 키를 거부하고, 엄격한 `{"cases": [...]}` 스키마를 `RetrievalEvaluationCase` tuple로 변환합니다. 자동 디렉터리 탐색, 네트워크, 제공자 SDK는 사용하지 않습니다.
+16. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
+17. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
 
 생성기 경계는 `Protocol`이므로 실습과 테스트는 항상 Mock 구현만 사용합니다. 이 슬라이스는 외부 제공자, 라이브 API, 비밀값, 배포를 사용하지 않습니다.
 
@@ -37,7 +38,7 @@ uv run python examples/volume05/local_rag.py
 uv run pytest tests/unit/test_volume05_rag.py -q
 ```
 
-예제는 명시한 `handbook.md`·`returns.md`와 `exchange-notice.pdf`만 읽습니다. PDF 파일은 실제 엔진이 아니라 `SamplePdfTextExtractor`가 읽는 고정 로컬 바이트와 Mock 페이지 텍스트를 사용합니다. 이 경계는 실제 파서의 신뢰하지 않는 출력도 검증하도록 설계되어 있으므로, 학습자가 파서를 추가할 때도 네트워크·라이브 API 없이 교체 테스트할 수 있습니다. `SampleQueryTransformer`는 원 질문을 보존한 고정 로컬 확장 질문만, `SampleDenseRanker`는 로컬에 고정한 Mock 청크 ID만 반환합니다. 그 뒤 `SampleEvidenceReranker`는 이미 검색된 제한된 로컬 후보에만 0~1의 고정 점수를 부여하고, `DocumentDiversityIndex`는 문서당 한 청크만 남겨 한 문서에 근거가 집중되지 않게 합니다. `ContextBudgetIndex`는 후보 3개와 600문자의 명시적 예산 안에서 청크 일부를 자르지 않고 근거를 선택합니다. 마지막 `ConfidenceThresholdIndex`는 정규화된 재순위화 점수가 0.8 이상인 근거만 생성기에 전달해 낮은 신뢰도의 응답을 No-answer로 바꿉니다. 예제는 배송·반품·PDF 교환의 고정 질의와 기대 청크 ID로 `RetrievalEvaluator`도 실행해 Recall@1·Hit rate·MRR을 출력합니다. 이 파이프라인은 `LocalRagApi.handle()`에 고정 로컬 요청 객체로 전달되며, API 응답도 네트워크 서버 없이 출력됩니다. 따라서 어휘가 겹치지 않는 도착 예정 질문도 배송 근거와 인용을 출력합니다. 반품과 PDF 교환 질문도 근거와 인용을 출력하고, 샘플 문서에 없는 주차장 할인 질문은 No-answer를 출력합니다. 새 파일을 샘플 디렉터리에 추가해도 명시적 `load_many()` 또는 `load()` 호출에 넣기 전에는 색인되지 않습니다.
+예제는 명시한 `handbook.md`·`returns.md`와 `exchange-notice.pdf`만 읽습니다. PDF 파일은 실제 엔진이 아니라 `SamplePdfTextExtractor`가 읽는 고정 로컬 바이트와 Mock 페이지 텍스트를 사용합니다. 이 경계는 실제 파서의 신뢰하지 않는 출력도 검증하도록 설계되어 있으므로, 학습자가 파서를 추가할 때도 네트워크·라이브 API 없이 교체 테스트할 수 있습니다. `SampleQueryTransformer`는 원 질문을 보존한 고정 로컬 확장 질문만, `SampleDenseRanker`는 로컬에 고정한 Mock 청크 ID만 반환합니다. 그 뒤 `SampleEvidenceReranker`는 이미 검색된 제한된 로컬 후보에만 0~1의 고정 점수를 부여하고, `DocumentDiversityIndex`는 문서당 한 청크만 남겨 한 문서에 근거가 집중되지 않게 합니다. `ContextBudgetIndex`는 후보 3개와 600문자의 명시적 예산 안에서 청크 일부를 자르지 않고 근거를 선택합니다. 마지막 `ConfidenceThresholdIndex`는 정규화된 재순위화 점수가 0.8 이상인 근거만 생성기에 전달해 낮은 신뢰도의 응답을 No-answer로 바꿉니다. 예제는 배송·반품·PDF 교환의 고정 질의와 기대 청크 ID를 `sample_data/retrieval-evaluation.json`에서 명시적으로 읽어 `RetrievalEvaluator`를 실행하고 Recall@1·Hit rate·MRR을 출력합니다. 이 JSON 파일은 루트 객체의 `cases` 배열만 허용하며, 각 사례는 `case_id`·`query`·`expected_chunk_ids` 배열을 정확히 한 번씩 가져야 합니다. `LocalRetrievalEvaluationSetLoader`는 자동으로 디렉터리를 탐색하지 않고, UTF-8·파일 크기·경로·중복 키·사례 ID를 검증합니다. 이 파이프라인은 `LocalRagApi.handle()`에 고정 로컬 요청 객체로 전달되며, API 응답도 네트워크 서버 없이 출력됩니다. 따라서 어휘가 겹치지 않는 도착 예정 질문도 배송 근거와 인용을 출력합니다. 반품과 PDF 교환 질문도 근거와 인용을 출력하고, 샘플 문서에 없는 주차장 할인 질문은 No-answer를 출력합니다. 새 파일을 샘플 디렉터리에 추가해도 명시적 `load_many()`·`load()` 또는 평가 세트 로더 호출에 넣기 전에는 색인·평가되지 않습니다.
 
 ## 프레임워크 독립 API 계약
 
@@ -63,30 +64,27 @@ payload = response.to_payload()
 `RetrievalEvaluator`는 생성 품질이나 라이브 제공자 호출을 측정하지 않습니다. 명시한 로컬 질의와 기대 청크 ID만 사용해 검색 회귀를 검출하는 경계입니다. 사례별 `recall_at_k`는 기대 청크 중 상위 k에서 회수한 비율이고, `passed`와 `reciprocal_rank`는 첫 기대 청크가 상위 k에 나타났는지와 그 역순위를 나타냅니다. 보고서의 `recall_at_k`는 모든 기대 청크의 마이크로 평균, `hit_rate`는 하나 이상 회수한 사례 비율, `mean_reciprocal_rank`는 사례별 역순위 평균입니다.
 
 ```python
+from pathlib import Path
+
 from ai_platform.rag import (
-    RetrievalEvaluationCase,
+    LocalRetrievalEvaluationSetLoader,
     RetrievalEvaluationConfig,
     RetrievalEvaluator,
 )
 
+cases = LocalRetrievalEvaluationSetLoader(root=Path("examples/volume05/sample_data")).load(
+    Path("retrieval-evaluation.json")
+)
 report = RetrievalEvaluator(
     index=index, config=RetrievalEvaluationConfig(top_k=1)
-).evaluate(
-    (
-        RetrievalEvaluationCase(
-            case_id="delivery-arrival",
-            query="언제 도착하나요?",
-            expected_chunk_ids=("local:handbook.md#1",),
-        ),
-    )
-)
+).evaluate(cases)
 
 assert report.recall_at_k == 1.0
 assert report.hit_rate == 1.0
 assert report.mean_reciprocal_rank == 1.0
 ```
 
-각 사례에는 중복 없는 비어 있지 않은 기대 청크 ID tuple이 필요합니다. 빈 사례 세트·중복 사례 ID·구성한 최대 사례 수 초과는 거부합니다. 평가기는 검색기의 tuple 반환, 최대 `top_k`개 결과, `SearchHit` 타입 및 중복 없는 청크 ID를 확인합니다. 보고서의 `to_payload()`는 원문이나 생성 답변 없이 사례 ID·기대/회수 청크 ID·순위·지표만 포함한 JSON 호환 값입니다.
+파일 루트는 정확히 `{"cases": [...]}`여야 하고 각 사례 객체는 `case_id` 문자열, `query` 문자열, 비어 있지 않고 중복 없는 문자열 `expected_chunk_ids` 배열만 포함합니다. 로더는 명시한 상대 `.json` 파일만 읽으며 절대 경로·경로/심볼릭 링크 탈출·자동 탐색·빈/과대 파일·비 UTF-8·잘못된 JSON·중복 JSON 키를 거부합니다. `RetrievalEvaluationCase`로 변환된 뒤 빈 사례 세트·중복 사례 ID·구성한 최대 사례 수 초과는 거부합니다. 평가기는 검색기의 tuple 반환, 최대 `top_k`개 결과, `SearchHit` 타입 및 중복 없는 청크 ID를 확인합니다. 보고서의 `to_payload()`는 원문이나 생성 답변 없이 사례 ID·기대/회수 청크 ID·순위·지표만 포함한 JSON 호환 값입니다.
 
 ## 장 목록
 

@@ -21,6 +21,7 @@ from ai_platform.rag import (
     LocalPdfLoader,
     LocalRagApi,
     LocalRagIndex,
+    LocalRetrievalEvaluationSetLoader,
     PdfLoadingConfig,
     QueryTransformationConfig,
     QueryTransformingIndex,
@@ -32,6 +33,7 @@ from ai_platform.rag import (
     RerankResult,
     RetrievalEvaluationCase,
     RetrievalEvaluationConfig,
+    RetrievalEvaluationSetLoadingConfig,
     RetrievalEvaluator,
     SearchHit,
     SourceDocument,
@@ -1018,6 +1020,142 @@ def test_retrieval_evaluator_rejects_untrusted_search_results(
         )
 
 
+def test_local_evaluation_set_loader_reads_explicit_utf8_json_cases_in_file_order(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "evaluation"
+    root.mkdir()
+    (root / "fixed-cases.json").write_text(
+        """{
+  "cases": [
+    {
+      "case_id": "delivery",
+      "query": "배송은 언제 도착하나요?",
+      "expected_chunk_ids": ["shipping#1"]
+    },
+    {
+      "case_id": "return",
+      "query": "반품은 어떻게 하나요?",
+      "expected_chunk_ids": ["returns#1", "returns#2"]
+    }
+  ]
+}""",
+        encoding="utf-8",
+    )
+
+    cases = LocalRetrievalEvaluationSetLoader(root=root).load(Path("fixed-cases.json"))
+
+    assert cases == (
+        RetrievalEvaluationCase("delivery", "배송은 언제 도착하나요?", ("shipping#1",)),
+        RetrievalEvaluationCase("return", "반품은 어떻게 하나요?", ("returns#1", "returns#2")),
+    )
+
+
+@pytest.mark.parametrize(
+    "relative_path, content, config, message",
+    [
+        (Path("notes.txt"), b"{}", None, "only JSON evaluation set files"),
+        (Path("../outside.json"), b"", None, "must stay within root"),
+        (Path("empty.json"), b"", None, "must not be empty"),
+        (
+            Path("large.json"),
+            b'{"cases":[]}',
+            RetrievalEvaluationSetLoadingConfig(max_file_bytes=1),
+            "size limit",
+        ),
+        (Path("legacy.json"), b"\xff", None, "UTF-8"),
+        (Path("malformed.json"), b"{", None, "valid JSON"),
+        (
+            Path("duplicate-key.json"),
+            b'{"cases":[],"cases":[]}',
+            None,
+            "valid JSON",
+        ),
+    ],
+)
+def test_local_evaluation_set_loader_rejects_unsafe_or_invalid_files(
+    tmp_path: Path,
+    relative_path: Path,
+    content: bytes,
+    config: RetrievalEvaluationSetLoadingConfig | None,
+    message: str,
+) -> None:
+    root = tmp_path / "evaluation"
+    root.mkdir()
+    if relative_path.parts[0] != "..":
+        (root / relative_path).write_bytes(content)
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalRetrievalEvaluationSetLoader(root=root, config=config).load(relative_path)
+
+
+@pytest.mark.parametrize(
+    "content, message",
+    [
+        (b"[]", "root must be an object"),
+        (b'{"unexpected":[]}', "root must contain only cases"),
+        (b'{"cases":{}}', "cases must be an array"),
+        (b'{"cases":[]}', "at least one case"),
+        (b'{"cases":["not an object"]}', "cases must be objects"),
+        (
+            b'{"cases":[{"case_id":"delivery","query":"delivery","expected_chunk_ids":[],"extra":1}]}',
+            "must contain only case_id",
+        ),
+        (
+            b'{"cases":[{"case_id":1,"query":"delivery","expected_chunk_ids":[]}]}',
+            "case_id and query must be strings",
+        ),
+        (
+            b'{"cases":[{"case_id":"delivery","query":"delivery","expected_chunk_ids":"shipping#1"}]}',
+            "expected_chunk_ids must be an array",
+        ),
+        (
+            b'{"cases":[{"case_id":"delivery","query":"delivery","expected_chunk_ids":[1]}]}',
+            "expected_chunk_ids must contain strings",
+        ),
+    ],
+)
+def test_local_evaluation_set_loader_rejects_invalid_json_schema(
+    tmp_path: Path, content: bytes, message: str
+) -> None:
+    root = tmp_path / "evaluation"
+    root.mkdir()
+    (root / "fixed-cases.json").write_bytes(content)
+
+    with pytest.raises(RagConfigurationError, match=message):
+        LocalRetrievalEvaluationSetLoader(root=root).load(Path("fixed-cases.json"))
+
+
+def test_local_evaluation_set_loader_rejects_duplicate_or_excess_cases(tmp_path: Path) -> None:
+    root = tmp_path / "evaluation"
+    root.mkdir()
+    (root / "duplicate-cases.json").write_text(
+        """{
+  "cases": [
+    {"case_id":"same","query":"배송","expected_chunk_ids":["shipping#1"]},
+    {"case_id":"same","query":"반품","expected_chunk_ids":["returns#1"]}
+  ]
+}""",
+        encoding="utf-8",
+    )
+    (root / "two-cases.json").write_text(
+        """{
+  "cases": [
+    {"case_id":"shipping","query":"배송","expected_chunk_ids":["shipping#1"]},
+    {"case_id":"returns","query":"반품","expected_chunk_ids":["returns#1"]}
+  ]
+}""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RagConfigurationError, match="case_id values must be unique"):
+        LocalRetrievalEvaluationSetLoader(root=root).load(Path("duplicate-cases.json"))
+    with pytest.raises(RagConfigurationError, match="more cases than configured"):
+        LocalRetrievalEvaluationSetLoader(
+            root=root, config=RetrievalEvaluationSetLoadingConfig(max_cases=1)
+        ).load(Path("two-cases.json"))
+
+
 @pytest.mark.parametrize(
     "factory",
     [
@@ -1027,6 +1165,8 @@ def test_retrieval_evaluator_rejects_untrusted_search_results(
         lambda: RetrievalEvaluationCase("shipping", "배송", ("shipping#1", "shipping#1")),
         lambda: RetrievalEvaluationConfig(top_k=0),
         lambda: RetrievalEvaluationConfig(max_cases=True),
+        lambda: RetrievalEvaluationSetLoadingConfig(max_file_bytes=0),
+        lambda: RetrievalEvaluationSetLoadingConfig(max_cases=True),
     ],
 )
 def test_retrieval_evaluation_rejects_invalid_contract_values(

@@ -1,0 +1,19 @@
+{
+  "cases": [
+    {
+      "case_id": "delivery-arrival",
+      "query": "언제 도착하나요?",
+      "expected_chunk_ids": ["local:handbook.md#1"]
+    },
+    {
+      "case_id": "return-request",
+      "query": "반품 요청은 어떻게 접수하나요?",
+      "expected_chunk_ids": ["local:returns.md#1"]
+    },
+    {
+      "case_id": "exchange-window",
+      "query": "교환은 언제 신청하나요?",
+      "expected_chunk_ids": ["local:exchange-notice.pdf#page=1#1"]
+    }
+  ]
+}

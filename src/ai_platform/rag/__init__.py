@@ -10,10 +10,12 @@ from ai_platform.rag.api import (
     RagRequestError,
 )
 from ai_platform.rag.evaluation import (
+    LocalRetrievalEvaluationSetLoader,
     RetrievalEvaluationCase,
     RetrievalEvaluationConfig,
     RetrievalEvaluationReport,
     RetrievalEvaluationResult,
+    RetrievalEvaluationSetLoadingConfig,
     RetrievalEvaluator,
 )
 from ai_platform.rag.loader import (
@@ -65,11 +67,13 @@ __all__ = [
     "RagErrorResponse",
     "RagQueryRequest",
     "RagRequestError",
+    "LocalRetrievalEvaluationSetLoader",
     "RetrievalEvaluationCase",
     "RetrievalEvaluationConfig",
     "RetrievalEvaluationReport",
     "RetrievalEvaluationResult",
     "RetrievalEvaluator",
+    "RetrievalEvaluationSetLoadingConfig",
     "Citation",
     "ConfidenceThresholdConfig",
     "ConfidenceThresholdIndex",

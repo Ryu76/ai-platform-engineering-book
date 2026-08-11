@@ -1,5 +1,44 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 파일 기반 고정 로컬 검색 평가 세트 슬라이스 완료
+
+### 완료
+
+- `LocalRetrievalEvaluationSetLoader`와 `RetrievalEvaluationSetLoadingConfig`를 추가했습니다. 이 경계는 호출자가 명시한 허용 루트 안의 UTF-8 `.json` 파일 하나만 읽으며, 자동 탐색·네트워크·제공자 SDK·생성기 호출을 하지 않습니다.
+- 평가 세트는 정확한 `{"cases": [...]}` JSON 구조와 사례별 `case_id`·`query`·`expected_chunk_ids` 배열만 허용합니다. 중복 JSON 키·중복 사례 ID·빈/과대 파일·비 UTF-8·비표준 JSON·경로/심볼릭 링크 탈출·지원하지 않는 필드 및 타입을 거부합니다.
+- 로컬 예제의 배송·반품·PDF 교환 고정 사례를 `sample_data/retrieval-evaluation.json`으로 옮기고, 검증된 사례를 기존 `RetrievalEvaluator`에 전달하도록 변경했습니다. 예제는 여전히 local/sample data와 Mock 제공자 경계만 사용합니다.
+- 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 137 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 7 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 5 source files
+uv run python examples/volume05/local_rag.py
+# 고정 JSON 평가 세트의 Recall@1·Hit rate·MRR 모두 1.00, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 로컬 검색 평가 보고서의 기준선 비교와 결정론적 회귀 판정 계약을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 고정 로컬 검색 품질 평가 계약 슬라이스 완료
 
 ### 완료
