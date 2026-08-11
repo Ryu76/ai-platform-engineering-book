@@ -1,6 +1,10 @@
 """Volume 08의 결정론적 Router 실습 모듈."""
 
 from ai_platform.router.api import RouterAPI, RouterAPIResponse
+from ai_platform.router.audit import (
+    UnsafeRouterAuditRecordError,
+    validate_router_audit_record,
+)
 from ai_platform.router.base import (
     NoEligibleRouteError,
     RouteDecision,
@@ -64,6 +68,8 @@ from ai_platform.router.semantic import (
 )
 
 __all__ = [
+    "UnsafeRouterAuditRecordError",
+    "validate_router_audit_record",
     "NoEligibleRouteError",
     "NoConfidentKeywordRouteError",
     "NoEscalationFixtureError",

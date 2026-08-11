@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 
 from ai_platform.router.api import RouterAPI
+from ai_platform.router.audit import validate_router_audit_record
 from ai_platform.router.base import (
     RouteTarget,
     RouteTargetKind,
@@ -49,59 +51,59 @@ class RouterMiniProject:
 
     def run(self) -> dict[str, object]:
         """외부 호출 없이 모든 결정의 원문 없는 JSON 가능 감사 결과를 반환한다."""
-        policy_decision = self.policy_router.route(
-            _request("mini-policy-001", "private general support request")
+        policy_request = _request("mini-policy-001", "private general support request")
+        rule_request = RoutingRequest(
+            request_id="mini-rule-001",
+            text="private billing rule request",
+            requirements=RoutingRequirements(
+                required_capabilities=frozenset({"billing", "respond"}),
+                maximum_cost=Decimal("0.005"),
+                maximum_latency_ms=100,
+                permitted_target_names=frozenset({"mini-rule-billing-agent"}),
+            ),
         )
-        rule_decision = self.rule_router.route(
-            RoutingRequest(
-                request_id="mini-rule-001",
-                text="private billing rule request",
-                requirements=RoutingRequirements(
-                    required_capabilities=frozenset({"billing", "respond"}),
-                    maximum_cost=Decimal("0.005"),
-                    maximum_latency_ms=100,
-                    permitted_target_names=frozenset({"mini-rule-billing-agent"}),
-                ),
-            )
+        keyword_request = _request("mini-keyword-001", "private order tracking request")
+        semantic_request = _request("mini-semantic-001", "private refund request")
+        llm_request = _request("mini-llm-001", "private priority request")
+        fallback_request = _request("mini-fallback-001", "private fallback request")
+        escalation_request = _request(
+            "mini-escalation-001",
+            "private escalation request",
+            permitted_target_names=frozenset({"mini-summary-model"}),
         )
-        keyword_decision = self.keyword_router.route(
-            _request("mini-keyword-001", "private order tracking request")
-        )
-        semantic_decision = self.semantic_router.route(
-            _request("mini-semantic-001", "private refund request")
-        )
-        llm_decision = self.llm_router.route(_request("mini-llm-001", "private priority request"))
-        fallback_decision = self.fallback_router.route(
-            _request("mini-fallback-001", "private fallback request")
-        )
-        escalation_decision = self.escalation_router.route(
-            _request(
-                "mini-escalation-001",
-                "private escalation request",
-                permitted_target_names=frozenset({"mini-summary-model"}),
-            )
-        )
-        api_response = self.api.route_post(
-            {
-                "request_id": "mini-api-001",
-                "text": "private API order request",
-                "requirements": {
-                    "required_capabilities": ["lookup_order", "respond"],
-                    "maximum_cost": "0.004",
-                    "maximum_latency_ms": 80,
-                    "permitted_target_names": ["mini-api-order-agent"],
-                },
-            }
-        )
+        api_request_text = "private API order request"
+        api_request_body = {
+            "request_id": "mini-api-001",
+            "text": api_request_text,
+            "requirements": {
+                "required_capabilities": ["lookup_order", "respond"],
+                "maximum_cost": "0.004",
+                "maximum_latency_ms": 80,
+                "permitted_target_names": ["mini-api-order-agent"],
+            },
+        }
+        policy_decision = self.policy_router.route(policy_request)
+        rule_decision = self.rule_router.route(rule_request)
+        keyword_decision = self.keyword_router.route(keyword_request)
+        semantic_decision = self.semantic_router.route(semantic_request)
+        llm_decision = self.llm_router.route(llm_request)
+        fallback_decision = self.fallback_router.route(fallback_request)
+        escalation_decision = self.escalation_router.route(escalation_request)
+        api_response = self.api.route_post(api_request_body)
         return {
-            "policy": policy_decision.as_log_record(),
-            "rule": rule_decision.as_log_record(),
-            "keyword": keyword_decision.as_log_record(),
-            "semantic": semantic_decision.as_log_record(),
-            "llm": llm_decision.as_log_record(),
-            "fallback": fallback_decision.as_log_record(),
-            "escalation": escalation_decision.as_log_record(),
-            "api": {"status_code": api_response.status_code, "body": api_response.body},
+            "policy": _audit_record(policy_decision.as_log_record(), policy_request.text),
+            "rule": _audit_record(rule_decision.as_log_record(), rule_request.text),
+            "keyword": _audit_record(keyword_decision.as_log_record(), keyword_request.text),
+            "semantic": _audit_record(semantic_decision.as_log_record(), semantic_request.text),
+            "llm": _audit_record(llm_decision.as_log_record(), llm_request.text),
+            "fallback": _audit_record(fallback_decision.as_log_record(), fallback_request.text),
+            "escalation": _audit_record(
+                escalation_decision.as_log_record(), escalation_request.text
+            ),
+            "api": _audit_record(
+                {"status_code": api_response.status_code, "body": api_response.body},
+                api_request_text,
+            ),
         }
 
 
@@ -366,3 +368,10 @@ def _stage(name: str, target: RouteTarget) -> RoutingStage:
         policy_router=PolicyRouter(name=f"{name}-policy", targets=(target,)),
         permitted_target_names=frozenset({target.name}),
     )
+
+
+def _audit_record(record: Mapping[str, object], request_text: str) -> dict[str, object]:
+    """고정 fixture report가 allowlist 밖의 field나 해당 요청 원문을 남기지 않게 한다."""
+    audit_record = dict(record)
+    validate_router_audit_record(audit_record, sensitive_values=(request_text,))
+    return audit_record

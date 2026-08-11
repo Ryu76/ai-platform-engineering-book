@@ -41,9 +41,10 @@ uv run python examples/volume08/router_api.py
 uv run pytest tests/unit/test_volume08_router_api.py -q
 uv run python examples/volume08/router_mini_project.py
 uv run pytest tests/unit/test_volume08_router_mini_project.py -q
+uv run pytest tests/unit/test_volume08_router_audit.py -q
 ```
 
-스무 개 명령은 외부 서비스, API 키, 네트워크 호출 없이 고정된 정책·Rule·keyword·semantic·LLM Router 결정, 평가 accuracy gate, 제한된 policy fallback, Agent·Tool·Model 다단계 escalation, 원문 없는 Router API HTTP 계약과 전체 Router 미니 프로젝트 조합을 검증합니다.
+스물한 개 명령은 외부 서비스, API 키, 네트워크 호출 없이 고정된 정책·Rule·keyword·semantic·LLM Router 결정, 평가 accuracy gate, 제한된 policy fallback, Agent·Tool·Model 다단계 escalation, 원문 없는 Router API HTTP 계약, 감사 record allowlist와 전체 Router 미니 프로젝트 조합을 검증합니다.
 
 ## 학습자 체크리스트
 

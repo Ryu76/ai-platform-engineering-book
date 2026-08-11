@@ -531,3 +531,46 @@ PRD DoD 상태:
 - 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
 - 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
 - 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-11 — Tick 13: Router 감사 record allowlist와 원문 비노출 회귀
+
+완료한 범위:
+
+- `validate_router_audit_record()`와 `UnsafeRouterAuditRecordError`를 추가했습니다. validator는 결정·API audit record의 재귀 field allowlist, JSON 직렬화 가능 여부, 해당 요청 원문의 부분 문자열 비노출을 확인합니다.
+- `RouterMiniProject.run()`의 policy, rule, keyword, semantic, LLM, fallback, escalation, API 여덟 결과를 반환 직전에 각 요청 원문과 함께 validator로 확인하게 했습니다. 따라서 새 report field나 원문 반사값은 미니 프로젝트 경계에서 fail closed 합니다.
+- allowlist 밖 field, 허용 field 안의 원문, non-JSON 값, 잘못된 sensitive value 입력과 안전한 중첩 Router API body를 고정 fixture unit test로 검증했습니다.
+- 미니 프로젝트 문서·README·학습자 체크리스트에 audit 검사 명령, 오류 해결, field 확장 시 검토 경계를 추가했습니다. 외부 Agent·Tool·Model·LLM·embedding·HTTP API·네트워크 호출은 하지 않았습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+34 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 13 source files
+
+uv run pytest tests/unit/test_volume08_*.py -q
+80 passed in 0.51s
+
+uv run pytest -q
+141 passed in 1.10s
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 JSON report 출력; audit allowlist와 각 fixture 원문 비노출 검사를 통과
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
+- 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
+- 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.

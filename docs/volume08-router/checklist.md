@@ -37,6 +37,7 @@
 - [ ] Router API가 strict JSON body를 검증하고 `400 INVALID_ROUTING_REQUEST`와 `422 NO_ELIGIBLE_ROUTE`를 구분함을 확인했다.
 - [ ] API layer가 Router 정책을 재구현하거나 임의 fallback을 추가하지 않음을 설명할 수 있다.
 - [ ] 모든 decision 및 안전 실패 로그가 JSON 직렬화 가능함을 확인했다.
+- [ ] 미니 프로젝트 audit record가 허용 field만 사용하고 해당 request 원문의 부분 문자열을 포함하지 않음을 확인했다.
 - [ ] 로그와 API body에 사용자 원문, prompt, raw classifier output, API 키가 없어야 함을 확인했다.
 - [ ] `router_mini_project.py`가 Policy, Keyword, Semantic, LLM, fallback, escalation, API를 하나의 고정 request ID 집합으로 조합함을 확인했다.
 - [ ] Volume 09 workflow에는 `request_id`, target 정보, 원문 없는 audit record, 안전 실패 계약만 인계해야 함을 확인했다.
@@ -47,6 +48,7 @@
 # 실행 위치: 저장소 루트
 uv run python examples/volume08/router_mini_project.py
 uv run pytest tests/unit/test_volume08_router_mini_project.py -q
+uv run pytest tests/unit/test_volume08_router_audit.py -q
 uv run pytest -q
 ```
 
