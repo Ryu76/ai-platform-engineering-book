@@ -14,6 +14,7 @@ from ai_platform.api.correlation import (
     request_id_from_environ,
 )
 from ai_platform.api.dependencies import environment_dependency_readiness
+from ai_platform.api.telemetry import TelemetryExporter, publish_probe_telemetry
 
 StartResponse: TypeAlias = Callable[[str, list[tuple[str, str]]], object]  # noqa: UP040
 WsgiApplication: TypeAlias = Callable[[dict[str, object], StartResponse], Iterable[bytes]]  # noqa: UP040
@@ -51,10 +52,12 @@ class HealthApplication:
         readiness_check: Callable[[], bool] = readiness_from_environment,
         logger: Logger | None = None,
         request_id_factory: CorrelationIdFactory = new_request_id,
+        telemetry_exporter: TelemetryExporter | None = None,
     ) -> None:
         self._readiness_check = readiness_check
         self._logger = logger if logger is not None else getLogger(__name__)
         self._request_id_factory = request_id_factory
+        self._telemetry_exporter = telemetry_exporter
 
     def __call__(
         self, environ: dict[str, object], start_response: StartResponse
@@ -96,6 +99,11 @@ class HealthApplication:
             request_completion_event(
                 request_id=request_id, path=path, status_code=int(status.split(maxsplit=1)[0])
             )
+        )
+        publish_probe_telemetry(
+            path=path,
+            status_code=int(status.split(maxsplit=1)[0]),
+            exporter=self._telemetry_exporter,
         )
         start_response(status, headers)
         return [body]

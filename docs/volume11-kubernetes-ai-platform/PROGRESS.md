@@ -2,6 +2,43 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 10: Telemetry 데이터 최소화와 exporter failure의 로컬 격리 경계
+
+### 완료한 범위
+
+- `src/ai_platform/api/telemetry.py`에 표준 라이브러리만 쓰는 최소 telemetry schema를 추가했습니다.
+  - `probe_telemetry_event()`는 알려진 `/livez`·`/readyz` 또는 `unmatched` route, HTTP status class, HTTP status code만 가진 고정 metric/span 모양 JSON을 만듭니다.
+  - request ID, raw path·query·body·header, 환경 값, dependency detail, exception text, endpoint, credential, trace ID와 임의 label은 event에 넣지 않습니다.
+  - status code는 100~599만 허용하고 metric label은 individual status가 아닌 class만 사용합니다.
+- `HealthApplication`에 optional local `telemetry_exporter` callback 경계를 추가했습니다.
+  - 기본값은 `None`이며 기존 API는 telemetry delivery를 시도하지 않습니다.
+  - callback의 `Exception`은 상세를 log 또는 response에 노출하지 않고 `False`로 바꾸므로, exporter failure가 ready probe의 `200 OK`를 `503`으로 바꾸지 않습니다.
+  - retry, queue, collector, metric endpoint, trace exporter, telemetry backend, network 연결 또는 cluster 동작은 추가하지 않았습니다.
+- `examples/volume11/telemetry_boundary_demo.py`와 Volume 11 unit/integration test를 추가했습니다.
+  - 메모리 WSGI와 process-local list/stdout callback으로 최소 event 하나를 보이고, 의도적으로 실패하는 callback 뒤에도 `/readyz`가 `200 OK`임을 확인합니다.
+  - TCP listener, 실제 exporter, backend, credential 또는 deployment는 사용하지 않습니다.
+- [Telemetry 데이터 최소화와 exporter failure 경계](10-telemetry-data-minimization-exporter-failure.md) 장과 README를 갱신했습니다.
+  - high-cardinality·privacy 경계와 실제 운영에서 별도로 승인할 delivery failure, backpressure, retry, sampling, retention, access control, cost/alert 검토 항목을 분리했습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/telemetry_boundary_demo.py` | 통과 — in-memory `/livez`의 최소 JSON event 1개와 local export `200 OK`, exporter failure 뒤 isolated `/readyz` `200 OK`만 stdout에 출력; TCP, backend, cluster 연결 없음 |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/unit/test_volume11_telemetry.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 29 passed |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 13 source files 문제 없음, 전체 90 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- 장애 대응과 비용 관리 장 작성하기
+- Volume 미니 프로젝트, 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 값과 로컬·오프라인 검사만 사용해 AI 서비스의 장애 대응 runbook 경계와 관측 비용 관리 원칙을 작성하고, 실제 alert, on-call, telemetry backend, cluster 연결 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 09: 구조화된 request correlation logging의 로컬 관측 경계
 
 ### 완료한 범위

@@ -66,6 +66,29 @@ def test_correlation_logging_demo_runs_without_network_or_telemetry_backend() ->
     assert "contains whitespace" not in result.stdout
 
 
+def test_telemetry_boundary_demo_runs_without_network_or_a_telemetry_backend() -> None:
+    """The telemetry lesson uses injected local callbacks and keeps exporter failure isolated."""
+    result = run(
+        [sys.executable, "examples/volume11/telemetry_boundary_demo.py"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        '{"event":"probe_telemetry","metric":{"name":"http_server_requests_total",'
+        '"labels":{"route":"/livez","status_class":"2xx"}},'
+        '"span":{"name":"health_probe","attributes":{"http.route":"/livez",'
+        '"http.response.status_code":200}}}'
+    ) in result.stdout
+    assert "local-export 200 OK" in result.stdout
+    assert "exporter-failure-isolated 200 OK" in result.stdout
+    assert "client-correlation-not-telemetry-label" not in result.stdout.splitlines()[0]
+    assert "example exporter detail must not be emitted" not in result.stdout
+
+
 def test_probe_manifests_use_example_image_and_distinct_readiness_and_liveness_routes() -> None:
     """Manifests are safe examples, never a deployable production image or embedded secret."""
     deployment = (ROOT / "k8s/volume11/deployment.yaml").read_text(encoding="utf-8")
@@ -271,6 +294,9 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     correlation_chapter = (VOLUME / "09-structured-correlation-logging-boundary.md").read_text(
         encoding="utf-8"
     )
+    telemetry_chapter = (VOLUME / "10-telemetry-data-minimization-exporter-failure.md").read_text(
+        encoding="utf-8"
+    )
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
@@ -282,6 +308,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "](07-hpa-cpu-scaling-boundary.md)" in readme
     assert "](08-rolling-update-rollback-boundary.md)" in readme
     assert "](09-structured-correlation-logging-boundary.md)" in readme
+    assert "](10-telemetry-data-minimization-exporter-failure.md)" in readme
     combined_chapters = (
         health_chapter
         + dependency_chapter
@@ -292,14 +319,17 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         + hpa_chapter
         + rollout_chapter
         + correlation_chapter
+        + telemetry_chapter
     )
     for relative_path in (
         "src/ai_platform/api/health.py",
         "src/ai_platform/api/dependencies.py",
         "src/ai_platform/api/correlation.py",
+        "src/ai_platform/api/telemetry.py",
         "examples/volume11/health_probe_demo.py",
         "examples/volume11/dependency_readiness_demo.py",
         "examples/volume11/correlation_logging_demo.py",
+        "examples/volume11/telemetry_boundary_demo.py",
         "docker/volume11/Dockerfile",
         "docker/volume11/compose.dependencies.yaml",
         "k8s/volume11/deployment.yaml",
@@ -350,6 +380,11 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "telemetry backend" in correlation_chapter
     assert "kubectl apply" in correlation_chapter
     assert "cluster 연결 또는 deployment를 실행하지 마세요" in correlation_chapter
+    assert "probe_telemetry_event" in telemetry_chapter
+    assert "telemetry_boundary_demo.py" in telemetry_chapter
+    assert "exporter failure" in telemetry_chapter
+    assert "metric endpoint" in telemetry_chapter
+    assert "cluster 연결 또는 deployment를 실행하지 마세요" in telemetry_chapter
     assert "클러스터에 적용하거나 배포하지 않습니다" in (
         health_chapter + dependency_chapter + ingress_chapter
     )
