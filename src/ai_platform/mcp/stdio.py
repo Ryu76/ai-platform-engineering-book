@@ -14,7 +14,7 @@ from types import MappingProxyType
 
 from ai_platform.mcp.catalog import McpServerCatalog
 from ai_platform.mcp.prompts import McpPromptCatalog, McpPromptError
-from ai_platform.mcp.resources import McpResourceCatalog
+from ai_platform.mcp.resources import McpResourceCatalog, McpResourceError
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
 DEFAULT_MAX_MESSAGE_BYTES = 16_384
@@ -55,10 +55,11 @@ class McpStdioSession:
     """고정 lifecycle 뒤 catalog를 read-only 목록 method로만 노출한다.
 
     ``tools/list``, ``resources/list``, ``prompts/list``은 고정된 catalog snapshot만
-    응답하고, ``prompts/get``은 exact allowlist name과 빈 arguments만 받아 고정 message
-    snapshot을 응답한다. ``tools/call``, ``resources/read``를 포함한 다른 모든 method는
-    dispatcher, loader에 전달하지 않으므로 transport metadata가 Tool 실행 인자나 승인
-    입력으로 섞이거나 URI가 파일 경로로 해석될 수 없다.
+    응답한다. ``resources/read``은 exact allowlisted URI의 내장 text snapshot만,
+    ``prompts/get``은 exact allowlisted name과 빈 arguments의 고정 message snapshot만
+    응답한다. ``tools/call``을 포함한 다른 모든 method는 dispatcher에 전달하지 않으므로
+    transport metadata가 Tool 실행 인자나 승인 입력으로 섞일 수 없다. Resource URI도
+    catalog lookup key일 뿐 파일 경로 또는 URL로 해석하지 않는다.
     """
 
     def __init__(
@@ -132,15 +133,23 @@ class McpStdioSession:
         self._state = McpStdioState.READY
 
     def _receive_ready_request(self, request: McpJsonRpcRequest) -> str:
-        """READY에서는 execution-free catalog와 고정 Prompt snapshot만 허용한다."""
-        if request.method not in {"tools/list", "resources/list", "prompts/list", "prompts/get"}:
+        """READY에서는 execution-free catalog와 고정 Resource/Prompt snapshot만 허용한다."""
+        if request.method not in {
+            "tools/list",
+            "resources/list",
+            "resources/read",
+            "prompts/list",
+            "prompts/get",
+        }:
             raise McpStdioError(
                 "no MCP methods are enabled besides read-only tools/list, resources/list, "
-                "prompts/list, and fixed prompts/get in this adapter"
+                "fixed resources/read, prompts/list, and fixed prompts/get in this adapter"
             )
         if request.is_notification:
             raise McpStdioError(f"{request.method} must include a JSON-RPC request id")
-        if request.method == "prompts/get":
+        if request.method == "resources/read":
+            result = self._read_fixed_resource(request.params)
+        elif request.method == "prompts/get":
             result = self._get_fixed_prompt(request.params)
         elif request.params:
             raise McpStdioError(f"{request.method} params must be empty when present")
@@ -158,6 +167,18 @@ class McpStdioSession:
             },
             max_message_bytes=self._max_message_bytes,
         )
+
+    def _read_fixed_resource(self, params: Mapping[str, object]) -> dict[str, object]:
+        """exact URI의 내장 text snapshot만 MCP contents envelope로 반환한다."""
+        uri = params.get("uri")
+        if not isinstance(uri, str) or not uri.strip():
+            raise McpStdioError("resources/read uri must be a non-empty string")
+        if set(params) != {"uri"}:
+            raise McpStdioError("resources/read params must contain only uri")
+        try:
+            return {"contents": [self._resource_catalog.read_resource(uri)]}
+        except McpResourceError as error:
+            raise McpStdioError("resources/read uri is not allowlisted") from error
 
     def _get_fixed_prompt(self, params: Mapping[str, object]) -> dict[str, object]:
         """보간 없이 exact allowlist name의 정적 Prompt message snapshot만 반환한다."""

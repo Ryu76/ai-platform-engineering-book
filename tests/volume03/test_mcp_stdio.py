@@ -127,6 +127,95 @@ def test_stdio_session_projects_fixed_catalog_with_read_only_resources_list() ->
     assert session.state is McpStdioState.READY
 
 
+def test_stdio_session_reads_fixed_allowlisted_resource_without_uri_resolution() -> None:
+    resource_catalog = McpResourceCatalog(
+        (
+            McpStaticResource(
+                uri="ai-platform://volume03/transport-boundary",
+                name="Transport boundary note",
+                mime_type="text/plain",
+                text="Reading this resource does not read a file or execute a Tool.",
+            ),
+        )
+    )
+    session = McpStdioSession(resource_catalog=resource_catalog)
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"resource-001","method":"resources/read",'
+        '"params":{"uri":"ai-platform://volume03/transport-boundary"}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line) == {
+        "jsonrpc": "2.0",
+        "id": "resource-001",
+        "result": {
+            "contents": [
+                {
+                    "uri": "ai-platform://volume03/transport-boundary",
+                    "mimeType": "text/plain",
+                    "text": "Reading this resource does not read a file or execute a Tool.",
+                }
+            ]
+        },
+    }
+    assert session.state is McpStdioState.READY
+
+
+@pytest.mark.parametrize(
+    ("raw_line", "message"),
+    (
+        (
+            '{"jsonrpc":"2.0","method":"resources/read",'
+            '"params":{"uri":"ai-platform://volume03/transport-boundary"}}\n',
+            "must include",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"resource-002","method":"resources/read",'
+            '"params":{}}\n',
+            "uri must be",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"resource-003","method":"resources/read",'
+            '"params":{"uri":"ai-platform://volume03/transport-boundary/"}}\n',
+            "not allowlisted",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"resource-004","method":"resources/read",'
+            '"params":{"uri":"file:///etc/passwd"}}\n',
+            "not allowlisted",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"resource-005","method":"resources/read",'
+            '"params":{"uri":"ai-platform://volume03/transport-boundary","extra":true}}\n',
+            "contain only uri",
+        ),
+    ),
+)
+def test_stdio_session_rejects_ambiguous_or_non_allowlisted_resource_read(
+    raw_line: str, message: str
+) -> None:
+    session = McpStdioSession(
+        resource_catalog=McpResourceCatalog(
+            (
+                McpStaticResource(
+                    uri="ai-platform://volume03/transport-boundary",
+                    name="Transport boundary note",
+                    mime_type="text/plain",
+                    text="Fixed text.",
+                ),
+            )
+        )
+    )
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    with pytest.raises(McpStdioError, match=message):
+        session.receive_line(raw_line)
+
+
 def test_stdio_session_projects_fixed_catalog_with_read_only_prompts_list() -> None:
     prompt_catalog = McpPromptCatalog(
         (
@@ -285,10 +374,6 @@ def test_stdio_session_rejects_ambiguous_or_non_allowlisted_prompt_get(
             '{"jsonrpc":"2.0","id":"prompts-002","method":"prompts/list",'
             '"params":{"cursor":"unexpected"}}\n',
             "prompts/list params must be empty",
-        ),
-        (
-            '{"jsonrpc":"2.0","id":"read-001","method":"resources/read","params":{}}\n',
-            "no MCP methods",
         ),
         ('{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n', "no MCP methods"),
         (

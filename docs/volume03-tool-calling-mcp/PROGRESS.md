@@ -2,34 +2,34 @@
 
 ## 현재 상태
 
-- 현재 Phase: **MCP STDIO READY state의 고정 allowlisted `prompts/get` message snapshot projection**
-- 완료 선언: 아직 하지 않음. 실제 STDIO process I/O wiring, error/EOF policy, `resources/read` transport adapter, 검토된 `tools/call` dispatcher 연결, Hermes/Codex 연동을 구현·문서화·검증해야 합니다.
+- 현재 Phase: **MCP STDIO READY state의 고정 allowlisted `resources/read` text snapshot projection**
+- 완료 선언: 아직 하지 않음. 실제 STDIO process I/O wiring, error/EOF policy, 검토된 `tools/call` dispatcher 연결, Hermes/Codex 연동을 구현·문서화·검증해야 합니다.
 
-## 이번 슬라이스: handshake 뒤 고정 Prompt 하나만 보간 없이 조회
+## 이번 슬라이스: handshake 뒤 고정 Resource 하나만 경로 해석 없이 조회
 
 - `src/ai_platform/mcp/stdio.py`
-  - `McpStdioSession`은 기존 한 줄 JSON-RPC framing·고정 initialize lifecycle 뒤 `tools/list`, `resources/list`, `prompts/list`, `prompts/get` request만 받습니다.
-  - `prompts/get`은 request ID와 exact allowlisted `name`, 없거나 빈 object인 `arguments`만 검증하고 `McpPromptCatalog.get_prompt()`의 고정 message snapshot을 `result`로 투영합니다.
-  - notification, name 누락·공백, alias/미등록 name, non-empty/non-object arguments, extra params는 거부합니다. template 보간, 사용자 입력, Resource loader, URI path 해석, dispatcher, 승인, retry, audit, 실제 process I/O, 파일·셸·네트워크는 호출하지 않습니다.
-- `examples/volume03/mcp_stdio_prompts_get.py`
-  - 코드에 명시한 정적 `review-tool-boundary` Prompt로 메모리 JSON-RPC handshake와 `prompts/get`을 확인하고 `review-tool-boundary: fixed snapshot`만 출력합니다.
+  - `McpStdioSession`은 기존 한 줄 JSON-RPC framing·고정 initialize lifecycle 뒤 `tools/list`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get` request만 받습니다.
+  - `resources/read`는 request ID와 exact allowlisted `uri` 하나만 검증하고 `McpResourceCatalog.read_resource()`의 고정 `text/plain` snapshot을 MCP `contents` result envelope로 투영합니다.
+  - notification, URI 누락·공백, alias, `file:///...`, extra params와 미등록 URI는 거부합니다. URI 정규화·path 해석, loader, dispatcher, 승인, retry, audit, 실제 process I/O, 파일·셸·네트워크는 호출하지 않습니다.
+- `examples/volume03/mcp_stdio_resources_read.py`
+  - 코드에 명시한 정적 `ai-platform://volume03/transport-boundary` Resource로 메모리 JSON-RPC handshake와 `resources/read`을 확인하고 `ai-platform://volume03/transport-boundary: fixed snapshot`만 출력합니다.
 - `tests/volume03/test_mcp_stdio.py`
-  - fixed Prompt snapshot response 및 READY state 유지, request ID 없는 notification, name 누락, non-empty arguments, extra param, whitespace alias 거부를 검증합니다.
-- `docs/volume03-tool-calling-mcp/15-mcp-stdio-prompts-get.md`
-  - 좁은 request/response 계약, empty arguments가 no-op임을 설명하고 message snapshot과 dynamic rendering을 분리하며, offline 실습, rejection, 운영 renderer 경계를 문서화했습니다.
+  - fixed Resource snapshot response와 READY state 유지, request ID 없는 notification, URI 누락, alias, file URI, extra param 거부를 검증합니다.
+- `docs/volume03-tool-calling-mcp/16-mcp-stdio-resources-read.md`
+  - 좁은 request/response 계약, `contents` envelope, static snapshot과 동적 loader를 분리하는 이유, offline 실습, rejection, 운영 loader 경계를 문서화했습니다.
 - `docs/volume03-tool-calling-mcp/README.md`
-  - 열다섯 번째 학습 장을 목록에 추가했습니다.
+  - 열여섯 번째 학습 장을 목록에 추가했습니다.
 
 ## 검증 기록
 
 실행 위치: `E:\python\ai-platform-engineering-book-volume-03`
 
 ```text
-$ uv run python examples/volume03/mcp_stdio_prompts_get.py
-review-tool-boundary: fixed snapshot
+$ uv run python examples/volume03/mcp_stdio_resources_read.py
+ai-platform://volume03/transport-boundary: fixed snapshot
 
 $ uv run pytest tests/volume03/test_mcp_stdio.py -q
-32 passed in 0.16s
+37 passed in 0.17s
 
 $ uv run ruff check .
 All checks passed!
@@ -38,7 +38,7 @@ $ uv run mypy src
 Success: no issues found in 20 source files
 
 $ uv run pytest -q
-146 passed in 0.97s
+151 passed in 0.96s
 
 $ uv run python scripts/validate_docs.py
 문서 검증 통과: Volume 11개
@@ -60,4 +60,4 @@ $ git diff --check
 
 ## 다음 슬라이스
 
-실제 process I/O는 계속 열지 않고, READY 뒤 고정 allowlisted `resources/read` response를 별도 adapter로 좁게 모델링합니다. exact URI와 빈 params/명시적 request envelope를 검증해 `McpResourceCatalog.read_resource()`의 고정 text snapshot을 연결하며, URI path 해석, 사용자 입력, `tools/call`, dispatcher, handler, 파일·셸·네트워크 및 실제 destructive Tool은 계속 허용하지 않습니다.
+실제 process I/O는 계속 열지 않고, READY 뒤 검토된 `tools/call` request를 기존 `McpToolCallRequest` parser와 dispatcher에 연결할 수 있는지 별도 adapter로 좁게 모델링합니다. request envelope, allowlist·Schema 재검증, 승인/timeout/retry/audit 결과 projection과 JSON-RPC error policy를 명시하며, handler가 실제 destructive action을 하지 않는 allowlisted pure Tool만 사용합니다.
