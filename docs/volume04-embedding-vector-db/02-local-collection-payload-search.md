@@ -73,7 +73,7 @@ The example deliberately assigns a small scalar-only payload. A production schem
 
 `create_collection("platform_docs", vector_size=64)` fixes the vector contract before any data is written. `upsert` validates the complete batch first, so a malformed point cannot leave a half-written batch. It copies vectors and payloads into immutable stored records, preventing later caller mutations from silently changing indexed data.
 
-`search` validates the query dimension, filters points whose payload contains every requested key/value, calculates cosine similarity for each candidate, and sorts by `score` descending. Equal scores use point ID ascending as a tie-breaker so local runs and tests remain deterministic. The `limit` is applied only after sorting.
+`search` validates the query dimension, then filters points whose payload contains every requested key/value **with the same scalar type** before it calculates cosine similarity. A missing key does not match a `null`/`None` filter, and Python's `True == 1` shortcut does not allow a boolean filter to match an integer payload. It then sorts candidates by `score` descending. Equal scores use point ID ascending as a tie-breaker so local runs and tests remain deterministic. The `limit` is applied only after sorting.
 
 `delete` removes known point IDs and reports the actual number removed. This return value makes a re-index workflow observable: delete stale IDs, verify the count, then upsert the new document version.
 
@@ -97,7 +97,7 @@ The test command must report all tests passed. It covers ranking and payload ret
 | `collection not found` | `create_collection` was skipped or the name differs | Create the collection first and use the exact same name. |
 | `vector must have dimension 64` | A different model dimension was used for a point or query | Use the same embedding configuration for creation, indexing, and search. |
 | `vector must not be a zero vector` | A manually supplied empty-signal vector was used | Embed non-empty text or supply a meaningful, non-zero numeric vector. |
-| No results | The metadata filter does not exactly match any payload | Print the stored payload keys and values; remove or correct the filter. |
+| No results | The metadata filter does not exactly match any payload key, value, and scalar type | Print the stored payload keys, values, and types; a missing key does not match `None`, and `true` does not match integer `1`. |
 | The expected document is not first | This is a token-hash educational mock, not semantic AI | Check shared tokens and use a real evaluated embedding model only in a later explicit integration. |
 
 ## 10. Extension exercise

@@ -110,7 +110,7 @@ uv run pytest tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_
 | `delete(ids)` | stale ID가 후속 검색과 direct lookup에서 사라짐 | 삭제 수/성공 응답과 검색 부재를 함께 확인 |
 | versioned reindex | same stable ID에 version 2·새 content hash·새 vector를 기록 | `version=2` filter와 top-1 품질 회복 확인 |
 
-local mock의 scalar equality filter는 의도적으로 작습니다. 운영 DB의 range, nested object, full-text, geo filter는 local mock에 없는 기능입니다. 그런 기능을 adapter에 도입하면 DB별 query를 직접 테스트하고, local mock이 기능을 흉내 낸다고 주장하지 않습니다.
+local mock의 scalar equality filter는 의도적으로 작습니다. filter는 payload에 key가 실제로 존재하고 value와 scalar type이 모두 일치할 때만 통과합니다. 따라서 missing key는 `None` filter에, boolean `true`는 integer `1` filter에 서로 매치되지 않습니다. 운영 DB의 range, nested object, full-text, geo filter는 local mock에 없는 기능입니다. 그런 기능을 adapter에 도입하면 DB별 query를 직접 테스트하고, local mock이 기능을 흉내 낸다고 주장하지 않습니다.
 
 ## 9. Score와 정렬의 함정
 

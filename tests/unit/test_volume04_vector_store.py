@@ -70,6 +70,30 @@ def test_search_applies_metadata_filter(
     assert [result.id for result in results] == ["vector-guide"]
 
 
+def test_metadata_filter_requires_an_existing_key_and_matching_scalar_type() -> None:
+    """Python의 bool/int 동치나 누락 key가 filter 후보를 넓히면 안 된다."""
+    store = InMemoryVectorStore()
+    store.create_collection("typed_payloads", vector_size=2)
+    store.upsert(
+        "typed_payloads",
+        [
+            VectorPoint(id="integer", vector=[1.0, 0.0], payload={"version": 1}),
+            VectorPoint(id="boolean", vector=[0.0, 1.0], payload={"published": True}),
+            VectorPoint(id="null", vector=[-1.0, 0.0], payload={"deleted_at": None}),
+        ],
+    )
+
+    boolean_version_results = store.search(
+        "typed_payloads", [1.0, 0.0], metadata_filter={"version": True}
+    )
+    null_results = store.search(
+        "typed_payloads", [1.0, 0.0], metadata_filter={"deleted_at": None}
+    )
+
+    assert boolean_version_results == []
+    assert [result.id for result in null_results] == ["null"]
+
+
 def test_upsert_replaces_same_id_and_keeps_collection_size(
     populated_store: tuple[InMemoryVectorStore, DeterministicEmbeddingModel],
 ) -> None:

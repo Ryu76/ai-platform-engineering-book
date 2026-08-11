@@ -194,9 +194,10 @@ def _prepare_payload(payload: Mapping[str, PayloadValue]) -> dict[str, PayloadVa
 def _matches_filter(
     payload: Mapping[str, PayloadValue], metadata_filter: Mapping[str, PayloadValue] | None
 ) -> bool:
-    """filter의 모든 key/value가 payload와 일치하는지 판단한다."""
+    """filter의 모든 key/value가 payload에 같은 scalar type으로 있는지 판단한다."""
     return metadata_filter is None or all(
-        payload.get(key) == value for key, value in metadata_filter.items()
+        key in payload and type(payload[key]) is type(value) and payload[key] == value
+        for key, value in metadata_filter.items()
     )
 
 
