@@ -79,7 +79,7 @@ uv run pytest tests/unit/test_volume04_embedding_service.py -q
 cosine(A, B) = dot(A, B) / (||A|| × ||B||)
 ```
 
-`dot_product`는 두 벡터의 같은 위치를 곱해 더하고, `euclidean_distance`는 위치별 차이의 제곱합에 제곱근을 적용합니다. 구현은 빈 벡터, 차원 불일치, cosine의 zero vector를 예외로 거부합니다.
+`dot_product`는 두 벡터의 같은 위치를 곱해 더하고, `euclidean_distance`는 위치별 차이의 제곱합에 제곱근을 적용합니다. 구현은 빈 벡터, 문자열 container, bool·`NaN`·무한대를 포함한 비유한 수치, 차원 불일치, cosine의 zero vector를 예외로 거부합니다.
 
 ## 8. 정상 실행 결과
 
@@ -101,6 +101,7 @@ query_dimensions=64
 | `dimensions must be ...` | 차원이 8 미만, 4096 초과, 또는 정수가 아님 | `8`부터 `4096` 사이의 정수를 전달합니다. |
 | `text must contain ...` | 공백이나 기호만 있는 텍스트 | 문서와 질의에 글자 또는 숫자를 넣습니다. |
 | `vectors must have the same dimension` | 문서와 질의에 다른 모델 차원을 사용함 | 저장과 검색에 같은 모델 설정을 사용합니다. |
+| `vectors must contain only finite numbers` | vector에 `NaN`, 무한대, bool 또는 숫자가 아닌 값이 있음 | JSON number와 같은 유한 `int`/`float` 값만 전달합니다. |
 
 ## 10. 응용 실습
 

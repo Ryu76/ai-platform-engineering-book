@@ -65,3 +65,20 @@ def test_vector_operations_reject_mismatched_and_zero_vectors() -> None:
         dot_product([1.0], [1.0, 2.0])
     with pytest.raises(VectorDimensionError, match="zero vector"):
         cosine_similarity([0.0, 0.0], [1.0, 0.0])
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ("10", [1.0, 0.0]),
+        ([1.0, math.nan], [1.0, 0.0]),
+        ([True, 0.0], [1.0, 0.0]),
+    ],
+)
+def test_vector_operations_reject_non_numeric_or_non_finite_vectors(
+    left: object, right: object
+) -> None:
+    """모든 벡터 연산은 문자열, bool, NaN을 명시적 계약 오류로 거부해야 한다."""
+    for operation in (dot_product, cosine_similarity, euclidean_distance):
+        with pytest.raises(VectorDimensionError, match="finite numbers"):
+            operation(left, right)  # type: ignore[arg-type]

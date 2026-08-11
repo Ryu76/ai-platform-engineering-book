@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from hashlib import sha256
-from math import sqrt
+from math import isfinite, sqrt
 from re import findall
 from typing import Protocol
 
@@ -109,8 +109,23 @@ def _l2_normalize(vector: list[float]) -> list[float]:
 
 
 def _require_same_nonempty_dimension(left: Sequence[float], right: Sequence[float]) -> None:
-    """거리 계산 전에 두 벡터가 비어 있지 않은 같은 차원인지 검증한다."""
+    """거리 계산 전에 벡터의 container, 차원, 수치 입력을 검증한다."""
+    if (
+        isinstance(left, (str, bytes))
+        or isinstance(right, (str, bytes))
+        or not isinstance(left, Sequence)
+        or not isinstance(right, Sequence)
+    ):
+        raise VectorDimensionError("vectors must be sequences of finite numbers")
     if not left or not right:
         raise VectorDimensionError("vectors must not be empty")
     if len(left) != len(right):
         raise VectorDimensionError("vectors must have the same dimension")
+    for vector in (left, right):
+        for value in vector:
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not isfinite(value)
+            ):
+                raise VectorDimensionError("vectors must contain only finite numbers")
