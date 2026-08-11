@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping
+from decimal import Decimal, InvalidOperation
 from typing import Final
 
 from ai_platform.router.base import RoutingConfigurationError
@@ -100,6 +101,18 @@ _LIST_OF_STRING_AUDIT_FIELDS: Final = frozenset(
     {"attempted_policy_names", "attempted_stage_names", "matched_keywords"}
 )
 _NONNEGATIVE_INTEGER_AUDIT_FIELDS: Final = frozenset({"escalation_count", "fallback_count"})
+_PROBABILITY_AUDIT_FIELDS: Final = frozenset(
+    {
+        "classifier_confidence",
+        "confidence",
+        "llm_classifier_confidence",
+        "semantic_similarity",
+    }
+)
+_NONNEGATIVE_DECIMAL_STRING_AUDIT_FIELDS: Final = frozenset({"estimated_cost"})
+_NONNEGATIVE_INTEGER_STRING_AUDIT_FIELDS: Final = frozenset({"estimated_latency_ms"})
+_TARGET_KIND_AUDIT_FIELDS: Final = frozenset({"stage_target_kind", "target_kind"})
+_ROUTE_TARGET_KINDS: Final = frozenset({"agent", "tool", "model"})
 
 
 def validate_router_audit_record(
@@ -203,7 +216,7 @@ def _validate_report_record_shape(route_name: str, record: Mapping[str, object])
 
 
 def _validate_non_api_record_value_types(route_name: str, record: Mapping[str, object]) -> None:
-    """각 Router 결정의 문자열·목록·counter 계약을 엄격하게 확인한다."""
+    """각 Router 결정의 문자열·목록·counter·의미상 수치 계약을 엄격하게 확인한다."""
     expected_fields = _ROUTER_AUDIT_REPORT_RECORD_FIELDS[route_name]
     string_fields = (
         expected_fields - _LIST_OF_STRING_AUDIT_FIELDS - _NONNEGATIVE_INTEGER_AUDIT_FIELDS
@@ -214,6 +227,14 @@ def _validate_non_api_record_value_types(route_name: str, record: Mapping[str, o
         _validate_list_of_nonempty_strings(record[field_name])
     for field_name in expected_fields & _NONNEGATIVE_INTEGER_AUDIT_FIELDS:
         _validate_nonnegative_integer(record[field_name])
+    for field_name in expected_fields & _PROBABILITY_AUDIT_FIELDS:
+        _validate_decimal_string(record[field_name], maximum=Decimal("1"))
+    for field_name in expected_fields & _NONNEGATIVE_DECIMAL_STRING_AUDIT_FIELDS:
+        _validate_decimal_string(record[field_name])
+    for field_name in expected_fields & _NONNEGATIVE_INTEGER_STRING_AUDIT_FIELDS:
+        _validate_decimal_string(record[field_name], require_integral=True)
+    for field_name in expected_fields & _TARGET_KIND_AUDIT_FIELDS:
+        _validate_route_target_kind(record[field_name])
 
 
 def _validate_api_record_value_types(record: Mapping[str, object]) -> None:
@@ -242,6 +263,14 @@ def _validate_api_record_value_types(record: Mapping[str, object]) -> None:
     _validate_nonempty_string(body["outcome"])
     for field_name in _DECISION_AUDIT_FIELDS:
         _validate_nonempty_string(decision[field_name])
+    for field_name in _DECISION_AUDIT_FIELDS & _PROBABILITY_AUDIT_FIELDS:
+        _validate_decimal_string(decision[field_name], maximum=Decimal("1"))
+    for field_name in _DECISION_AUDIT_FIELDS & _NONNEGATIVE_DECIMAL_STRING_AUDIT_FIELDS:
+        _validate_decimal_string(decision[field_name])
+    for field_name in _DECISION_AUDIT_FIELDS & _NONNEGATIVE_INTEGER_STRING_AUDIT_FIELDS:
+        _validate_decimal_string(decision[field_name], require_integral=True)
+    for field_name in _DECISION_AUDIT_FIELDS & _TARGET_KIND_AUDIT_FIELDS:
+        _validate_route_target_kind(decision[field_name])
 
 
 def _validate_expected_fields(
@@ -254,7 +283,38 @@ def _validate_expected_fields(
 
 def _validate_nonempty_string(value: object) -> None:
     """감사 schema의 식별·수치 문자열이 빈 값이나 다른 타입이 되지 않게 한다."""
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value.strip():
+        raise UnsafeRouterAuditRecordError(
+            "router audit report record does not match configured route value types"
+        )
+
+
+def _validate_decimal_string(
+    value: object, *, maximum: Decimal | None = None, require_integral: bool = False
+) -> None:
+    """문자열로 보관한 비용·지연 시간·confidence가 유한한 범위를 지키게 한다."""
+    if not isinstance(value, str) or not value.strip():
+        raise UnsafeRouterAuditRecordError(
+            "router audit report record does not match configured route value types"
+        )
+    try:
+        decimal_value = Decimal(value)
+        valid = decimal_value.is_finite() and decimal_value >= Decimal("0")
+        if maximum is not None:
+            valid = valid and decimal_value <= maximum
+        if require_integral:
+            valid = valid and decimal_value == decimal_value.to_integral_value()
+    except (InvalidOperation, ValueError):
+        valid = False
+    if not valid:
+        raise UnsafeRouterAuditRecordError(
+            "router audit report record does not match configured route value types"
+        )
+
+
+def _validate_route_target_kind(value: object) -> None:
+    """감사 결과의 target kind가 Router 계약의 Agent·Tool·Model만 가리키게 한다."""
+    if not isinstance(value, str) or value not in _ROUTE_TARGET_KINDS:
         raise UnsafeRouterAuditRecordError(
             "router audit report record does not match configured route value types"
         )

@@ -186,6 +186,32 @@ def test_mini_project_report_rejects_wrong_route_specific_audit_value_types() ->
             validate_router_audit_report(invalid_report, sensitive_values_by_route=request_texts)
 
 
+def test_mini_project_report_rejects_invalid_semantic_audit_values() -> None:
+    report = build_router_mini_project().run()
+    request_texts = _mini_project_request_texts()
+
+    invalid_reports = (
+        {**report, "policy": {**report["policy"], "confidence": "not-a-probability"}},
+        {**report, "semantic": {**report["semantic"], "semantic_similarity": "1.01"}},
+        {**report, "fallback": {**report["fallback"], "estimated_cost": "-0.001"}},
+        {**report, "policy": {**report["policy"], "estimated_latency_ms": "70.5"}},
+        {**report, "escalation": {**report["escalation"], "stage_target_kind": "queue"}},
+        {
+            **report,
+            "api": {
+                **report["api"],
+                "body": {
+                    **report["api"]["body"],
+                    "decision": {**report["api"]["body"]["decision"], "confidence": "1.01"},
+                },
+            },
+        },
+    )
+    for invalid_report in invalid_reports:
+        with pytest.raises(UnsafeRouterAuditRecordError, match="route value types"):
+            validate_router_audit_report(invalid_report, sensitive_values_by_route=request_texts)
+
+
 def test_audit_report_serializer_revalidates_and_emits_canonical_strict_json() -> None:
     report = build_router_mini_project().run()
     request_texts = _mini_project_request_texts()
