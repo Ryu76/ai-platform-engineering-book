@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — RAG 보안·비용·성능 운영 점검 문서 슬라이스 완료
+
+### 완료
+
+- `README.md`에 PRD의 RAG 보안·비용·성능 필수 내용을 현재 로컬/Mock 구현의 실제 경계에 맞춰 추가했습니다. 허용 루트·명시 경로, 신뢰하지 않는 파서/임베더/저장소 출력 검증, 인용과 ACL의 차이, 검색 문서의 prompt-injection 위험, 공개 오류와 로컬 평가 기록의 데이터 노출 범위를 명시했습니다.
+- 청크 크기/overlap의 비용 trade-off, `top_k`·컨텍스트 문자 예산·다양성·신뢰도 임계값·파일 및 벡터 상한을 실제 계약과 연결했습니다. 제공자 토큰/과금 API가 없는 실습에서 문자 수를 토큰 비용으로 오인하지 않는다는 제한도 기록했습니다.
+- 고정 평가 세트·콘텐츠 ID가 결합된 승인 기준선·한 경계씩 바꾸는 회귀 검증·No-answer를 성능/품질 점검 절차로 문서화했습니다. 실제 제공자 지연, LLM 토큰 사용량, 벡터 DB 인덱스 지연은 이 로컬 Mock 검증의 범위 밖임을 명확히 했습니다.
+- 라이브 API·비밀값·서버·포트 바인딩·배포는 사용하지 않았고, 코드/샘플 데이터 계약은 변경하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 197 passed in 1.50s
+uv run python examples/volume05/local_rag.py
+# Recall@1/Hit rate/MRR 1.00, 고정 보고서 재검증·회귀 판정 통과,
+# Mock 벡터 검색의 인용 경계 및 근거 없음 No-answer 확인
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 9 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 7 source files
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- FastAPI를 프로젝트 의존성으로 명시할 수 있는 별도 허용 범위에서 실제 `TestClient`로 필수 JSON 본문, 200 인용·No-answer, 누락/잘못된 JSON 및 공개 400 경계를 통합 검증합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — FastAPI 필수 JSON 본문 경계 슬라이스 완료
 
 ### 완료
