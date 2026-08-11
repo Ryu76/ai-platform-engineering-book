@@ -986,3 +986,56 @@ def test_concurrent_json_checkpoint_instances_share_a_path_lock_for_risky_reject
     assert rejected.result is None
     assert [event.node for event in rejected.events] == ["plan", "approval", "approval"]
     assert "execute" not in [event.node for event in rejected.events]
+
+
+def test_json_checkpoint_path_aliases_share_a_normalized_lock_for_risky_approvals(
+    tmp_path: Path,
+) -> None:
+    """서로 다른 경로 표기도 resolve 뒤 같은 승인 대기를 한 번만 소비한다."""
+    checkpoint_path = tmp_path / "normalized-shared-approvals.json"
+    alias_directory = tmp_path / "path-alias"
+    alias_directory.mkdir()
+    alias_path = alias_directory / ".." / checkpoint_path.name
+    assert checkpoint_path != alias_path
+    adapters = tuple(
+        WorkflowApiAdapter(
+            workflow=DeterministicWorkflow(
+                checkpointer=JsonFileCheckpointer(
+                    path=checkpoint_path if index % 2 == 0 else alias_path
+                )
+            )
+        )
+        for index in range(8)
+    )
+    run_id = "json-normalized-path-approval-001"
+    adapters[0].start(
+        request=StartWorkflowRequest(
+            run_id=run_id,
+            task="학습용 배포를 준비한다",
+            action=ActionKind.DEPLOY,
+        )
+    )
+    barrier = Barrier(8)
+
+    def approve_once(index: int) -> WorkflowStatus | str:
+        barrier.wait(timeout=5)
+        try:
+            return adapters[index].resume(
+                run_id=run_id,
+                request=ApprovalRequest(approved=True),
+            ).status
+        except WorkflowRunConflictError:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(approve_once, range(8)))
+
+    assert outcomes.count(WorkflowStatus.COMPLETED) == 1
+    assert outcomes.count("conflict") == 7
+    completed = JsonFileCheckpointer(path=checkpoint_path).load(run_id=run_id)
+    assert completed.action is ActionKind.DEPLOY
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert completed.approval_granted is True
+    assert [event.node for event in completed.events] == [
+        "plan", "approval", "approval", "execute"
+    ]

@@ -3,20 +3,20 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 같은 Python 프로세스에서 동일한 정규화 JSON 경로를 여는 8개의 독립 `JsonFileCheckpointer` 인스턴스로 같은 `DEPLOY` **거절** 요청을 동시에 재전송해도 정확히 하나만 `WAITING_FOR_APPROVAL` Checkpoint를 소비해 `REJECTED`를 기록함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 기존 Action·거절 상태·감사 이벤트를 바꾸거나 `execute` 이벤트를 추가하지 않습니다. 경로 단위 Lock 보장은 하나의 프로세스와 같은 로컬 경로로 한정되고, 위험 작업은 별도의 엄격한 Boolean 결정 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
-- 이번 검증: `json_shared_path_concurrent_rejection_workflow.py`는 `rejected=1`, `conflicts=7`, `plan | approval | approval`를 출력했습니다. 새 동시 거절 계약 테스트는 10회 반복 모두 통과했고, Volume 09 단위 테스트는 `41 passed`, 전체 테스트는 `102 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
+- 이번 슬라이스: 같은 Python 프로세스에서 `checkpoints.json`과 `path-alias/../checkpoints.json`처럼 **서로 다른 Path 표기**로 같은 파일을 여는 8개의 독립 `JsonFileCheckpointer` 인스턴스가 동시 `DEPLOY` 승인을 재전송해도, `Path.resolve()` 기반 경로 단위 Lock이 정확히 하나의 `WAITING_FOR_APPROVAL` Checkpoint만 소비해 `COMPLETED`와 하나의 `execute`를 기록함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 기존 Action·완료 상태·감사 이벤트를 바꾸지 않습니다. 보장은 하나의 프로세스와 정규화 뒤 같은 로컬 경로로 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+- 이번 검증: `json_normalized_path_concurrent_approval_workflow.py`는 `completed=1`, `conflicts=7`, `plan | approval | approval | execute`를 출력했습니다. 새 경로 별칭 동시 승인 계약 테스트는 10회 반복 모두 통과했고, Volume 09 단위 테스트는 `42 passed`, 전체 테스트는 `103 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
 
-- `docs/volume09-langgraph/18-json-shared-path-concurrent-rejection.md`
-  - 동일 정규화 JSON 경로의 독립 Checkpointer 인스턴스가 동시에 `approved=False`를 재전송할 때, 하나만 `REJECTED`를 기록하고 중복 요청은 충돌로 끝나는 경로 단위 Lock·비교-교체·운영 경계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/19-json-normalized-path-concurrent-approval.md`
+  - `..`를 포함한 서로 다른 경로 표기가 `Path.resolve()` 뒤 같은 파일을 가리킬 때 독립 Checkpointer 인스턴스가 Lock을 공유하고 하나만 승인 대기를 소비하는 계약·운영 경계를 14개 장 템플릿으로 문서화했습니다.
 - `docs/volume09-langgraph/README.md`
-  - 열여덟 번째 동시 거절 안전성 장과 오프라인 예제·테스트 범위를 추가했습니다.
-- `examples/volume09/json_shared_path_concurrent_rejection_workflow.py`
-  - 8개 독립 인스턴스의 동시 `DEPLOY` 거절이 `rejected=1`, `conflicts=7`, `plan | approval | approval`만 출력하고 `execute`를 만들지 않는 오프라인 데모를 추가했습니다.
+  - 열아홉 번째 경로 별칭 동시 승인 안전성 장과 오프라인 예제 범위를 추가했습니다.
+- `examples/volume09/json_normalized_path_concurrent_approval_workflow.py`
+  - 원래 경로와 `path-alias/..` 별칭을 번갈아 쓰는 8개 독립 인스턴스가 `completed=1`, `conflicts=7`, 단일 `execute`만 출력하는 오프라인 데모를 추가했습니다.
 - `tests/unit/test_volume09_graph.py`
-  - 동일 경로의 독립 JSON Checkpointer 인스턴스 8개가 하나의 위험 run만 거절하고, 충돌 요청이 Action·감사 이벤트·거절 상태를 보존하며 `execute`와 결과를 만들지 않음을 검증하는 계약을 추가했습니다.
+  - 서로 다른 `Path` 객체가 정규화 뒤 같은 JSON 파일을 가리킬 때, 독립 인스턴스 8개가 하나의 위험 run만 완료하고 충돌 요청이 완료 Checkpoint·감사 이벤트를 보존함을 검증하는 계약을 추가했습니다.
 
 ## 기존 완료 파일
 
