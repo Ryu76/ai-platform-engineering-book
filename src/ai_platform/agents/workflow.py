@@ -72,12 +72,38 @@ class Agent(Protocol):
         """Return one response for the supplied, immutable workflow context."""
 
 
+def validate_declared_role(expected_role: str, boundary_name: str, agent: object) -> None:
+    """Bind an optional local Mock role declaration to its configured role.
+
+    Production-style adapter objects do not need to expose a ``role`` attribute.  A
+    deterministic Mock does expose one, however, so accepting a mismatched label
+    would hide a wiring error before the first bounded workflow call.
+    """
+    try:
+        declared_role = getattr(agent, "role", None)
+    except Exception as error:
+        raise WorkflowConfigurationError(
+            f"{boundary_name} role declaration could not be read"
+        ) from error
+    if declared_role is None:
+        return
+    if not isinstance(declared_role, str) or not declared_role.strip():
+        raise WorkflowConfigurationError(
+            f"{boundary_name} declared role must be a non-empty string"
+        )
+    if declared_role != expected_role:
+        raise WorkflowConfigurationError(
+            f"{boundary_name} declared role must match {expected_role!r}"
+        )
+
+
 def validate_agent_boundary(name: str, agent: object) -> None:
-    """Reject a role without a callable local agent boundary during configuration."""
+    """Reject a role without a callable, correctly labelled local boundary at setup."""
     if not callable(getattr(agent, "act", None)):
         raise WorkflowConfigurationError(
             f"{name} must provide a callable act(context) method"
         )
+    validate_declared_role(name, name, agent)
 
 
 def validate_fixed_script(name: str, script: object) -> None:

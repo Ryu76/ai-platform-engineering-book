@@ -31,27 +31,31 @@ def mock_agent(role: str) -> DeterministicMockAgent:
 
 def test_review_and_release_workflows_reject_non_callable_role_boundaries() -> None:
     """Role objects without ``act`` are rejected before either workflow can run."""
-    valid = mock_agent("valid")
+    planner = mock_agent("planner")
+    researcher = mock_agent("researcher")
+    developer = mock_agent("developer")
+    reviewer = mock_agent("reviewer")
+    qa = mock_agent("qa")
 
     with pytest.raises(WorkflowConfigurationError, match="planner must provide a callable"):
         BoundedReviewWorkflow(
             planner=object(),
-            researcher=valid,
-            developer=valid,
-            reviewer=valid,
-            qa=valid,
+            researcher=researcher,
+            developer=developer,
+            reviewer=reviewer,
+            qa=qa,
         )
 
     with pytest.raises(WorkflowConfigurationError, match="devops must provide a callable"):
         ApprovalGatedReleaseHandoffWorkflow(
-            planner=valid,
-            developer=valid,
-            reviewer=valid,
-            qa=valid,
+            planner=planner,
+            developer=developer,
+            reviewer=reviewer,
+            qa=qa,
             devops=object(),
         )
 
-    assert valid.calls == []
+    assert planner.calls == researcher.calls == developer.calls == reviewer.calls == qa.calls == []
 
 
 def test_delegation_rejects_non_callable_coordinator_and_worker_boundaries() -> None:

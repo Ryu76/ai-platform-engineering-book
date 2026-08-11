@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 14: 결정론적 Mock 역할 바인딩
+
+- `DeterministicMockAgent`, `DeterministicMockWorker`, `DeterministicMockConflictAgent`가 선언하는 `role`은 이제 workflow 구성 slot 또는 mapping key와 정확히 일치해야 한다. 잘못 배선된 role label은 첫 Agent 호출 전에 `WorkflowConfigurationError`로 fail-closed한다.
+- `role` 속성이 없는 protocol adapter는 기존의 callable boundary 검사를 계속 사용한다. 이 slice는 local Mock fixture 배선 오류를 잡는 경계이며 production identity·tool 권한·사람 승인의 대체물이 아니다.
+- `tests/volume07/test_declared_mock_role_binding.py`는 review, release handoff, delegation, conflict workflow의 네 role mismatch가 peer·coordinator·후속 Agent 호출 없이 구성 단계에서 중단되는지 고정한다. 모든 검증은 local Mock만 사용하며 네트워크, live API, secret, 도구 실행, 배포를 사용하지 않는다.
+- `docs/volume07-multi-agent/11-declared-mock-role-binding.md`에 선언 role과 구성 role의 책임 분리를 기록했다.
+
 ## 2026-08-11 — Slice 13: Hermes runtime과 직접 구현의 책임 경계
 
 - `docs/volume07-multi-agent/10-hermes-runtime-comparison.md`에 Volume 07의 deterministic local Mock workflow와 Hermes Agent runtime의 역할·메시지·state/memory·tool·bounded loop·사람 승인 책임을 비교했다.

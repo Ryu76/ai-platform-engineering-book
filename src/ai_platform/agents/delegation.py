@@ -15,6 +15,7 @@ from typing import Protocol
 from ai_platform.agents.workflow import (
     AgentProtocolError,
     WorkflowConfigurationError,
+    validate_declared_role,
     validate_fixed_script,
 )
 
@@ -232,6 +233,7 @@ class ApprovalGatedDelegationWorkflow:
                 raise WorkflowConfigurationError(
                     f"worker for {assignee} must provide a callable act(context) method"
                 )
+            validate_declared_role(assignee, f"worker for {assignee}", worker)
         self._coordinator = coordinator
         self._workers = dict(workers)
         self._allowed_assignees = frozenset(allowed_assignees)

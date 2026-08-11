@@ -15,6 +15,7 @@ from typing import Protocol
 from ai_platform.agents.workflow import (
     AgentProtocolError,
     WorkflowConfigurationError,
+    validate_declared_role,
     validate_fixed_script,
 )
 
@@ -144,6 +145,7 @@ class BoundedConflictResolutionWorkflow:
                 raise WorkflowConfigurationError(
                     f"agent for {role} must provide a callable propose(context) method"
                 )
+            validate_declared_role(role, f"agent for {role}", agent)
         self._agents = dict(agents)
         self._max_rounds = max_rounds
 
