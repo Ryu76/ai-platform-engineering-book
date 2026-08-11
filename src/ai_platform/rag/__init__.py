@@ -1,5 +1,14 @@
 """Volume 05의 로컬·인용 가능 RAG 구성 요소."""
 
+from ai_platform.rag.api import (
+    LocalRagApi,
+    RagAnswerResponse,
+    RagCitationResponse,
+    RagEndpointResponse,
+    RagErrorResponse,
+    RagQueryRequest,
+    RagRequestError,
+)
 from ai_platform.rag.loader import (
     LocalMarkdownLoader,
     LocalPdfLoader,
@@ -42,6 +51,13 @@ from ai_platform.rag.retrieval import (
 
 __all__ = [
     "ChunkingConfig",
+    "LocalRagApi",
+    "RagAnswerResponse",
+    "RagCitationResponse",
+    "RagEndpointResponse",
+    "RagErrorResponse",
+    "RagQueryRequest",
+    "RagRequestError",
     "Citation",
     "ConfidenceThresholdConfig",
     "ConfidenceThresholdIndex",

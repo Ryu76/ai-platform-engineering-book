@@ -21,8 +21,9 @@
 10. `ContextBudgetIndex`는 제한된 로컬 `SearchHit` 후보에서 전체 문자 예산에 맞는 **완전한 청크**만 순서대로 선택합니다. 청크를 자르지 않아 원래 문자 범위와 인용이 보존되며, 남은 예산보다 큰 상위 청크는 건너뛰고 뒤의 더 작은 근거를 선택할 수 있습니다. 이 모듈은 토크나이저·외부 모델·네트워크 클라이언트를 만들지 않습니다.
 11. `DocumentDiversityIndex`는 제한된 로컬 `SearchHit` 후보의 원래 순위를 유지하면서 문서별 최대 청크 수를 적용합니다. 상위 문서의 제한 초과 청크를 건너뛰어 다른 문서의 근거를 포함하되, 선택 청크의 점수·텍스트·출처 URI·문자 범위는 바꾸지 않습니다.
 12. `ConfidenceThresholdIndex`는 제한된 후보의 점수가 유한한 0~1 정규화 신뢰도인지 검증하고, 명시한 최소 신뢰도보다 낮은 근거를 제외합니다. 이 경계는 점수 척도를 변환하지 않으므로 `RerankingIndex`처럼 정규화 점수를 만드는 단계 뒤에 둡니다. 모든 근거가 임계값 미만이면 빈 결과를 반환해 생성 전 No-answer를 보장하며, 통과한 청크의 인용 경계는 바꾸지 않습니다.
-13. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
-14. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
+13. `LocalRagApi`는 프레임워크·HTTP 서버 없이 `{"query": string, "top_k"?: 1..20}` 로컬 JSON 요청을 검증합니다. 지원하지 않는 필드·빈 질문·범위 밖/boolean `top_k`는 생성기나 검색기를 호출하지 않고 안정된 `400 {"error": {"code": "invalid_request", "message": ...}}`로 반환합니다. 유효 요청은 `200`과 답변·No-answer·인용 JSON을 반환합니다.
+14. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
+15. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
 
 생성기 경계는 `Protocol`이므로 실습과 테스트는 항상 Mock 구현만 사용합니다. 이 슬라이스는 외부 제공자, 라이브 API, 비밀값, 배포를 사용하지 않습니다.
 
@@ -35,7 +36,26 @@ uv run python examples/volume05/local_rag.py
 uv run pytest tests/unit/test_volume05_rag.py -q
 ```
 
-예제는 명시한 `handbook.md`·`returns.md`와 `exchange-notice.pdf`만 읽습니다. PDF 파일은 실제 엔진이 아니라 `SamplePdfTextExtractor`가 읽는 고정 로컬 바이트와 Mock 페이지 텍스트를 사용합니다. 이 경계는 실제 파서의 신뢰하지 않는 출력도 검증하도록 설계되어 있으므로, 학습자가 파서를 추가할 때도 네트워크·라이브 API 없이 교체 테스트할 수 있습니다. `SampleQueryTransformer`는 원 질문을 보존한 고정 로컬 확장 질문만, `SampleDenseRanker`는 로컬에 고정한 Mock 청크 ID만 반환합니다. 그 뒤 `SampleEvidenceReranker`는 이미 검색된 제한된 로컬 후보에만 0~1의 고정 점수를 부여하고, `DocumentDiversityIndex`는 문서당 한 청크만 남겨 한 문서에 근거가 집중되지 않게 합니다. `ContextBudgetIndex`는 후보 3개와 600문자의 명시적 예산 안에서 청크 일부를 자르지 않고 근거를 선택합니다. 마지막 `ConfidenceThresholdIndex`는 정규화된 재순위화 점수가 0.8 이상인 근거만 생성기에 전달해 낮은 신뢰도의 응답을 No-answer로 바꿉니다. 따라서 어휘가 겹치지 않는 도착 예정 질문도 배송 근거와 인용을 출력합니다. 반품과 PDF 교환 질문도 근거와 인용을 출력하고, 샘플 문서에 없는 주차장 할인 질문은 No-answer를 출력합니다. 새 파일을 샘플 디렉터리에 추가해도 명시적 `load_many()` 또는 `load()` 호출에 넣기 전에는 색인되지 않습니다.
+예제는 명시한 `handbook.md`·`returns.md`와 `exchange-notice.pdf`만 읽습니다. PDF 파일은 실제 엔진이 아니라 `SamplePdfTextExtractor`가 읽는 고정 로컬 바이트와 Mock 페이지 텍스트를 사용합니다. 이 경계는 실제 파서의 신뢰하지 않는 출력도 검증하도록 설계되어 있으므로, 학습자가 파서를 추가할 때도 네트워크·라이브 API 없이 교체 테스트할 수 있습니다. `SampleQueryTransformer`는 원 질문을 보존한 고정 로컬 확장 질문만, `SampleDenseRanker`는 로컬에 고정한 Mock 청크 ID만 반환합니다. 그 뒤 `SampleEvidenceReranker`는 이미 검색된 제한된 로컬 후보에만 0~1의 고정 점수를 부여하고, `DocumentDiversityIndex`는 문서당 한 청크만 남겨 한 문서에 근거가 집중되지 않게 합니다. `ContextBudgetIndex`는 후보 3개와 600문자의 명시적 예산 안에서 청크 일부를 자르지 않고 근거를 선택합니다. 마지막 `ConfidenceThresholdIndex`는 정규화된 재순위화 점수가 0.8 이상인 근거만 생성기에 전달해 낮은 신뢰도의 응답을 No-answer로 바꿉니다. 이 파이프라인은 `LocalRagApi.handle()`에 고정 로컬 요청 객체로 전달되며, API 응답도 네트워크 서버 없이 출력됩니다. 따라서 어휘가 겹치지 않는 도착 예정 질문도 배송 근거와 인용을 출력합니다. 반품과 PDF 교환 질문도 근거와 인용을 출력하고, 샘플 문서에 없는 주차장 할인 질문은 No-answer를 출력합니다. 새 파일을 샘플 디렉터리에 추가해도 명시적 `load_many()` 또는 `load()` 호출에 넣기 전에는 색인되지 않습니다.
+
+## 프레임워크 독립 API 계약
+
+`LocalRagApi`는 웹 프레임워크 어댑터가 사용할 수 있는 작은 로컬 경계입니다. 서버를 실행하거나 FastAPI 의존성을 추가하지 않으며, JSON을 역직렬화한 값만 받습니다.
+
+```python
+from ai_platform.rag import LocalRagApi, RagPipeline
+
+api = LocalRagApi(pipeline=RagPipeline(index=index, generator=mock_generator))
+response = api.handle({"query": "배송 상태는 어떻게 확인하나요?", "top_k": 1})
+
+assert response.status_code == 200
+payload = response.to_payload()
+# {"answer": "...", "no_answer": False,
+#  "citations": [{"label": 1, "chunk_id": "...", "source_uri": "...",
+#                 "start_offset": 0, "end_offset": 54, "title": "..."}]}
+```
+
+`query`는 공백이 아닌 문자열이어야 하고 `top_k`는 선택적 1~20 정수입니다. 입력 객체는 이 두 필드만 허용합니다. 잘못된 요청은 `400` 및 공개 `invalid_request` 오류가 되며, 검색기·Mock 생성기는 호출되지 않습니다. 성공한 No-answer는 여전히 `200`이고 `citations: []`, `no_answer: true`를 반환합니다. 검색·생성의 내부 구성 오류는 요청 오류로 위장하지 않고 호출자에게 전파됩니다.
 
 ## 장 목록
 

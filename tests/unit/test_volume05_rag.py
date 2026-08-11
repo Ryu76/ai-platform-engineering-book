@@ -19,12 +19,14 @@ from ai_platform.rag import (
     HybridSearchConfig,
     LocalMarkdownLoader,
     LocalPdfLoader,
+    LocalRagApi,
     LocalRagIndex,
     PdfLoadingConfig,
     QueryTransformationConfig,
     QueryTransformingIndex,
     RagConfigurationError,
     RagPipeline,
+    RagQueryRequest,
     RerankingConfig,
     RerankingIndex,
     RerankResult,
@@ -802,6 +804,84 @@ def test_pipeline_returns_no_answer_without_calling_generator() -> None:
     assert answer.text == RagPipeline.NO_ANSWER_TEXT
     assert answer.citations == ()
     assert generator.calls == []
+
+
+def test_local_rag_api_returns_stable_cited_json_for_mocked_generation() -> None:
+    generator = RecordingGenerator(response="배송 안내를 확인하세요.")
+    api = LocalRagApi(pipeline=RagPipeline(index=_index(), generator=generator))
+
+    response = api.handle({"query": "배송 상태는 어떻게 확인하나요?", "top_k": 1})
+
+    assert response.status_code == 200
+    assert response.to_payload() == {
+        "answer": "배송 안내를 확인하세요.",
+        "no_answer": False,
+        "citations": [
+            {
+                "label": 1,
+                "chunk_id": "shipping#1",
+                "title": "배송 안내",
+                "source_uri": "local://handbook/shipping",
+                "start_offset": 0,
+                "end_offset": 54,
+            }
+        ],
+    }
+    assert [query for query, _ in generator.calls] == ["배송 상태는 어떻게 확인하나요?"]
+    assert len(generator.calls[0][1]) == 1
+
+
+def test_local_rag_api_preserves_no_answer_without_calling_mock_generator() -> None:
+    generator = RecordingGenerator()
+    api = LocalRagApi(pipeline=RagPipeline(index=_index(), generator=generator))
+
+    response = api.handle({"query": "주차장 할인 정책이 있나요?"})
+
+    assert response.status_code == 200
+    assert response.to_payload() == {
+        "answer": RagPipeline.NO_ANSWER_TEXT,
+        "no_answer": True,
+        "citations": [],
+    }
+    assert generator.calls == []
+
+
+@pytest.mark.parametrize(
+    "payload, message",
+    [
+        (None, "request payload must be an object"),
+        ({}, "request payload must include query"),
+        ({"query": " "}, "query must be a non-empty string"),
+        ({"query": "배송", "top_k": True}, "top_k must be an integer between 1 and 20"),
+        ({"query": "배송", "top_k": 21}, "top_k must be an integer between 1 and 20"),
+        (
+            {"query": "배송", "unknown": "value"},
+            "request payload contains unsupported fields: unknown",
+        ),
+    ],
+)
+def test_local_rag_api_returns_public_400_for_invalid_payload(
+    payload: object, message: str
+) -> None:
+    generator = RecordingGenerator()
+    api = LocalRagApi(pipeline=RagPipeline(index=_index(), generator=generator))
+
+    response = api.handle(payload)
+
+    assert response.status_code == 400
+    assert response.to_payload() == {"error": {"code": "invalid_request", "message": message}}
+    assert generator.calls == []
+
+
+def test_local_rag_api_accepts_a_prevalidated_request_object() -> None:
+    generator = RecordingGenerator()
+    api = LocalRagApi(pipeline=RagPipeline(index=_index(), generator=generator))
+
+    response = api.answer(RagQueryRequest(query="배송", top_k=1))
+
+    assert response.no_answer is False
+    assert response.citations[0].chunk_id == "shipping#1"
+    assert generator.calls[0][0] == "배송"
 
 
 def test_chunking_config_accepts_minimum_safe_size() -> None:

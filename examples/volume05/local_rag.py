@@ -16,6 +16,7 @@ from ai_platform.rag import (
     HybridRagIndex,
     LocalMarkdownLoader,
     LocalPdfLoader,
+    LocalRagApi,
     LocalRagIndex,
     QueryTransformingIndex,
     RagPipeline,
@@ -113,6 +114,7 @@ def main() -> None:
         config=ConfidenceThresholdConfig(candidate_count=3, minimum_confidence=0.8),
     )
     pipeline = RagPipeline(index=index, generator=SampleOnlyGenerator())
+    api = LocalRagApi(pipeline=pipeline)
 
     for query in (
         "언제 도착하나요?",
@@ -120,9 +122,12 @@ def main() -> None:
         "교환은 언제 신청하나요?",
         "주차장 할인 정책이 있나요?",
     ):
-        answer = pipeline.answer(query)
+        endpoint_response = api.handle({"query": query, "top_k": 3})
+        if endpoint_response.status_code != 200 or endpoint_response.answer is None:
+            raise RuntimeError("sample RAG API rejected a fixed valid request")
+        answer = endpoint_response.answer
         print(f"질문: {query}")
-        print(f"답변: {answer.text}")
+        print(f"답변: {answer.answer}")
         if answer.no_answer:
             print("인용: 없음 (No-answer)")
         else:

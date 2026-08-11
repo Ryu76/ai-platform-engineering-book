@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 프레임워크 독립 로컬 RAG API 계약 슬라이스 완료
+
+### 완료
+
+- `RagQueryRequest`, `RagAnswerResponse`, `RagCitationResponse`, `RagErrorResponse`, `RagEndpointResponse`, `LocalRagApi`를 추가했습니다. HTTP 서버·FastAPI·네트워크 클라이언트·제공자 SDK 없이 역직렬화한 로컬 JSON 요청을 명시적인 응답 계약으로 변환합니다.
+- 요청은 공백이 아닌 `query`와 선택적 1~20 정수 `top_k`만 허용합니다. 객체가 아닌 입력, 누락·빈 질문, boolean/범위 밖 `top_k`, 지원하지 않는 필드는 검색기나 생성기를 호출하지 않고 안정적인 `400` 및 `invalid_request` JSON 오류로 반환합니다.
+- 성공 응답은 답변·`no_answer`·인용 배열을 JSON 호환 값으로 고정합니다. 인용은 label·chunk ID·제목·출처 URI·원문 문자 범위를 보존하며, No-answer에는 빈 인용만 허용합니다. 검색·생성 내부 오류는 요청 오류로 숨기지 않습니다.
+- 로컬 예제는 기존의 local/sample data 및 Mock 생성기 체인을 `LocalRagApi.handle()`로 실행하도록 바꿨습니다. 테스트는 인용 JSON, No-answer와 생성기 미호출, 사전 검증 요청, 공개 400 오류 계약을 포함합니다.
+- 라이브 API, 비밀값, 배포는 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 103 passed
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 6 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 4 source files
+uv run python examples/volume05/local_rag.py
+# 배송·반품·PDF 교환 근거와 인용, 주차장 할인 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 로컬 고정 질의·기대 인용을 이용한 검색 품질 평가 계약을 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 정규화 신뢰도 임계값·abstention 슬라이스 완료
 
 ### 완료
