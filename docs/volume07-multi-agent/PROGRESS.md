@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 21: Chapter 02 PRD 학습 문서 완성도 확장
+
+- `02-approved-bounded-delegation.md`를 PRD Chapter template의 14개 항목(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 실제 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다.
+- 문서는 Coordinator의 immutable `DelegationPlan` proposal과 `APPROVED` 뒤 Worker dispatch를 분리하고, `max_tasks`/`max_worker_attempts`의 독립 호출 상한, `PENDING`/`APPROVED`/`REJECTED` fail-closed 경계, Worker retry-limit 뒤 subsequent task 미실행을 현재 `delegation.py`와 예제의 동작에 맞춰 설명한다.
+- `uv run python examples/volume07/offline_approved_delegation.py`와 `--approve` 경로를 실제 실행해 각각 `awaiting_human_approval`(Coordinator manifest만 기록)과 `completed`(`draft,verify` local Worker audit)을 확인했다. `uv run pytest tests/volume07/test_approval_gated_delegation.py -q`는 7 passed였다. live API, secret, network Agent, tool 실행, 파일 변경, deployment는 추가하거나 사용하지 않았다.
+
 ## 2026-08-11 — Slice 20: Chapter 01 PRD 학습 문서 완성도 확장
 
 - `01-bounded-review-workflow.md`를 PRD Chapter template의 14개 항목(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 실제 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다.
