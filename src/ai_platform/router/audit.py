@@ -103,6 +103,24 @@ def validate_router_audit_report(
         validate_router_audit_record(record, sensitive_values=sensitive_values_by_route[route_name])
 
 
+def serialize_router_audit_report(
+    report: Mapping[str, object], *, sensitive_values_by_route: Mapping[str, Iterable[str]]
+) -> str:
+    """검증된 전체 report를 결정론적인 strict JSON 한 줄로 내보낸다.
+
+    반환 직전에 complete report·field allowlist·경로별 원문 비노출을 다시 확인한다.
+    호출자는 검증된 Python dict를 받은 뒤 수정해 외부 출력 경계를 우회할 수 없다.
+    """
+    validate_router_audit_report(report, sensitive_values_by_route=sensitive_values_by_route)
+    return json.dumps(
+        report,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
 def _normalize_sensitive_values(sensitive_values: Iterable[str]) -> tuple[str, ...]:
     """원문 누락·중복 없이 비교할 수 있는 값 집합을 만든다."""
     if isinstance(sensitive_values, str):

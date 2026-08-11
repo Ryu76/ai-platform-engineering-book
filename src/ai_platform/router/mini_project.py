@@ -6,7 +6,10 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from ai_platform.router.api import RouterAPI
-from ai_platform.router.audit import validate_router_audit_report
+from ai_platform.router.audit import (
+    serialize_router_audit_report,
+    validate_router_audit_report,
+)
 from ai_platform.router.base import (
     RouteTarget,
     RouteTargetKind,
@@ -113,6 +116,12 @@ class RouterMiniProject:
             },
         )
         return report
+
+    def render_audit_report(self) -> str:
+        """모든 고정 경로를 재검증한 canonical strict JSON audit report를 반환한다."""
+        return serialize_router_audit_report(
+            self.run(), sensitive_values_by_route=_mini_project_sensitive_values()
+        )
 
 
 def build_router_mini_project() -> RouterMiniProject:
@@ -346,6 +355,20 @@ def _request(
             permitted_target_names=permitted_target_names,
         ),
     )
+
+
+def _mini_project_sensitive_values() -> dict[str, tuple[str]]:
+    """고정 경로별 원문을 export 직전 privacy 검증에만 제공한다."""
+    return {
+        "policy": ("private general support request",),
+        "rule": ("private billing rule request",),
+        "keyword": ("private order tracking request",),
+        "semantic": ("private refund request",),
+        "llm": ("private priority request",),
+        "fallback": ("private fallback request",),
+        "escalation": ("private escalation request",),
+        "api": ("private API order request",),
+    }
 
 
 def _target(

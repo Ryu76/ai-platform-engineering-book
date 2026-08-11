@@ -74,3 +74,18 @@ def test_router_mini_project_is_deterministic_and_logs_no_request_text() -> None
     ):
         assert private_text not in serialized_report
     json.dumps(first_report)
+
+
+def test_router_mini_project_renders_deterministic_canonical_audit_json() -> None:
+    first_report = build_router_mini_project().render_audit_report()
+    second_report = build_router_mini_project().render_audit_report()
+
+    assert first_report == second_report
+    assert first_report == json.dumps(
+        build_router_mini_project().run(),
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    assert json.loads(first_report)["api"]["status_code"] == 200

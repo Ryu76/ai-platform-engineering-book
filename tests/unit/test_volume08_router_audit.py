@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from math import inf, nan
 
@@ -9,6 +10,7 @@ import pytest
 
 from ai_platform.router import (
     UnsafeRouterAuditRecordError,
+    serialize_router_audit_report,
     validate_router_audit_record,
     validate_router_audit_report,
 )
@@ -122,6 +124,31 @@ def test_mini_project_report_rejects_non_mapping_records_and_route_specific_leak
     }
     with pytest.raises(UnsafeRouterAuditRecordError, match="sensitive value"):
         validate_router_audit_report(leaked_report, sensitive_values_by_route=request_texts)
+
+
+def test_audit_report_serializer_revalidates_and_emits_canonical_strict_json() -> None:
+    report = build_router_mini_project().run()
+    request_texts = _mini_project_request_texts()
+
+    serialized_report = serialize_router_audit_report(
+        report, sensitive_values_by_route=request_texts
+    )
+
+    assert serialized_report == serialize_router_audit_report(
+        report, sensitive_values_by_route=request_texts
+    )
+    assert serialized_report == json.dumps(
+        report,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    with pytest.raises(UnsafeRouterAuditRecordError, match="unsafe field"):
+        serialize_router_audit_report(
+            {**report, "policy": {**report["policy"], "request_text": "customer secret"}},
+            sensitive_values_by_route=request_texts,
+        )
 
 
 def _mini_project_request_texts() -> dict[str, tuple[str]]:
