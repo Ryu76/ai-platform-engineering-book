@@ -38,6 +38,7 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     compose = (repository_root / "docker/volume11/compose.dependencies.yaml").read_text(
         encoding="utf-8"
     )
+    service = (repository_root / "k8s/volume11/service.yaml").read_text(encoding="utf-8")
     batch = (repository_root / "k8s/volume11/batch/cronjob.yaml").read_text(encoding="utf-8")
     hpa = (repository_root / "k8s/volume11/autoscaling/hpa.yaml").read_text(encoding="utf-8")
     ingress = (repository_root / "k8s/volume11/ingress.yaml").read_text(encoding="utf-8")
@@ -61,6 +62,11 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
         in deployment,
         "deployment_has_distinct_health_probes": "path: /livez" in deployment
         and "path: /readyz" in deployment,
+        "deployment_and_service_share_named_http_port": (
+            "name: http\n              containerPort: 8080" in deployment
+        )
+        and deployment.count("port: http") == 3
+        and "name: http\n      port: 80\n      targetPort: http" in service,
         "deployment_declares_startup_probe_boundary": bool(startup_marker)
         and all(
             value in startup_probe

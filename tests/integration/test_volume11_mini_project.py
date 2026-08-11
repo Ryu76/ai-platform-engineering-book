@@ -33,6 +33,7 @@ def test_local_operations_review_combines_probe_telemetry_and_render_only_bounda
         "dockerfile_is_multistage_and_nonroot": True,
         "deployment_uses_example_image": True,
         "deployment_has_distinct_health_probes": True,
+        "deployment_and_service_share_named_http_port": True,
         "deployment_declares_startup_probe_boundary": True,
         "deployment_declares_resource_requests_and_limits": True,
         "deployment_declares_restricted_runtime_security": True,
