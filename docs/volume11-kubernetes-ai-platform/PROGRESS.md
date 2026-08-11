@@ -2,6 +2,46 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 15: Multi-stage Dockerfile의 source/runtime 정적 계약
+
+### 완료한 범위
+
+- [Multi-stage Dockerfile: source stage와 runtime stage의 정적 계약](15-multistage-dockerfile-static-contract.md) 장을 추가했습니다.
+  - source stage, runtime stage, 명시적 `COPY --from=source`, non-root `appuser`의 서로 다른 책임과 text/config 증거의 한계를 설명합니다.
+  - `docker compose ... config --no-interpolate`는 parse-only 확인이고 image build, container 실행, pull/push, registry login이 아니라는 경계를 명시했습니다.
+  - image build·container execution·deployment evidence가 여전히 `not verified`이며, PRD 완료 flag를 추가하지 않는다고 명시했습니다.
+- `docker/volume11/Dockerfile`을 Volume 11 전용 multi-stage 학습 artifact로 갱신했습니다.
+  - source stage는 `src/ai_platform`만 `/build/ai_platform`에 준비하고, 독립 runtime stage는 해당 package만 `/app/src/ai_platform`로 복사합니다.
+  - runtime에는 UID 10001의 non-root `appuser`와 `PYTHONPATH=/app/src`만 선언하며 credential, registry, Secret, 실제 image reference를 넣지 않았습니다.
+- `src/ai_platform/api/operations_review.py`의 local-only report를 확장했습니다.
+  - Docker daemon을 호출하지 않고 Dockerfile text에서 source/runtime stage, `COPY --from`, non-root user 계약을 읽습니다.
+  - report의 `not_verified`에 `image build`를 명시적으로 추가했습니다.
+- README와 Volume 11 integration tests를 갱신했습니다.
+  - 새 장 링크 및 static contract를 검사하며, local review의 10개 artifact check와 `image build` 미검증 경계를 확인합니다.
+- 실제 image build/pull/push, container, registry login, Secret, credential, cluster, rollout, rollback 또는 deployment를 실행하지 않았습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/local_operations_review_demo.py` | 통과 — probe status 4개가 예상값이고 10개 local artifact check가 모두 `true`; `image build`, container, dependency connectivity, telemetry backend, cluster deployment는 `not_verified` |
+| `uv run pytest tests/integration/test_volume11_health_artifacts.py tests/integration/test_volume11_mini_project.py tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/unit/test_volume11_telemetry.py -q` | 통과 — 36 passed |
+| `uv run pytest -q` | 통과 — 전체 97 passed |
+| `docker compose -f docker/volume11/compose.health.yaml config --no-interpolate` 및 `docker compose -f docker/volume11/compose.dependencies.yaml config --no-interpolate` | 통과 — local Compose config parsing만 수행, image·container·network·volume을 만들지 않음 |
+| `kubectl kustomize k8s/volume11{,/batch,/storage,/autoscaling}` | 통과 — local render만 수행, Kubernetes API·cluster·resource 생성 없음 |
+| `uv run ruff check .`, `uv run mypy src` | 통과 — Ruff 전체 통과, mypy 14 source files 문제 없음 |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — 문서 11개, 링크·코드 블록·비밀값 검사 통과 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- PRD Volume DoD는 아직 충족하지 않았습니다. PRD 필수 실습의 API Docker image 생성·Docker Compose 통합 실행·Kubernetes 로컬 환경 구성·Rolling Update·Rollback·최종 AI Platform 배포는 현재 작업 제한의 live cluster·deployment 금지 또는 아직 실행하지 않은 image/container evidence와 충돌해 완료 선언할 수 없습니다.
+- 따라서 `VOLUME11_COMPLETE=true`를 설정하거나 self-pause 하지 않습니다. static Dockerfile/Compose contract가 build, scan, provenance, startup, runtime health 또는 live deployment evidence를 대체하지 않습니다.
+
+### 다음 Slice
+
+현재 작업 제한을 유지하는 동안에는 Volume 11 local-only artifact·test·placeholder boundary의 보수만 수행합니다. image build/Compose integration execution, Kubernetes local environment, update/rollback, final deployment를 실제로 검증할 수 있도록 명시적 범위가 변경되기 전에는 completion flag를 추가하지 않습니다. 실제 image, container, cluster, Secret, credential, alert, backend 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 14: PRD 추적성과 local-only 완료 판정 경계
 
 ### 완료한 범위

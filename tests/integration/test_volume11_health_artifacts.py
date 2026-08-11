@@ -107,6 +107,23 @@ def test_probe_manifests_use_example_image_and_distinct_readiness_and_liveness_r
     assert "kind: Secret" not in deployment + configmap + service
 
 
+def test_dockerfile_uses_multistage_source_copy_and_a_nonroot_runtime_user() -> None:
+    """The Docker artifact exposes a reviewable stage boundary without an image build."""
+    dockerfile = (ROOT / "docker/volume11/Dockerfile").read_text(encoding="utf-8")
+
+    assert "FROM python:3.12-slim AS source" in dockerfile
+    assert "COPY src/ai_platform /build/ai_platform" in dockerfile
+    assert "FROM python:3.12-slim AS runtime" in dockerfile
+    assert (
+        "COPY --from=source --chown=10001:10001 /build/ai_platform /app/src/ai_platform"
+        in dockerfile
+    )
+    assert "RUN useradd --create-home --uid 10001 appuser" in dockerfile
+    assert "USER appuser" in dockerfile
+    assert "PASSWORD" not in dockerfile
+    assert "TOKEN" not in dockerfile
+
+
 def test_secret_example_has_a_placeholder_and_is_not_part_of_the_apply_set() -> None:
     """The required Secret shape teaches separation without storing a usable credential."""
     secret_example = (ROOT / "k8s/volume11/secret.example.yaml").read_text(encoding="utf-8")

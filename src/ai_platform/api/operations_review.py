@@ -30,6 +30,7 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     placeholders and render-only boundaries; they do not prove a cluster deployment,
     image availability, dependency connectivity, or production readiness.
     """
+    dockerfile = (repository_root / "docker/volume11/Dockerfile").read_text(encoding="utf-8")
     deployment = (repository_root / "k8s/volume11/deployment.yaml").read_text(encoding="utf-8")
     base_kustomization = (repository_root / "k8s/volume11/kustomization.yaml").read_text(
         encoding="utf-8"
@@ -43,6 +44,15 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     pvc = (repository_root / "k8s/volume11/storage/pvc.yaml").read_text(encoding="utf-8")
 
     return {
+        "dockerfile_is_multistage_and_nonroot": all(
+            value in dockerfile
+            for value in (
+                "FROM python:3.12-slim AS source",
+                "FROM python:3.12-slim AS runtime",
+                "COPY --from=source --chown=10001:10001 /build/ai_platform /app/src/ai_platform",
+                "USER appuser",
+            )
+        ),
         "deployment_uses_example_image": "image: example.invalid/ai-platform-api:0.1.0"
         in deployment,
         "deployment_has_distinct_health_probes": "path: /livez" in deployment
@@ -113,6 +123,7 @@ def run_local_operations_review(repository_root: Path) -> dict[str, object]:
         },
         "artifact_checks": render_only_artifact_checks(repository_root),
         "not_verified": [
+            "image build",
             "container execution",
             "dependency connectivity",
             "telemetry backend delivery",

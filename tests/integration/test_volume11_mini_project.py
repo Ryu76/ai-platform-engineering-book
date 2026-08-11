@@ -30,6 +30,7 @@ def test_local_operations_review_combines_probe_telemetry_and_render_only_bounda
     artifact_checks = review["artifact_checks"]
     assert isinstance(artifact_checks, dict)
     assert artifact_checks == {
+        "dockerfile_is_multistage_and_nonroot": True,
         "deployment_uses_example_image": True,
         "deployment_has_distinct_health_probes": True,
         "deployment_declares_resource_requests_and_limits": True,
@@ -41,6 +42,7 @@ def test_local_operations_review_combines_probe_telemetry_and_render_only_bounda
         "hpa_targets_a_separate_example": True,
     }
     assert review["not_verified"] == [
+        "image build",
         "container execution",
         "dependency connectivity",
         "telemetry backend delivery",
@@ -140,3 +142,25 @@ def test_prd_traceability_keeps_static_artifacts_separate_from_blocked_live_prac
     assert "최종 AI Platform 배포" in traceability
     assert "not verified / incomplete" in traceability
     assert "`VOLUME11_COMPLETE=true`를 설정하지 않습니다" in traceability
+
+
+def test_multistage_dockerfile_chapter_keeps_static_contract_separate_from_image_build() -> None:
+    """The Dockerfile lesson reviews stage boundaries without claiming container evidence."""
+    chapter = (VOLUME / "15-multistage-dockerfile-static-contract.md").read_text(
+        encoding="utf-8"
+    )
+    readme = (VOLUME / "README.md").read_text(encoding="utf-8")
+    dockerfile = (ROOT / "docker/volume11/Dockerfile").read_text(encoding="utf-8")
+
+    assert "](15-multistage-dockerfile-static-contract.md)" in readme
+    for contract in (
+        "FROM python:3.12-slim AS source",
+        "FROM python:3.12-slim AS runtime",
+        "COPY --from=source --chown=10001:10001 /build/ai_platform /app/src/ai_platform",
+        "USER appuser",
+    ):
+        assert contract in dockerfile
+    assert "dockerfile_is_multistage_and_nonroot" in chapter
+    assert "docker compose up" in chapter
+    assert "image build" in chapter
+    assert "`VOLUME11_COMPLETE=true`를 설정하지 않습니다" in chapter
