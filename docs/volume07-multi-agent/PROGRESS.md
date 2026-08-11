@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 18: 권 단위 학습 체크리스트·용어집·Router 인계
+
+- `docs/volume07-multi-agent/15-volume-learning-checklist-glossary-and-router-handoff.md`에 네 deterministic local workflow의 권 단위 재실행 순서, 기본 `PENDING` pause와 독립 approval flag의 예상 출력을 추가했다.
+- 이 장은 Agent, role, state, memory, message passing, deterministic Mock, bounded loop, fail-closed, human-in-the-loop, exact consensus, local handoff, Router handoff 용어를 Volume 07 범위에서 정의했다. 다음 Volume Router는 workflow를 선택할 수 있지만 approval를 생성하거나 tool/deployment capability를 위임할 수 없음을 명시했다.
+- Router 인계표와 learner checklist는 status/audit snapshot처럼 넘길 수 있는 data를 approval, secret, tool object, mutable script처럼 넘기면 안 되는 authority/capability와 분리한다. live API, network Agent, secret, tool 실행, 파일 변경, deployment를 추가하지 않았다.
+- `uv run pytest tests/volume07 -q`로 Volume 07 deterministic Mock, bounded loop, role authority, approval-gate contract 54개를 다시 검증했다. local mini project의 기본 pause 및 네 approval flag completed 경로도 실제로 실행해 확인했다.
+
 ## 2026-08-11 — Slice 17: Agent 계약·실행 상태·Capability 경계
 
 - `docs/volume07-multi-agent/14-agent-contract-state-and-capability-boundaries.md`에 Agent와 단순 LLM 호출의 차이, role·goal·입출력 schema·capability·authority·stop condition·human gate 계약을 추가했다.
