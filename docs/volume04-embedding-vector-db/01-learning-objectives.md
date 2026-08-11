@@ -71,7 +71,7 @@ uv run pytest tests/unit/test_volume04_embedding_service.py -q
 
 ## 7. 코드 설명
 
-`DeterministicEmbeddingModel`은 텍스트를 소문자 토큰으로 나누고, 각 토큰의 SHA-256 결과를 차원 위치와 부호로 바꿉니다. SHA-256은 입력이 같으면 항상 같은 결과를 내므로 테스트가 재현됩니다. 토큰의 값을 더한 다음 L2 정규화합니다.
+`DeterministicEmbeddingModel`은 텍스트를 소문자 토큰으로 나누고, 각 토큰의 SHA-256 결과를 차원 위치와 부호로 바꿉니다. SHA-256은 입력이 같으면 항상 같은 결과를 내므로 테스트가 재현됩니다. 토큰의 값을 더한 다음 L2 정규화합니다. 단일 텍스트에는 `embed_one(text)`를 쓰고, `embed(texts)`에는 비어 있지 않은 문자열 sequence만 전달합니다. 문자열 자체는 Python에서 sequence이지만 여러 문서 batch가 아니므로 `embed("문서 하나")`처럼 전달하지 않습니다.
 
 `cosine_similarity`는 다음 식으로 계산합니다.
 
@@ -91,7 +91,7 @@ query_dimensions=64
 
 그 뒤에 점수와 문서가 높은 점수부터 표시됩니다. `Python API 오류 처리와 재시도 전략` 문서는 질의와 토큰을 공유하므로 이 고정 입력에서는 첫 순위여야 합니다. 점수의 마지막 자리 대신 **순위, 차원, 반복 실행의 동일성**을 확인합니다.
 
-테스트는 6개 테스트가 모두 통과해야 합니다. 실행 결과가 다르면 문서와 질의가 같은 모델 인스턴스 구성 및 같은 차원을 쓰는지 확인합니다.
+Volume 04 단위 테스트 명령이 모두 통과해야 합니다. 실행 결과가 다르면 문서와 질의가 같은 모델 인스턴스 구성 및 같은 차원을 쓰는지 확인합니다.
 
 ## 9. 오류 해결
 
@@ -100,6 +100,7 @@ query_dimensions=64
 | `No module named ai_platform` | 저장소 루트 밖에서 실행했거나 프로젝트 환경을 쓰지 않음 | 저장소 루트로 이동한 뒤 `uv run python ...`을 사용합니다. |
 | `dimensions must be ...` | 차원이 8 미만, 4096 초과, 또는 정수가 아님 | `8`부터 `4096` 사이의 정수를 전달합니다. |
 | `text must contain ...` | 공백이나 기호만 있는 텍스트 | 문서와 질의에 글자 또는 숫자를 넣습니다. |
+| `texts must be a non-empty sequence of strings` | batch API에 단일 문자열·bytes·빈 목록·비-sequence을 전달함 | 하나의 문서는 `embed_one`으로 처리하고, 여러 문서는 비어 있지 않은 `list[str]` 또는 `tuple[str, ...]`로 `embed`에 전달합니다. |
 | `vectors must have the same dimension` | 문서와 질의에 다른 모델 차원을 사용함 | 저장과 검색에 같은 모델 설정을 사용합니다. |
 | `vectors must contain only finite numbers` | vector에 `NaN`, 무한대, bool 또는 숫자가 아닌 값이 있음 | JSON number와 같은 유한 `int`/`float` 값만 전달합니다. |
 

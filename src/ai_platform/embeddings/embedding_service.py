@@ -45,7 +45,14 @@ class DeterministicEmbeddingModel:
             raise EmbeddingConfigurationError("dimensions must be an integer between 8 and 4096")
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        """각 비어 있지 않은 텍스트를 L2 정규화된 고정 차원 벡터로 변환한다."""
+        """비어 있지 않은 텍스트 batch를 L2 정규화된 고정 차원 벡터로 변환한다."""
+        if (
+            isinstance(texts, (str, bytes))
+            or not isinstance(texts, Sequence)
+            or not texts
+            or not all(isinstance(text, str) for text in texts)
+        ):
+            raise EmbeddingConfigurationError("texts must be a non-empty sequence of strings")
         return [self.embed_one(text) for text in texts]
 
     def embed_one(self, text: str) -> list[float]:

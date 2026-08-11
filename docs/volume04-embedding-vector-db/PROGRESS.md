@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME04_COMPLETE` 미설정
-- 현재 slice: 04 — 결정적 local mock 삭제·재색인 lifecycle 미니 프로젝트
+- 현재 slice: 18 — 결정적 local mock embedding batch 입력 계약 강화
 - 범위: 외부 API, 다운로드 모델, Docker, Qdrant를 실행하지 않았습니다.
 
 ## 2026-08-10 — Slice 01 완료
@@ -463,6 +463,42 @@ git diff --check
 
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+
+## 2026-08-11 — Slice 18 완료: embedding batch 입력 계약 강화
+
+### 추가한 결과물
+
+- `embedding_service.py`의 `DeterministicEmbeddingModel.embed`가 단일 `str`/`bytes`를 문자별 batch로 오해하거나 빈·비-sequence batch를 조용히 성공시키지 않도록, 비어 있지 않은 문자열 sequence만 받게 했습니다.
+- `test_volume04_embedding_service.py`에 단일 문자열, bytes, 빈 목록, `None`, 비문자열 항목 거부와 유효 batch의 입력 순서·출력 대응 회귀 테스트를 추가했습니다.
+- 01장에 `embed_one(text)`와 `embed(texts)`의 경계 및 새 오류 해결 항목을 기록했습니다.
+
+### 검증 결과
+
+```bash
+# 실행 위치: 저장소 루트
+uv run pytest tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py tests/unit/test_volume04_learning_materials.py -q
+# 48 passed in 0.27s
+uv run ruff check src/ai_platform/embeddings examples/volume04 tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py tests/unit/test_volume04_learning_materials.py
+# All checks passed!
+uv run mypy src/ai_platform/embeddings
+# Success: no issues found in 5 source files
+uv run python examples/volume04/embedding_similarity.py
+# retry 문서 score=0.548, 1위
+uv run python examples/volume04/vector_store_search.py
+# retry-guide score=0.548, topic=api
+uv run python examples/volume04/retrieval_quality.py
+# precision_at_1=1.0; recall_at_1=1.0; mrr=1.0; answerable=True
+uv run python examples/volume04/reindex_lifecycle.py
+# deleted_count=1; reindexed_version=2; collection_size=3; top_1_recovered=True
+git diff --check
+# 공백 오류 없음
+```
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+- Commit: `fix(volume04): validate embedding batch inputs`
 
 ## 다음 slice
 

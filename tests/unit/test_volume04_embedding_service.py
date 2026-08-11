@@ -59,6 +59,21 @@ def test_model_rejects_empty_or_tokenless_text(text: str | None) -> None:
         DeterministicEmbeddingModel().embed_one(text)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("texts", ["one document", b"one document", [], None, ["valid", None]])
+def test_model_rejects_non_batch_or_empty_batch_input(texts: object) -> None:
+    """batch API는 단일 문자열, bytes, 빈·비-sequence·비문자열 batch를 받으면 안 된다."""
+    with pytest.raises(EmbeddingConfigurationError, match="non-empty sequence of strings"):
+        DeterministicEmbeddingModel().embed(texts)  # type: ignore[arg-type]
+
+
+def test_model_embed_preserves_batch_order() -> None:
+    """유효한 batch는 입력 순서와 동일한 수의 독립된 vector를 반환해야 한다."""
+    model = DeterministicEmbeddingModel(dimensions=32)
+    texts = ["Python API 오류 처리", "벡터 데이터베이스 검색"]
+
+    assert model.embed(texts) == [model.embed_one(text) for text in texts]
+
+
 def test_vector_operations_reject_mismatched_and_zero_vectors() -> None:
     """잘못된 차원과 zero vector는 조용히 잘못된 점수를 만들면 안 된다."""
     with pytest.raises(VectorDimensionError, match="same dimension"):
