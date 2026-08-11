@@ -2,6 +2,42 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 12: 로컬 AI Platform 운영 검토 미니 프로젝트
+
+### 완료한 범위
+
+- [Volume 11 미니 프로젝트: 로컬 AI Platform 운영 검토](12-local-operations-review-mini-project.md) 장을 추가했습니다.
+  - health/readiness, exporter failure 격리, process-local telemetry, Compose/Manifest의 placeholder·render-only 경계를 하나의 evidence report로 연결했습니다.
+  - 각 artifact check가 보장하는 파일 계약과 보장하지 않는 container 실행·dependency 연결·backend delivery·cluster deployment를 분리했습니다.
+  - 실제 alert, on-call, backend query, Secret, credential, image pull/build, container, cluster 또는 deployment는 추가하거나 실행하지 않았습니다.
+- `src/ai_platform/api/operations_review.py`에 표준 라이브러리와 기존 `HealthApplication`만 쓰는 local review 함수를 추가했습니다.
+  - TCP listener 없이 in-memory `/livez`·`/readyz`를 호출해 available/unavailable readiness와 exporter failure isolation을 검토합니다.
+  - `docker/volume11`과 `k8s/volume11` 파일은 read-only text로만 확인하며 `example.invalid`, internal Compose topology, suspended CronJob, 분리된 HPA target, Secret example 제외를 검토합니다.
+  - report에는 request ID, raw request input, dependency detail, exporter exception detail, endpoint, credential 또는 cluster address를 넣지 않습니다.
+- `examples/volume11/local_operations_review_demo.py`와 `tests/integration/test_volume11_mini_project.py`를 추가했습니다.
+  - demo는 deterministic local-only JSON 한 줄을 출력하고, test는 probe status·telemetry event 수·artifact boundary·미검증 범위를 확인합니다.
+- Volume README에 열두 번째 장과 mini project 실행/API artifact를 연결했습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/local_operations_review_demo.py` | 통과 — local-only JSON에서 liveness/available readiness/exporter isolation `200 OK`, unavailable readiness `503`, process-local telemetry event 2개와 artifact check 6개 `true`; network·container·backend·cluster 연결 없음 |
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/unit/test_volume11_telemetry.py tests/integration/test_volume11_health_artifacts.py tests/integration/test_volume11_mini_project.py -q` | 통과 — 32 passed |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 14 source files 문제 없음, 전체 93 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — 문서 11개, 링크·코드 블록·비밀값 검사 통과 |
+| `kubectl kustomize k8s/volume11{,/batch,/storage,/autoscaling}` 및 `docker compose -f docker/volume11/compose.dependencies.yaml config --no-interpolate` | 통과 — 모두 local render/config 확인만 수행, resource·container·cluster 연결 없음 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- Volume 전체 운영 전 체크리스트와 용어집 인계를 작성하기
+- Volume 전체 artifact·문서 체크리스트를 다시 검토하고 PRD Volume DoD 충족 여부를 판정하기
+
+### 다음 Slice
+
+예제 값과 로컬·오프라인 검증만 사용해 Volume 11 전체 체크리스트와 용어집 인계를 작성하고, 실제 cluster, alert, telemetry backend, Secret, credential 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 11: AI 서비스 장애 대응과 관측 비용의 증거·결정 경계
 
 ### 완료한 범위
