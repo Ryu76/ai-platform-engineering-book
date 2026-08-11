@@ -2,6 +2,37 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 13: 운영 전 체크리스트·용어집·인계 경계
+
+### 완료한 범위
+
+- [Volume 11 운영 전 체크리스트·용어집·인계 경계](13-preflight-checklist-glossary-handoff.md) 장을 추가했습니다.
+  - health, dependency readiness, Compose, base/optional Kubernetes artifacts, update, correlation/telemetry, mini project의 local evidence와 운영 전 별도 evidence를 표로 분리했습니다.
+  - image provenance, Secret/configuration, probe semantics, capacity/update, observability cost/privacy, incident, customer/data impact의 owner·입력·종료 기준을 예제 값으로만 정리했습니다.
+  - liveness, readiness, dependency readiness policy, render-only, placeholder, base/optional set, low cardinality, exporter failure isolation, recovery verification 용어를 구분했습니다.
+  - local test success가 deployment approval 또는 PRD 완료 선언이 아니며, unknown/not verified를 success claim으로 바꾸지 않는 인계 경계를 명시했습니다.
+- Volume README와 `tests/integration/test_volume11_mini_project.py`를 갱신했습니다.
+  - 새 장 링크, existing Volume artifact 참조, glossary, local-only/deployment boundary 및 completion flag 부재를 테스트합니다.
+- 실제 cluster, container, image pull/build, alert, on-call, telemetry backend, Secret, credential 또는 deployment는 추가하거나 실행하지 않았습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/unit/test_volume11_telemetry.py tests/integration/test_volume11_health_artifacts.py tests/integration/test_volume11_mini_project.py -q` | 통과 — 33 passed |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 14 source files 문제 없음, 전체 94 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — 문서 11개, 링크·코드 블록·비밀값 검사 통과 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- PRD Volume DoD는 아직 충족하지 않았습니다. PRD 필수 실습의 Docker Compose 통합 실행, Kubernetes 로컬 환경 구성, Rolling Update, Rollback, 최종 AI Platform 배포는 현재 작업 제한의 live cluster·deployment 금지와 충돌해 실행·완료 선언할 수 없습니다.
+- 허용 범위 안에서 Volume 전체 artifact·문서 checklist를 재검토하더라도, 위 금지된 실습의 성공을 추정하거나 `VOLUME11_COMPLETE=true`를 설정하지 않습니다.
+
+### 다음 Slice
+
+현재 작업 제한을 유지하는 동안에는 local-only artifact의 문서·test·placeholder boundary만 보수합니다. PRD DoD 완료 flag와 self-pause는 승인된 Docker Compose 통합 실행, Kubernetes local environment, update/rollback, final deployment를 실제로 검증할 수 있는 명시적 범위 변경이 있을 때에만 검토합니다. 실제 cluster, Secret, credential, alert, backend 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 12: 로컬 AI Platform 운영 검토 미니 프로젝트
 
 ### 완료한 범위
