@@ -71,7 +71,7 @@ The example deliberately assigns a small scalar-only payload. A production schem
 
 ## 7. Code walkthrough
 
-`create_collection("platform_docs", vector_size=64)` fixes the vector contract before any data is written. `upsert` validates the complete batch first, so a malformed point cannot leave a half-written batch. It copies vectors and payloads into immutable stored records, preventing later caller mutations from silently changing indexed data.
+`create_collection("platform_docs", vector_size=64)` fixes the vector contract before any data is written. `upsert` accepts a non-empty `list[VectorPoint]` or `tuple[VectorPoint, ...]`, not a single point, string, bytes value, or arbitrary iterable. It validates the complete batch first, so a malformed point cannot leave a half-written batch. It copies vectors and payloads into immutable stored records, preventing later caller mutations from silently changing indexed data.
 
 `search` validates the query dimension, then filters points whose payload contains every requested key/value **with the same scalar type** before it calculates cosine similarity. A missing key does not match a `null`/`None` filter, and Python's `True == 1` shortcut does not allow a boolean filter to match an integer payload. It then sorts candidates by `score` descending. Equal scores use point ID ascending as a tie-breaker so local runs and tests remain deterministic. The `limit` is applied only after sorting.
 
@@ -97,6 +97,7 @@ The test command must report all tests passed. It covers ranking and payload ret
 | `collection not found` | `create_collection` was skipped or the name differs | Create the collection first and use the exact same name. |
 | `vector must have dimension 64` | A different model dimension was used for a point or query | Use the same embedding configuration for creation, indexing, and search. |
 | `vector must not be a zero vector` | A manually supplied empty-signal vector was used | Embed non-empty text or supply a meaningful, non-zero numeric vector. |
+| `points must be a non-empty sequence of VectorPoint instances` | `upsert` received an empty batch, a single value, string, bytes value, or non-sequence | Wrap one or more points in a `list[VectorPoint]` or `tuple[VectorPoint, ...]`, for example `[VectorPoint(...)]`. |
 | `point_ids must be a non-empty sequence of strings` | `delete` received an empty list, a single string, bytes, or a non-batch value | Pass one or more non-empty IDs in a `list[str]` or `tuple[str, ...]`, for example `["retry-guide"]`. |
 | No results | The metadata filter does not exactly match any payload key, value, and scalar type | Print the stored payload keys, values, and types; a missing key does not match `None`, and `true` does not match integer `1`. |
 | An indexed record unexpectedly changed after `upsert` | Caller code mutated the original vector or payload object | Do not rely on caller-owned mutable input after writing. The local store copies inputs into immutable stored records; query again and inspect the returned payload. |

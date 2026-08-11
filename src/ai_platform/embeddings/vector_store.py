@@ -139,8 +139,12 @@ class InMemoryVectorStore:
 
 def _prepare_points(points: Sequence[VectorPoint], *, vector_size: int) -> dict[str, VectorPoint]:
     """batch 전체를 검증하고 저장에 안전한 불변 point로 복사한다."""
-    if not points:
-        raise VectorStoreError("points must not be empty")
+    if (
+        isinstance(points, (str, bytes))
+        or not isinstance(points, Sequence)
+        or not points
+    ):
+        raise VectorStoreError("points must be a non-empty sequence of VectorPoint instances")
 
     prepared: dict[str, VectorPoint] = {}
     for point in points:

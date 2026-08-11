@@ -164,6 +164,16 @@ def test_upsert_is_atomic_when_a_batch_contains_an_invalid_vector(
     assert store.search("platform_docs", model.embed_one("유효한 문서"))[0].id != "valid"
 
 
+@pytest.mark.parametrize("points", [[], (), "retry-guide", b"retry-guide", None])
+def test_upsert_rejects_empty_or_non_batch_point_inputs(points: object) -> None:
+    """upsert는 빈 batch나 문자열을 point 목록으로 해석하면 안 된다."""
+    store = InMemoryVectorStore()
+    store.create_collection("docs", vector_size=2)
+
+    with pytest.raises(VectorStoreError, match="non-empty sequence of VectorPoint instances"):
+        store.upsert("docs", points)  # type: ignore[arg-type]
+
+
 def test_delete_reports_actual_count_and_removes_points(
     populated_store: tuple[InMemoryVectorStore, DeterministicEmbeddingModel],
 ) -> None:
