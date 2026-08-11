@@ -98,15 +98,11 @@ class ApprovalGatedReleaseHandoffWorkflow:
         for cycle in range(1, self._max_review_cycles + 1):
             self._append(messages, "developer", self._developer, task, cycle)
             reviewer_response = self._call(self._reviewer, task, cycle, messages)
-            self._validate_response(reviewer_response)
+            self._validate_role_response(reviewer_response, "reviewer")
             messages.append(AgentMessage("reviewer", reviewer_response.content, cycle))
 
             if reviewer_response.review is ReviewDecision.REVISE:
                 continue
-            if reviewer_response.review is not ReviewDecision.APPROVE:
-                raise AgentProtocolError(
-                    "reviewer response must include an explicit review decision"
-                )
             if human_approval is HumanApproval.PENDING:
                 return ReleaseHandoffResult(
                     ReleaseHandoffStatus.AWAITING_HUMAN_APPROVAL,
@@ -117,7 +113,7 @@ class ApprovalGatedReleaseHandoffWorkflow:
 
             self._append(messages, "qa", self._qa, task, cycle)
             handoff = self._call(self._devops, task, cycle, messages)
-            self._validate_response(handoff)
+            self._validate_role_response(handoff, "devops")
             messages.append(AgentMessage("devops", handoff.content, cycle))
             return ReleaseHandoffResult(
                 ReleaseHandoffStatus.COMPLETED,
@@ -148,11 +144,11 @@ class ApprovalGatedReleaseHandoffWorkflow:
         self, messages: list[AgentMessage], role: str, agent: Agent, task: str, iteration: int
     ) -> None:
         response = self._call(agent, task, iteration, messages)
-        self._validate_response(response)
+        self._validate_role_response(response, role)
         messages.append(AgentMessage(role, response.content, iteration))
 
     @staticmethod
-    def _validate_response(response: object) -> None:
+    def _validate_response(response: object) -> AgentResponse:
         if not isinstance(response, AgentResponse):
             raise AgentProtocolError("agent response must be an AgentResponse")
         if not isinstance(response.content, str) or not response.content.strip():
@@ -161,3 +157,16 @@ class ApprovalGatedReleaseHandoffWorkflow:
             raise AgentProtocolError(
                 "agent response review must be a ReviewDecision or None"
             )
+        return response
+
+    @classmethod
+    def _validate_role_response(cls, response: object, role: str) -> None:
+        """Limit review authority to Reviewer before an output enters the audit trail."""
+        validated_response = cls._validate_response(response)
+        if role != "reviewer" and validated_response.review is not None:
+            raise AgentProtocolError(f"{role} response must not include a review decision")
+        if role == "reviewer" and validated_response.review not in (
+            ReviewDecision.APPROVE,
+            ReviewDecision.REVISE,
+        ):
+            raise AgentProtocolError("reviewer response must include an explicit review decision")

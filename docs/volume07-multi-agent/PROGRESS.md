@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 12: 역할 범위 검토 권한
+
+- `BoundedReviewWorkflow`와 `ApprovalGatedReleaseHandoffWorkflow`는 `ReviewDecision`을 Reviewer 역할에만 허용한다. Planner·Researcher·Developer·QA·DevOps의 명시적 review 값은 audit trail에 기록되거나 다음 역할을 호출하기 전에 `AgentProtocolError`로 fail-closed한다.
+- Reviewer는 `APPROVE` 또는 `REVISE`를 반드시 명시해야 하며, 결정 누락도 audit 기록 전에 중단한다. 사람 승인은 역할 권한이나 Agent protocol 오류를 우회하지 않는다.
+- `tests/volume07/test_runtime_review_decision_contract.py`는 Reviewer가 아닌 Planner가 review 권한을 주장하면 Researcher가 호출되지 않고, QA가 review 권한을 주장하면 DevOps handoff가 호출되지 않는지 고정한다. 모든 검증은 local Mock만 사용하며 네트워크, live API, secret, 도구 실행, 배포를 사용하지 않는다.
+- `docs/volume07-multi-agent/09-role-scoped-review-authority.md`에 역할 권한과 사람 승인 게이트의 분리를 기록했다.
+
 ## 2026-08-11 — Slice 11: 실행 중 검토 결정 계약
 
 - `BoundedReviewWorkflow`와 `ApprovalGatedReleaseHandoffWorkflow`는 모든 신뢰할 수 없는 실행 Agent 응답의 `review`를 `ReviewDecision` 또는 `None`으로 audit 기록과 후속 역할 호출 전에 검사한다. `"approve"` 같은 문자열은 enum처럼 보여도 `AgentProtocolError`로 fail-closed한다.
