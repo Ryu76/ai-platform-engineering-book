@@ -20,6 +20,7 @@ from ai_platform.mcp.stdio import (
     McpStdioError,
     McpStdioSession,
     McpStdioState,
+    McpToolCallBoundary,
     encode_stdio_jsonrpc_message,
     parse_stdio_jsonrpc_line,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "McpStdioError",
     "McpStdioSession",
     "McpStdioState",
+    "McpToolCallBoundary",
     "McpServerCatalog",
     "McpToolCallRequest",
     "McpToolDefinition",

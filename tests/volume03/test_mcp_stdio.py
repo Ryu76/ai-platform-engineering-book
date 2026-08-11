@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 
 import pytest
 
@@ -13,9 +14,14 @@ from ai_platform.mcp.stdio import (
     McpStdioError,
     McpStdioSession,
     McpStdioState,
+    McpToolCallBoundary,
     encode_stdio_jsonrpc_message,
     parse_stdio_jsonrpc_line,
 )
+from ai_platform.tools.audit import InMemoryToolAuditSink, ToolAuditOutcome
+from ai_platform.tools.authorization import ToolAuthorizationPolicy, ToolRisk
+from ai_platform.tools.execution import ToolExecutionPolicy
+from ai_platform.tools.registry import SAFE_TEXT_CASE, ToolRegistry, ToolSpec
 
 
 def _initialize_line(*, request_id: str = "initialize-001") -> str:
@@ -31,6 +37,13 @@ def _initialize_line(*, request_id: str = "initialize-001") -> str:
             },
         }
     ) + "\n"
+
+
+def _ready_session(*, tool_call_boundary: McpToolCallBoundary | None = None) -> McpStdioSession:
+    session = McpStdioSession(tool_call_boundary=tool_call_boundary)
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+    return session
 
 
 def test_stdio_session_requires_initialize_then_notification_and_emits_response() -> None:
@@ -354,6 +367,106 @@ def test_stdio_session_rejects_ambiguous_or_non_allowlisted_prompt_get(
         session.receive_line(raw_line)
 
 
+def test_stdio_session_projects_allowlisted_pure_tool_call_through_dispatcher() -> None:
+    sink = InMemoryToolAuditSink()
+    session = _ready_session(
+        tool_call_boundary=McpToolCallBoundary(
+            registry=ToolRegistry((SAFE_TEXT_CASE,)),
+            authorization_policy=ToolAuthorizationPolicy({"safe_text_case": ToolRisk.LOW}),
+            execution_policy=ToolExecutionPolicy(timeout_seconds=0.5),
+            audit_sink=sink,
+        )
+    )
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":'
+        '{"name":"safe_text_case","arguments":{"text":"Mcp","operation":"upper"}}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line) == {
+        "jsonrpc": "2.0",
+        "id": "call-001",
+        "result": {
+            "content": [{"type": "text", "text": '{"text":"MCP"}'}],
+            "isError": False,
+        },
+    }
+    assert sink.events[0].request_id == "mcp-stdio:string:call-001"
+    assert sink.events[0].outcome is ToolAuditOutcome.SUCCEEDED
+    assert session.state is McpStdioState.READY
+
+
+def test_stdio_session_keeps_tool_calls_disabled_without_explicit_boundary() -> None:
+    session = _ready_session()
+
+    with pytest.raises(McpStdioError, match="not enabled without an explicit"):
+        session.receive_line(
+            '{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n'
+        )
+
+
+def test_stdio_session_returns_fixed_error_for_invalid_tool_request_without_audit() -> None:
+    sink = InMemoryToolAuditSink()
+    session = _ready_session(
+        tool_call_boundary=McpToolCallBoundary(
+            registry=ToolRegistry((SAFE_TEXT_CASE,)),
+            authorization_policy=ToolAuthorizationPolicy({"safe_text_case": ToolRisk.LOW}),
+            execution_policy=ToolExecutionPolicy(timeout_seconds=0.5),
+            audit_sink=sink,
+        )
+    )
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":'
+        '{"name":"not_allowlisted","arguments":{"text":"secret","operation":"upper"}}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line)["result"] == {
+        "content": [{"type": "text", "text": "Tool request was denied or failed."}],
+        "isError": True,
+    }
+    assert sink.events == ()
+
+
+def test_stdio_session_hides_handler_error_and_audits_failed_pure_tool_call() -> None:
+    def failing_handler(_: Mapping[str, object]) -> Mapping[str, object]:
+        raise RuntimeError("test-only handler detail must not cross the transport boundary")
+
+    sink = InMemoryToolAuditSink()
+    session = _ready_session(
+        tool_call_boundary=McpToolCallBoundary(
+            registry=ToolRegistry(
+                (
+                    ToolSpec(
+                        "failing_text",
+                        "Fails without touching an external system.",
+                        SAFE_TEXT_CASE.input_schema,
+                        failing_handler,
+                    ),
+                )
+            ),
+            authorization_policy=ToolAuthorizationPolicy({"failing_text": ToolRisk.LOW}),
+            execution_policy=ToolExecutionPolicy(timeout_seconds=0.5),
+            audit_sink=sink,
+        )
+    )
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"call-failure","method":"tools/call","params":'
+        '{"name":"failing_text","arguments":{"text":"safe","operation":"upper"}}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line)["result"] == {
+        "content": [{"type": "text", "text": "Tool request was denied or failed."}],
+        "isError": True,
+    }
+    assert sink.events[0].outcome is ToolAuditOutcome.FAILED
+    assert "safe" not in str(sink.events[0])
+
+
 @pytest.mark.parametrize(
     ("raw_line", "message"),
     (
@@ -375,7 +488,10 @@ def test_stdio_session_rejects_ambiguous_or_non_allowlisted_prompt_get(
             '"params":{"cursor":"unexpected"}}\n',
             "prompts/list params must be empty",
         ),
-        ('{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n', "no MCP methods"),
+        (
+            '{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n',
+            "not enabled without an explicit",
+        ),
         (
             '{"jsonrpc":"2.0","id":"unknown-001","method":"unknown/method",'
             '"params":{}}\n',
@@ -395,12 +511,12 @@ def test_stdio_session_rejects_non_read_only_or_ambiguous_ready_methods(
 
 
 
-def test_stdio_session_never_dispatches_tool_methods_after_handshake() -> None:
+def test_stdio_session_rejects_tool_calls_without_explicit_boundary() -> None:
     session = McpStdioSession()
     session.receive_line(_initialize_line())
     session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
 
-    with pytest.raises(McpStdioError, match="no MCP methods are enabled"):
+    with pytest.raises(McpStdioError, match="not enabled without an explicit"):
         session.receive_line(
             '{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n'
         )

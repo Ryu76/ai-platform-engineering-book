@@ -1,7 +1,8 @@
-"""한 줄 JSON-RPC와 read-only catalog 목록만 검증하는 MCP STDIO adapter.
+"""한 줄 JSON-RPC와 좁은 catalog·명시적 Tool call 경계를 검증하는 MCP STDIO adapter.
 
-이 모듈은 실제 ``sys.stdin``/``sys.stdout``를 열거나 Tool을 실행하지 않는다. 호출자는
-입력 줄 하나를 ``receive_line()``에 전달하고, 반환된 한 줄만 stdout에 쓸 수 있다.
+이 모듈은 실제 ``sys.stdin``/``sys.stdout``를 열지 않는다. 호출자는 입력 줄 하나를
+``receive_line()``에 전달하고 반환된 한 줄만 stdout에 쓸 수 있다. Tool 실행은 명시적인
+``McpToolCallBoundary``를 전달했을 때에만 기존 dispatcher를 통해 일어난다.
 """
 from __future__ import annotations
 
@@ -13,11 +14,18 @@ from enum import StrEnum
 from types import MappingProxyType
 
 from ai_platform.mcp.catalog import McpServerCatalog
+from ai_platform.mcp.dispatcher import McpDispatchError, dispatch_mcp_tool_call
 from ai_platform.mcp.prompts import McpPromptCatalog, McpPromptError
+from ai_platform.mcp.requests import McpCallRequestError
 from ai_platform.mcp.resources import McpResourceCatalog, McpResourceError
+from ai_platform.tools.audit import InMemoryToolAuditSink
+from ai_platform.tools.authorization import ApprovalGrant, ToolAuthorizationPolicy
+from ai_platform.tools.execution import ToolExecutionPolicy
+from ai_platform.tools.registry import ToolRegistry, ToolRegistryError, ToolResult
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
 DEFAULT_MAX_MESSAGE_BYTES = 16_384
+MAX_TOOL_RESULT_TEXT_BYTES = 4_096
 
 
 class McpStdioError(ValueError):
@@ -51,14 +59,52 @@ class McpJsonRpcRequest:
         return self.request_id is None
 
 
+@dataclass(frozen=True, slots=True)
+class McpToolCallBoundary:
+    """검토된 Tool 실행 정책을 STDIO transport와 명시적으로 연결하는 설정이다.
+
+    이 경계는 handler나 caller가 보낸 승인·정책을 받지 않는다. 생성 시점에 신뢰된
+    host가 구성한 registry, authorization, execution, audit만 사용한다.
+    """
+
+    registry: ToolRegistry
+    authorization_policy: ToolAuthorizationPolicy
+    execution_policy: ToolExecutionPolicy
+    audit_sink: InMemoryToolAuditSink
+    approval: ApprovalGrant | None = None
+
+    def dispatch(self, request: McpJsonRpcRequest) -> ToolResult:
+        """검증된 JSON-RPC params를 기존 parser·dispatcher 경계로 다시 전달한다."""
+        if request.request_id is None:
+            raise McpStdioError("tools/call must include a JSON-RPC request id")
+        try:
+            raw_request = json.dumps(
+                dict(request.params),
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        except (TypeError, ValueError) as error:
+            raise McpStdioError("tools/call params must be JSON serializable") from error
+        return dispatch_mcp_tool_call(
+            self.registry,
+            request_id=_tool_audit_request_id(request.request_id),
+            raw_request=raw_request,
+            authorization_policy=self.authorization_policy,
+            execution_policy=self.execution_policy,
+            audit_sink=self.audit_sink,
+            approval=self.approval,
+        )
+
+
 class McpStdioSession:
-    """고정 lifecycle 뒤 catalog를 read-only 목록 method로만 노출한다.
+    """고정 lifecycle 뒤 catalog와 명시적으로 연결한 Tool call만 좁게 노출한다.
 
     ``tools/list``, ``resources/list``, ``prompts/list``은 고정된 catalog snapshot만
     응답한다. ``resources/read``은 exact allowlisted URI의 내장 text snapshot만,
     ``prompts/get``은 exact allowlisted name과 빈 arguments의 고정 message snapshot만
-    응답한다. ``tools/call``을 포함한 다른 모든 method는 dispatcher에 전달하지 않으므로
-    transport metadata가 Tool 실행 인자나 승인 입력으로 섞일 수 없다. Resource URI도
+    응답한다. ``tools/call``은 명시적인 ``McpToolCallBoundary``가 있을 때만 기존
+    parser·allowlist·승인·timeout/retry·감사 dispatcher로 연결한다. Resource URI는
     catalog lookup key일 뿐 파일 경로 또는 URL로 해석하지 않는다.
     """
 
@@ -68,6 +114,7 @@ class McpStdioSession:
         catalog: McpServerCatalog | None = None,
         resource_catalog: McpResourceCatalog | None = None,
         prompt_catalog: McpPromptCatalog | None = None,
+        tool_call_boundary: McpToolCallBoundary | None = None,
         max_message_bytes: int = DEFAULT_MAX_MESSAGE_BYTES,
     ) -> None:
         _validate_max_message_bytes(max_message_bytes)
@@ -75,6 +122,7 @@ class McpStdioSession:
         self._catalog = catalog or McpServerCatalog(())
         self._resource_catalog = resource_catalog or McpResourceCatalog(())
         self._prompt_catalog = prompt_catalog or McpPromptCatalog(())
+        self._tool_call_boundary = tool_call_boundary
         self._state = McpStdioState.WAITING_FOR_INITIALIZE
 
     @property
@@ -83,7 +131,7 @@ class McpStdioSession:
         return self._state
 
     def receive_line(self, raw_line: str) -> str | None:
-        """한 framed line을 검증하고 initialize 또는 read-only catalog response를 반환한다."""
+        """한 framed line을 검증하고 lifecycle·catalog·Tool call response를 반환한다."""
         if self._state is McpStdioState.CLOSED:
             raise McpStdioError("STDIO session is closed")
 
@@ -133,21 +181,25 @@ class McpStdioSession:
         self._state = McpStdioState.READY
 
     def _receive_ready_request(self, request: McpJsonRpcRequest) -> str:
-        """READY에서는 execution-free catalog와 고정 Resource/Prompt snapshot만 허용한다."""
+        """READY에서는 명시적으로 구성한 Tool call과 좁은 snapshot만 허용한다."""
         if request.method not in {
             "tools/list",
+            "tools/call",
             "resources/list",
             "resources/read",
             "prompts/list",
             "prompts/get",
         }:
             raise McpStdioError(
-                "no MCP methods are enabled besides read-only tools/list, resources/list, "
-                "fixed resources/read, prompts/list, and fixed prompts/get in this adapter"
+                "no MCP methods are enabled besides tools/list, optionally configured "
+                "tools/call, resources/list, fixed resources/read, prompts/list, and fixed "
+                "prompts/get in this adapter"
             )
         if request.is_notification:
             raise McpStdioError(f"{request.method} must include a JSON-RPC request id")
-        if request.method == "resources/read":
+        if request.method == "tools/call":
+            result = self._call_configured_tool(request)
+        elif request.method == "resources/read":
             result = self._read_fixed_resource(request.params)
         elif request.method == "prompts/get":
             result = self._get_fixed_prompt(request.params)
@@ -167,6 +219,18 @@ class McpStdioSession:
             },
             max_message_bytes=self._max_message_bytes,
         )
+
+    def _call_configured_tool(self, request: McpJsonRpcRequest) -> dict[str, object]:
+        """검토된 boundary에서만 Tool을 호출하고 실패 세부정보를 transport에 노출하지 않는다."""
+        if self._tool_call_boundary is None:
+            raise McpStdioError("tools/call is not enabled without an explicit tool call boundary")
+        try:
+            result = self._tool_call_boundary.dispatch(request)
+            return _mcp_tool_success_result(result)
+        except (McpCallRequestError, McpDispatchError, ToolRegistryError, McpStdioError):
+            return _mcp_tool_error_result()
+        except Exception:
+            return _mcp_tool_error_result()
 
     def _read_fixed_resource(self, params: Mapping[str, object]) -> dict[str, object]:
         """exact URI의 내장 text snapshot만 MCP contents envelope로 반환한다."""
@@ -342,3 +406,35 @@ def _validate_initialize_params(params: Mapping[str, object]) -> None:
         isinstance(client_info[key], str) and client_info[key].strip() for key in client_info
     ):
         raise McpStdioError("initialize clientInfo name and version must be non-empty strings")
+
+
+def _tool_audit_request_id(request_id: str | int) -> str:
+    """string과 integer JSON-RPC ID가 같은 audit correlation ID로 충돌하지 않게 만든다."""
+    if isinstance(request_id, str):
+        return f"mcp-stdio:string:{request_id}"
+    return f"mcp-stdio:integer:{request_id}"
+
+
+def _mcp_tool_success_result(result: ToolResult) -> dict[str, object]:
+    """작고 JSON인 Tool output만 표준 text content snapshot으로 투영한다."""
+    try:
+        text = json.dumps(
+            dict(result.output),
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+        )
+        byte_count = len(text.encode("utf-8"))
+    except (TypeError, UnicodeEncodeError, ValueError):
+        return _mcp_tool_error_result()
+    if byte_count > MAX_TOOL_RESULT_TEXT_BYTES:
+        return _mcp_tool_error_result()
+    return {"content": [{"type": "text", "text": text}], "isError": False}
+
+
+def _mcp_tool_error_result() -> dict[str, object]:
+    """거부·실패 원인, 인자, handler 예외를 노출하지 않는 고정 MCP Tool result다."""
+    return {
+        "content": [{"type": "text", "text": "Tool request was denied or failed."}],
+        "isError": True,
+    }

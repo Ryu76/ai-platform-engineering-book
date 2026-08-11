@@ -2,34 +2,34 @@
 
 ## 현재 상태
 
-- 현재 Phase: **MCP STDIO READY state의 고정 allowlisted `resources/read` text snapshot projection**
-- 완료 선언: 아직 하지 않음. 실제 STDIO process I/O wiring, error/EOF policy, 검토된 `tools/call` dispatcher 연결, Hermes/Codex 연동을 구현·문서화·검증해야 합니다.
+- 현재 Phase: **MCP STDIO READY state의 explicit boundary 기반 allowlisted `tools/call` projection**
+- 완료 선언: 아직 하지 않음. 실제 STDIO process I/O wiring, EOF/error policy, Hermes/Codex 연동과 전체 운영 DoD를 구현·문서화·검증해야 합니다.
 
-## 이번 슬라이스: handshake 뒤 고정 Resource 하나만 경로 해석 없이 조회
+## 이번 슬라이스: explicit 실행 경계가 있을 때만 순수 Tool 하나를 dispatcher로 연결
 
 - `src/ai_platform/mcp/stdio.py`
-  - `McpStdioSession`은 기존 한 줄 JSON-RPC framing·고정 initialize lifecycle 뒤 `tools/list`, `resources/list`, `resources/read`, `prompts/list`, `prompts/get` request만 받습니다.
-  - `resources/read`는 request ID와 exact allowlisted `uri` 하나만 검증하고 `McpResourceCatalog.read_resource()`의 고정 `text/plain` snapshot을 MCP `contents` result envelope로 투영합니다.
-  - notification, URI 누락·공백, alias, `file:///...`, extra params와 미등록 URI는 거부합니다. URI 정규화·path 해석, loader, dispatcher, 승인, retry, audit, 실제 process I/O, 파일·셸·네트워크는 호출하지 않습니다.
-- `examples/volume03/mcp_stdio_resources_read.py`
-  - 코드에 명시한 정적 `ai-platform://volume03/transport-boundary` Resource로 메모리 JSON-RPC handshake와 `resources/read`을 확인하고 `ai-platform://volume03/transport-boundary: fixed snapshot`만 출력합니다.
+  - `McpToolCallBoundary`는 host가 구성한 `ToolRegistry`, 위험도 정책, timeout/retry 정책, 최소 audit sink와 선택적인 trusted approval만 묶습니다. caller JSON은 handler, policy, approval, timeout, audit sink를 공급할 수 없습니다.
+  - `McpStdioSession`은 기존 handshake 뒤 `tools/call`을 기본적으로 거부하며, explicit boundary가 있을 때에만 transport `params`를 compact JSON으로 재구성해 기존 `parse_mcp_tool_call_request()`와 `dispatch_mcp_tool_call()`에 전달합니다.
+  - string/integer JSON-RPC ID는 각각 `mcp-stdio:string:<id>` / `mcp-stdio:integer:<id>` audit ID가 되어 충돌하지 않습니다. success output은 최대 4,096 UTF-8 byte의 JSON text content로만 투영합니다.
+  - Tool parser·allowlist·Schema·approval·timeout/retry·handler·output projection 실패는 원문 인자·예외·정책 detail을 포함하지 않는 고정 `isError: true` MCP Tool result로 반환합니다. malformed framing/lifecycle/notification/no-boundary는 실행 전에 `McpStdioError`로 거부합니다.
+- `src/ai_platform/mcp/__init__.py`
+  - `McpToolCallBoundary`를 Volume 03 MCP public export에 추가했습니다.
+- `examples/volume03/mcp_stdio_tools_call.py`
+  - in-memory handshake 뒤 코드에 allowlist한 순수 `SAFE_TEXT_CASE`의 고정 upper-case request 하나만 호출하고 `safe_text_case: MCP`를 출력합니다.
 - `tests/volume03/test_mcp_stdio.py`
-  - fixed Resource snapshot response와 READY state 유지, request ID 없는 notification, URI 누락, alias, file URI, extra param 거부를 검증합니다.
-- `docs/volume03-tool-calling-mcp/16-mcp-stdio-resources-read.md`
-  - 좁은 request/response 계약, `contents` envelope, static snapshot과 동적 loader를 분리하는 이유, offline 실습, rejection, 운영 loader 경계를 문서화했습니다.
+  - pure Tool success projection과 audit correlation, boundary 없는 default rejection, parser/allowlist 전 거부의 no-audit, handler error의 fixed result 및 failed audit을 검증합니다.
+- `docs/volume03-tool-calling-mcp/17-mcp-stdio-tools-call.md`
+  - explicit boundary 계약, success/error result policy, output size limit, offline exercise, rejection과 운영 transport 경계를 문서화했습니다.
 - `docs/volume03-tool-calling-mcp/README.md`
-  - 열여섯 번째 학습 장을 목록에 추가했습니다.
+  - 열일곱 번째 학습 장을 목록에 추가했습니다.
 
 ## 검증 기록
 
 실행 위치: `E:\python\ai-platform-engineering-book-volume-03`
 
 ```text
-$ uv run python examples/volume03/mcp_stdio_resources_read.py
-ai-platform://volume03/transport-boundary: fixed snapshot
-
-$ uv run pytest tests/volume03/test_mcp_stdio.py -q
-37 passed in 0.17s
+$ uv run python examples/volume03/mcp_stdio_tools_call.py
+safe_text_case: MCP
 
 $ uv run ruff check .
 All checks passed!
@@ -37,27 +37,18 @@ All checks passed!
 $ uv run mypy src
 Success: no issues found in 20 source files
 
+$ uv run pytest tests/volume03/test_mcp_stdio.py -q
+41 passed in 0.23s
+
 $ uv run pytest -q
-151 passed in 0.96s
-
-$ uv run python scripts/validate_docs.py
-문서 검증 통과: Volume 11개
-
-$ uv run python scripts/validate_links.py
-링크 검증 통과
-
-$ uv run python scripts/validate_code_blocks.py
-코드 블록 검증 통과
-
-$ uv run python scripts/check_secrets.py
-비밀값 검사 통과
+155 passed in 1.16s
 
 $ git diff --check
 (exit 0)
 ```
 
-모든 `uv` 명령은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만 프로젝트 가상환경에서 정상 실행했습니다. `validate_docs.py`는 기존 validator가 보고한 Volume 11개를 출력했으나 새 문서의 링크·코드 블록 검증은 통과했습니다. 실제 표준 입출력, MCP 통신, 파일·시스템 변경, 외부 네트워크 요청, 실제 destructive Tool 실행은 수행하지 않았습니다.
+모든 `uv` 명령은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만 프로젝트 가상환경에서 정상 실행했습니다. 실제 `sys.stdin`/`sys.stdout`, filesystem, shell, subprocess, network, 외부 MCP server, 실제 destructive Tool은 사용하지 않았습니다. 테스트의 failure handler는 외부 부작용 없이 예외만 발생시키고, 예제 Tool은 문자열 변환만 수행합니다.
 
 ## 다음 슬라이스
 
-실제 process I/O는 계속 열지 않고, READY 뒤 검토된 `tools/call` request를 기존 `McpToolCallRequest` parser와 dispatcher에 연결할 수 있는지 별도 adapter로 좁게 모델링합니다. request envelope, allowlist·Schema 재검증, 승인/timeout/retry/audit 결과 projection과 JSON-RPC error policy를 명시하며, handler가 실제 destructive action을 하지 않는 allowlisted pure Tool만 사용합니다.
+실제 외부 service나 destructive Tool을 열지 않고, 명시적 boundary의 JSON-RPC request ID와 approval correlation을 더 좁게 검증할 수 있는 standalone validation slice를 검토합니다. 실제 STDIO process I/O, EOF/error response, cancellation, durable audit, Hermes/Codex integration은 별도 설계·문서·테스트가 필요하며 이 교육용 in-memory adapter에 무분별하게 추가하지 않습니다.
