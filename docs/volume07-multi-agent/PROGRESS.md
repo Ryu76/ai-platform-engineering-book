@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 20: Chapter 01 PRD 학습 문서 완성도 확장
+
+- `01-bounded-review-workflow.md`를 PRD Chapter template의 14개 항목(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 실제 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다.
+- 문서는 Reviewer의 `ReviewDecision`과 QA를 여는 `HumanApproval`을 분리하고, immutable `AgentContext.messages`, deterministic fixed tuple Mock, `max_review_cycles`, `PENDING`/`APPROVED`/`REJECTED` fail-closed 경계를 실제 `workflow.py`와 예제의 동작에 맞춰 설명한다.
+- `uv run python examples/volume07/offline_review_workflow.py`와 `--approve` 경로를 실제 실행해 각각 `awaiting_human_approval`(QA 없음)과 `completed`(local QA message)을 확인했다. `uv run pytest tests/volume07/test_bounded_review_workflow.py -q`는 7 passed, 전체 `uv run pytest tests/volume07 -q`는 58 passed였다. live API, secret, network Agent, tool 실행, 파일 변경, deployment는 추가하거나 사용하지 않았다.
+
 ## 2026-08-11 — Slice 19: stage별 사람 승인 flag 격리 계약
 
 - `tests/volume07/test_offline_multi_agent_mini_project.py`는 이제 review, delegation, conflict, release의 네 단일 `--approve-*` 실행을 각각 subprocess로 검증한다. 선택한 stage 하나만 `completed`이며 나머지 세 stage는 계속 `awaiting_human_approval`이어야 한다.
