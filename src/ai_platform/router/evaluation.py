@@ -1,4 +1,5 @@
 """고정 dataset으로 Keyword Router 결정을 외부 호출 없이 평가한다."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

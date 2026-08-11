@@ -1,4 +1,5 @@
 """외부 모델 호출 없이 라우팅 계약과 검증 규칙을 정의한다."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

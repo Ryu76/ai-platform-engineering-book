@@ -1,4 +1,5 @@
 """Volume 08 Semantic Router의 외부 호출 없는 결정론적 계약 테스트."""
+
 import json
 from decimal import Decimal
 
@@ -127,9 +128,9 @@ def test_semantic_router_does_not_bypass_policy_permissions_or_capability_requir
 
 def test_semantic_decision_log_is_json_serializable_and_omits_request_text() -> None:
     secret_text = "do not log this customer secret"
-    record = _router().route(
-        RoutingRequest(request_id="semantic-001", text=secret_text)
-    ).as_log_record()
+    record = (
+        _router().route(RoutingRequest(request_id="semantic-001", text=secret_text)).as_log_record()
+    )
 
     assert record["classifier_name"] == "fixed-semantic-router"
     assert record["intent"] == "order_tracking"
@@ -148,9 +149,7 @@ def test_semantic_decision_log_is_json_serializable_and_omits_request_text() -> 
                 name="single-policy",
                 targets=(_target("single-agent", frozenset({"respond"})),),
             ),
-            routes=(
-                SemanticRoute("single", frozenset({"respond"})),
-            ),
+            routes=(SemanticRoute("single", frozenset({"respond"})),),
             score_fixtures=(
                 SemanticScoreFixture(
                     request_id="missing-score-001",

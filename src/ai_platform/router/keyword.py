@@ -1,4 +1,5 @@
 """고정 keyword fixture와 정책 Router를 결합하는 결정론적 intent Router."""
+
 from __future__ import annotations
 
 import re

@@ -447,3 +447,45 @@ PRD DoD 상태:
 다음 슬라이스:
 
 - 허용 범위가 공유 Glossary까지 확장되면 Volume 08 Router 주요 용어를 `docs/glossary.md`에 추가하고, 전체 Volume DoD를 다시 검증한 뒤에만 완료 marker와 self-pause를 처리합니다.
+
+## 2026-08-11 — Tick 11: Volume 08 범위 formatting 회귀 정리와 완료 경계 재검증
+
+완료한 범위:
+
+- Volume 08 전용 source, example, unit test 전체에 `ruff format`을 적용했습니다. 이전 slice에서 개별 신규 파일은 format 검사를 통과했지만, 범위 전체 검사에서는 기존 18개 파일이 현재 formatter 규칙과 불일치했습니다.
+- 형식 변경만 적용했으며 Router 정책, 고정 fixture, 결정 결과, 외부 호출 경계는 변경하지 않았습니다.
+- 고정 fixture 미니 프로젝트가 policy, rule, keyword, semantic, LLM, fallback, escalation, API 여덟 경로를 계속 결정론적으로 출력하고 원문을 report에 포함하지 않음을 재실행으로 확인했습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+32 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 12 source files
+
+uv run pytest tests/unit/test_volume08_*.py -q
+75 passed in 0.59s
+
+uv run pytest -q
+136 passed in 1.13s
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 JSON report 출력; 모든 예상 target·intent·attempt 순서는 조합 테스트에서 검증
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- 허용된 Volume 08 Router 범위의 구현·예제·테스트·학습자 체크리스트·미니 프로젝트·문서 검증은 모두 재검증했습니다.
+- 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 범위는 여전히 남아 있습니다. 현재 사용자 지시는 해당 공유 문서 변경을 금지하므로 이 tick에서는 수정하지 않았습니다.
+- 따라서 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.

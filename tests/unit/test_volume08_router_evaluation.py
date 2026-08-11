@@ -1,4 +1,5 @@
 """Volume 08 Keyword Router 평가의 외부 호출 없는 결정론적 계약 테스트."""
+
 import json
 from decimal import Decimal
 
@@ -103,16 +104,12 @@ def test_evaluation_measures_routes_and_two_safe_failure_modes() -> None:
             _case(
                 "unknown-safe-failure",
                 "hello there",
-                KeywordRoutingExpectation(
-                    outcome=KeywordRoutingOutcome.NO_CONFIDENT_KEYWORD_ROUTE
-                ),
+                KeywordRoutingExpectation(outcome=KeywordRoutingOutcome.NO_CONFIDENT_KEYWORD_ROUTE),
             ),
             _case(
                 "permission-safe-failure",
                 "refund please",
-                KeywordRoutingExpectation(
-                    outcome=KeywordRoutingOutcome.NO_ELIGIBLE_POLICY_ROUTE
-                ),
+                KeywordRoutingExpectation(outcome=KeywordRoutingOutcome.NO_ELIGIBLE_POLICY_ROUTE),
                 permitted_target_names=frozenset({"general-agent"}),
             ),
         ),
@@ -143,9 +140,7 @@ def test_evaluation_reports_mismatches_and_enforces_an_explicit_accuracy_gate() 
             _case(
                 "correct-safe-failure",
                 "unrelated request",
-                KeywordRoutingExpectation(
-                    outcome=KeywordRoutingOutcome.NO_CONFIDENT_KEYWORD_ROUTE
-                ),
+                KeywordRoutingExpectation(outcome=KeywordRoutingOutcome.NO_CONFIDENT_KEYWORD_ROUTE),
             ),
         ),
     )
@@ -165,9 +160,7 @@ def test_evaluation_report_log_is_json_serializable_and_omits_user_text() -> Non
             _case(
                 "private-case",
                 secret_text,
-                KeywordRoutingExpectation(
-                    outcome=KeywordRoutingOutcome.NO_CONFIDENT_KEYWORD_ROUTE
-                ),
+                KeywordRoutingExpectation(outcome=KeywordRoutingOutcome.NO_CONFIDENT_KEYWORD_ROUTE),
             ),
         ),
     )
@@ -231,9 +224,7 @@ def test_evaluation_rejects_invalid_accuracy_thresholds(minimum_accuracy: Decima
             _case(
                 "threshold-case",
                 "hello",
-                KeywordRoutingExpectation(
-                    outcome=KeywordRoutingOutcome.NO_CONFIDENT_KEYWORD_ROUTE
-                ),
+                KeywordRoutingExpectation(outcome=KeywordRoutingOutcome.NO_CONFIDENT_KEYWORD_ROUTE),
             ),
         ),
     )

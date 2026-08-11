@@ -1,4 +1,5 @@
 """고정 keyword fixture와 정책 제약을 결합하는 Volume 08 예제."""
+
 from __future__ import annotations
 
 import json

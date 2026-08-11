@@ -1,4 +1,5 @@
 """Volume 08 LLM Router의 외부 호출 없는 결정론적 계약 테스트."""
+
 import json
 from decimal import Decimal
 
@@ -122,9 +123,7 @@ def test_llm_router_does_not_bypass_policy_permissions_or_capability_requirement
 
 def test_llm_decision_log_is_json_serializable_and_omits_request_text() -> None:
     secret_text = "do not log this customer secret"
-    record = _router().route(
-        RoutingRequest(request_id="llm-001", text=secret_text)
-    ).as_log_record()
+    record = _router().route(RoutingRequest(request_id="llm-001", text=secret_text)).as_log_record()
 
     assert record["classifier_name"] == "fixed-llm-router"
     assert record["intent"] == "order_tracking"

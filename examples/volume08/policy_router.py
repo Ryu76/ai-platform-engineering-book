@@ -1,4 +1,5 @@
 """고정 정책과 fixture만으로 Router 결정을 재현하는 Volume 08 예제."""
+
 from __future__ import annotations
 
 import json

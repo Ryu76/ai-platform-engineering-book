@@ -1,4 +1,5 @@
 """고정 semantic score fixture로 정책 경계를 지키는 Volume 08 예제."""
+
 from __future__ import annotations
 
 import json

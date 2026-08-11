@@ -1,4 +1,5 @@
 """Volume 08 keyword Router의 외부 호출 없는 결정론적 계약 테스트."""
+
 import json
 from decimal import Decimal
 

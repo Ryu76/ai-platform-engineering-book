@@ -1,4 +1,5 @@
 """고정 semantic score fixture와 정책 Router를 결합하는 결정론적 Semantic Router."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

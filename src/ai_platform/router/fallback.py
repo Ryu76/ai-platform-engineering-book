@@ -1,4 +1,5 @@
 """정책 경계를 유지한 채 제한된 fallback을 수행하는 결정론적 Router."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,4 +1,5 @@
 """Volume 08 policy fallback Router의 외부 호출 없는 결정론적 계약 테스트."""
+
 import json
 from decimal import Decimal
 
@@ -94,9 +95,7 @@ def test_fallback_does_not_bypass_cost_or_permission_constraints() -> None:
     router = PolicyFallbackRouter(
         name="constrained-fallback-router",
         primary_router=_policy("primary-policy", _target("primary-agent", cost="0.010")),
-        fallback_routers=(
-            _policy("fallback-policy", _target("fallback-agent", cost="0.009")),
-        ),
+        fallback_routers=(_policy("fallback-policy", _target("fallback-agent", cost="0.009")),),
         retry_budget=1,
     )
     request = RoutingRequest(
@@ -119,9 +118,7 @@ def test_fallback_success_and_exhaustion_logs_are_json_serializable_and_omit_req
     successful_router = PolicyFallbackRouter(
         name="logging-fallback-router",
         primary_router=_policy("unhealthy-primary", _target("unhealthy-agent", healthy=False)),
-        fallback_routers=(
-            _policy("healthy-fallback", _target("healthy-agent")),
-        ),
+        fallback_routers=(_policy("healthy-fallback", _target("healthy-agent")),),
         retry_budget=1,
     )
     request = RoutingRequest(request_id="fallback-004", text=secret_text)
@@ -170,9 +167,7 @@ def test_fallback_success_and_exhaustion_logs_are_json_serializable_and_omit_req
         lambda: PolicyFallbackRouter(
             name="duplicate-policy-router",
             primary_router=_policy("same-policy", _target("primary-agent")),
-            fallback_routers=(
-                _policy("same-policy", _target("fallback-agent")),
-            ),
+            fallback_routers=(_policy("same-policy", _target("fallback-agent")),),
             retry_budget=1,
         ),
     ],
