@@ -2,6 +2,36 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 11: AI 서비스 장애 대응과 관측 비용의 증거·결정 경계
+
+### 완료한 범위
+
+- [AI 서비스 장애 대응과 관측 비용: 증거·결정·중단 경계](11-incident-response-observability-cost-boundaries.md) 장을 추가했습니다.
+  - `/livez`, `/readyz`, request completion event, 최소 telemetry, exporter callback이 각각 말해 주는 것과 말해 주지 않는 것을 분리했습니다.
+  - 탐지 후보, 영향 분류, 최소 증거 보존, 완화 변경 통제, 복구 검증, 사후 검토를 명령이 아닌 decision 단계로 구성했습니다.
+  - readiness failure와 exporter failure를 별도 가설로 다루고, raw request input·request ID·credential·exception detail을 incident note나 telemetry dimension으로 복사하지 않는 경계를 명시했습니다.
+  - metric cardinality, trace sampling, log payload, retention, delivery/backpressure를 비용·privacy·owner·alert action 기준과 함께 검토하도록 했습니다.
+- 모든 시간·threshold·비용·서비스 이름은 sample 또는 placeholder이며, 예제에 실제 alert, on-call, telemetry backend, query, cluster, Secret, credential, endpoint 또는 deployment를 추가하지 않았습니다.
+- README와 Volume 11 artifact 통합 테스트를 갱신했습니다.
+  - 새 장 링크와 exporter/readiness 분리, cardinality budget, sampling, retention, 오프라인 범위를 검증합니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run pytest tests/unit/test_volume11_health.py tests/unit/test_volume11_dependencies.py tests/unit/test_volume11_telemetry.py tests/integration/test_volume11_health_artifacts.py -q` | 통과 — 29 passed |
+| `uv run ruff check .`, `uv run mypy src`, `uv run pytest -q` | 통과 — Ruff 전체 통과, mypy 13 source files 문제 없음, 전체 90 passed |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — 문서 11개, 링크·코드 블록·비밀값 검사 통과 |
+
+### 남은 범위
+
+- Volume 미니 프로젝트 작성하기
+- 전체 체크리스트, 용어집 인계 및 Volume 전체 검증 완료하기
+
+### 다음 Slice
+
+예제 값과 로컬·오프라인 검증만 사용해 health, dependency readiness, correlation, telemetry와 render-only Manifest 경계를 묶는 Volume 미니 프로젝트를 작성하고, 실제 cluster, alert, telemetry backend, Secret, credential 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 10: Telemetry 데이터 최소화와 exporter failure의 로컬 격리 경계
 
 ### 완료한 범위

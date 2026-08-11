@@ -297,6 +297,9 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     telemetry_chapter = (VOLUME / "10-telemetry-data-minimization-exporter-failure.md").read_text(
         encoding="utf-8"
     )
+    incident_chapter = (
+        VOLUME / "11-incident-response-observability-cost-boundaries.md"
+    ).read_text(encoding="utf-8")
     readme = (VOLUME / "README.md").read_text(encoding="utf-8")
 
     assert "](01-health-probes.md)" in readme
@@ -309,6 +312,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "](08-rolling-update-rollback-boundary.md)" in readme
     assert "](09-structured-correlation-logging-boundary.md)" in readme
     assert "](10-telemetry-data-minimization-exporter-failure.md)" in readme
+    assert "](11-incident-response-observability-cost-boundaries.md)" in readme
     combined_chapters = (
         health_chapter
         + dependency_chapter
@@ -320,6 +324,7 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
         + rollout_chapter
         + correlation_chapter
         + telemetry_chapter
+        + incident_chapter
     )
     for relative_path in (
         "src/ai_platform/api/health.py",
@@ -385,6 +390,13 @@ def test_volume11_chapters_link_to_existing_artifacts_and_offline_verification()
     assert "exporter failure" in telemetry_chapter
     assert "metric endpoint" in telemetry_chapter
     assert "cluster 연결 또는 deployment를 실행하지 마세요" in telemetry_chapter
+    assert "exporter failure를 readiness failure로 승격하지 않는다" in incident_chapter
+    assert "cardinality budget" in incident_chapter
+    assert "sampling" in incident_chapter
+    assert "retention" in incident_chapter
+    assert "actual alert" not in incident_chapter.lower()
+    assert "kubectl apply" in incident_chapter
+    assert "cluster 연결 또는 deployment를 실행하지 마세요" in incident_chapter
     assert "클러스터에 적용하거나 배포하지 않습니다" in (
         health_chapter + dependency_chapter + ingress_chapter
     )
