@@ -1,4 +1,4 @@
-"""고정 semantic score fixture와 정책 Router를 결합하는 결정론적 Semantic Router."""
+"""고정 semantic score·embedding fixture와 정책 경계를 결합하는 Semantic Router."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from ai_platform.router.policy import PolicyRouter
 
 
 class NoSemanticScoreFixtureError(NoEligibleRouteError):
-    """요청 ID에 대응하는 고정 semantic score fixture가 없을 때 발생한다."""
+    """요청 ID에 대응하는 고정 semantic fixture가 없을 때 발생한다."""
 
 
 class NoConfidentSemanticRouteError(NoEligibleRouteError):
@@ -73,6 +73,40 @@ class SemanticScoreFixture:
 
 
 @dataclass(frozen=True, slots=True)
+class SemanticIntentEmbedding:
+    """한 intent의 고정된 비음수 Decimal embedding vector다."""
+
+    intent: str
+    embedding: tuple[Decimal, ...]
+
+    def __post_init__(self) -> None:
+        """intent와 재현 가능한 local embedding 값을 검증한다."""
+        _validate_identifier(self.intent, "semantic embedding intent")
+        _validate_embedding(self.embedding, "semantic intent embedding")
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticEmbeddingFixture:
+    """요청 ID별 query·intent embedding으로 local cosine score를 재현한다."""
+
+    request_id: str
+    query_embedding: tuple[Decimal, ...]
+    intent_embeddings: tuple[SemanticIntentEmbedding, ...]
+
+    def __post_init__(self) -> None:
+        """fixture 자체의 식별자·vector·intent 중복을 fail closed 한다."""
+        _validate_identifier(self.request_id, "semantic embedding fixture request_id")
+        _validate_embedding(self.query_embedding, "semantic query embedding")
+        if not self.intent_embeddings:
+            raise RoutingConfigurationError(
+                "semantic embedding fixture must contain at least one intent embedding"
+            )
+        intents = [intent_embedding.intent for intent_embedding in self.intent_embeddings]
+        if len(intents) != len(set(intents)):
+            raise RoutingConfigurationError("semantic embedding fixture intents must be unique")
+
+
+@dataclass(frozen=True, slots=True)
 class SemanticRouteDecision:
     """Semantic intent 판정과 정책 대상 선택을 함께 보관한다."""
 
@@ -103,11 +137,14 @@ class SemanticRouteDecision:
 
 
 class SemanticRouter:
-    """고정 semantic score를 threshold로 판정한 뒤 PolicyRouter에 위임한다.
+    """고정 semantic score 또는 local embedding을 PolicyRouter 경계 안에서 판정한다.
 
-    score fixture는 ``request_id``로만 선택하며, 실제 embedding·LLM·네트워크 호출을 하지
-    않는다. 동점은 similarity가 높은 intent, 그 다음 intent 이름 순으로 해소한다. 선택된
-    intent capability는 원래 요청의 capability와 합쳐져 policy 경계를 다시 통과해야 한다.
+    fixture는 ``request_id``로만 선택하며 실제 embedding 모델·LLM·네트워크를 호출하지
+    않는다. embedding fixture는 비음수 ``Decimal`` vector의 local cosine similarity를
+    계산하고, score fixture는 검토된 similarity를 그대로 사용한다. 두 mode를 한 Router에
+    섞을 수 없다. 동점은 similarity가 높은 intent, 그 다음 intent 이름 순으로 해소한다.
+    선택된 intent capability는 원래 요청의 capability와 합쳐져 policy 경계를 다시 통과해야
+    한다.
     """
 
     def __init__(
@@ -116,30 +153,37 @@ class SemanticRouter:
         name: str,
         policy_router: PolicyRouter,
         routes: tuple[SemanticRoute, ...],
-        score_fixtures: tuple[SemanticScoreFixture, ...],
         minimum_similarity: Decimal,
+        score_fixtures: tuple[SemanticScoreFixture, ...] = (),
+        embedding_fixtures: tuple[SemanticEmbeddingFixture, ...] = (),
     ) -> None:
-        """완전한 고정 fixture와 명시적인 similarity threshold를 검증한다."""
+        """하나의 완전한 fixture mode와 명시적인 similarity threshold를 검증한다."""
         _validate_identifier(name, "semantic router name")
         if not routes:
             raise RoutingConfigurationError("semantic router must contain at least one route")
-        if not score_fixtures:
+        if bool(score_fixtures) == bool(embedding_fixtures):
             raise RoutingConfigurationError(
-                "semantic router must contain at least one score fixture"
+                "semantic router must contain score fixtures or embedding fixtures, but not both"
             )
         route_intents = tuple(route.intent for route in routes)
         if len(route_intents) != len(set(route_intents)):
             raise RoutingConfigurationError("semantic route intents must be unique")
-        fixture_request_ids = [fixture.request_id for fixture in score_fixtures]
+        fixtures: tuple[SemanticScoreFixture | SemanticEmbeddingFixture, ...]
+        fixtures = score_fixtures or embedding_fixtures
+        fixture_request_ids = [fixture.request_id for fixture in fixtures]
         if len(fixture_request_ids) != len(set(fixture_request_ids)):
-            raise RoutingConfigurationError("semantic score fixture request_ids must be unique")
+            raise RoutingConfigurationError("semantic fixture request_ids must be unique")
         expected_intents = set(route_intents)
-        for fixture in score_fixtures:
-            if {score.intent for score in fixture.intent_scores} != expected_intents:
-                raise RoutingConfigurationError(
-                    "each semantic score fixture must score every configured route intent "
-                    "exactly once"
-                )
+        if score_fixtures:
+            for score_fixture in score_fixtures:
+                if {score.intent for score in score_fixture.intent_scores} != expected_intents:
+                    raise RoutingConfigurationError(
+                        "each semantic score fixture must score every configured route intent "
+                        "exactly once"
+                    )
+        else:
+            for embedding_fixture in embedding_fixtures:
+                _validate_embedding_fixture(embedding_fixture, expected_intents)
         _validate_unit_decimal(minimum_similarity, "minimum_similarity")
         self._name = name
         self._policy_router = policy_router
@@ -147,17 +191,16 @@ class SemanticRouter:
         self._score_fixtures_by_request_id = {
             fixture.request_id: fixture for fixture in score_fixtures
         }
+        self._embedding_fixtures_by_request_id = {
+            fixture.request_id: fixture for fixture in embedding_fixtures
+        }
         self._minimum_similarity = minimum_similarity
 
     def route(self, request: RoutingRequest) -> SemanticRouteDecision:
-        """고정 점수의 최고 eligible intent를 policy 경계 안에서 대상으로 변환한다."""
-        fixture = self._score_fixtures_by_request_id.get(request.request_id)
-        if fixture is None:
-            raise NoSemanticScoreFixtureError(
-                "no semantic score fixture is configured for the routing request"
-            )
+        """고정 score 또는 local cosine similarity의 최고 intent를 policy 경계에 전달한다."""
+        intent_scores = self._intent_scores_for(request.request_id)
         eligible_scores = [
-            score for score in fixture.intent_scores if score.similarity >= self._minimum_similarity
+            score for score in intent_scores if score.similarity >= self._minimum_similarity
         ]
         if not eligible_scores:
             raise NoConfidentSemanticRouteError(
@@ -185,6 +228,27 @@ class SemanticRouter:
             policy_decision=self._policy_router.route(constrained_request),
         )
 
+    def _intent_scores_for(self, request_id: str) -> tuple[SemanticIntentScore, ...]:
+        """선택한 fixture mode에서 request ID의 모든 intent score를 얻는다."""
+        score_fixture = self._score_fixtures_by_request_id.get(request_id)
+        if score_fixture is not None:
+            return score_fixture.intent_scores
+        embedding_fixture = self._embedding_fixtures_by_request_id.get(request_id)
+        if embedding_fixture is None:
+            raise NoSemanticScoreFixtureError(
+                "no semantic score fixture or embedding fixture is configured "
+                "for the routing request"
+            )
+        return tuple(
+            SemanticIntentScore(
+                intent=intent_embedding.intent,
+                similarity=_cosine_similarity(
+                    embedding_fixture.query_embedding, intent_embedding.embedding
+                ),
+            )
+            for intent_embedding in embedding_fixture.intent_embeddings
+        )
+
 
 def _validate_identifier(value: object, name: str) -> None:
     """비어 있거나 문자열이 아닌 식별자를 거부한다."""
@@ -204,3 +268,63 @@ def _validate_unit_decimal(value: object, name: str) -> None:
         ) from error
     if not valid:
         raise RoutingConfigurationError(f"{name} must be a finite Decimal between 0 and 1")
+
+
+def _validate_embedding(embedding: object, name: str) -> None:
+    """local cosine fixture가 유한한 비음수·비영 vector만 사용하게 한다."""
+    if not isinstance(embedding, tuple) or not embedding:
+        raise RoutingConfigurationError(f"{name} must be a nonempty tuple of Decimal values")
+    if any(
+        not isinstance(component, Decimal) or not component.is_finite() for component in embedding
+    ):
+        raise RoutingConfigurationError(f"{name} must contain only finite Decimal values")
+    if any(component < Decimal("0") for component in embedding):
+        raise RoutingConfigurationError(f"{name} must contain only nonnegative Decimal values")
+    if not any(component > Decimal("0") for component in embedding):
+        raise RoutingConfigurationError(f"{name} must not be a zero vector")
+
+
+def _validate_embedding_fixture(
+    fixture: SemanticEmbeddingFixture, expected_intents: set[str]
+) -> None:
+    """한 embedding fixture가 모든 route와 같은 차원의 vector를 가리키게 한다."""
+    if {
+        intent_embedding.intent for intent_embedding in fixture.intent_embeddings
+    } != expected_intents:
+        raise RoutingConfigurationError(
+            "each semantic embedding fixture must embed every configured route intent exactly once"
+        )
+    if any(
+        len(intent_embedding.embedding) != len(fixture.query_embedding)
+        for intent_embedding in fixture.intent_embeddings
+    ):
+        raise RoutingConfigurationError(
+            "semantic embedding fixture query and intent embeddings must share one dimension"
+        )
+
+
+def _cosine_similarity(
+    query_embedding: tuple[Decimal, ...], intent_embedding: tuple[Decimal, ...]
+) -> Decimal:
+    """검증된 local vector 두 개의 cosine similarity를 Decimal로 계산한다."""
+    dot_product = sum(
+        (
+            query_component * intent_component
+            for query_component, intent_component in zip(
+                query_embedding, intent_embedding, strict=True
+            )
+        ),
+        Decimal("0"),
+    )
+    query_norm_squared = sum((component * component for component in query_embedding), Decimal("0"))
+    intent_norm_squared = sum(
+        (component * component for component in intent_embedding), Decimal("0")
+    )
+    try:
+        similarity = dot_product / (query_norm_squared.sqrt() * intent_norm_squared.sqrt())
+    except (InvalidOperation, ValueError) as error:
+        raise RoutingConfigurationError(
+            "semantic embedding fixture must produce a finite cosine similarity"
+        ) from error
+    _validate_unit_decimal(similarity, "semantic embedding cosine similarity")
+    return similarity

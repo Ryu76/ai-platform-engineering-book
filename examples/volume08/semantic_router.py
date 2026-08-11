@@ -1,4 +1,4 @@
-"""고정 semantic score fixture로 정책 경계를 지키는 Volume 08 예제."""
+"""고정 local embedding fixture로 정책 경계를 지키는 Volume 08 예제."""
 
 from __future__ import annotations
 
@@ -11,15 +11,15 @@ from ai_platform.router import (
     RouteTargetKind,
     RoutingRequest,
     RoutingRequirements,
-    SemanticIntentScore,
+    SemanticEmbeddingFixture,
+    SemanticIntentEmbedding,
     SemanticRoute,
     SemanticRouter,
-    SemanticScoreFixture,
 )
 
 
 def build_router() -> SemanticRouter:
-    """외부 embedding 없이 고정 score fixture와 지원 정책을 구성한다."""
+    """외부 embedding 없이 고정 local vector fixture와 지원 정책을 구성한다."""
     return SemanticRouter(
         name="offline-semantic-intent-router",
         policy_router=PolicyRouter(
@@ -51,12 +51,13 @@ def build_router() -> SemanticRouter:
                 required_capabilities=frozenset({"issue_refund", "respond"}),
             ),
         ),
-        score_fixtures=(
-            SemanticScoreFixture(
+        embedding_fixtures=(
+            SemanticEmbeddingFixture(
                 request_id="lesson-08-semantic-001",
-                intent_scores=(
-                    SemanticIntentScore("order_tracking", Decimal("0.93")),
-                    SemanticIntentScore("refund_request", Decimal("0.18")),
+                query_embedding=(Decimal("3"), Decimal("4")),
+                intent_embeddings=(
+                    SemanticIntentEmbedding("order_tracking", (Decimal("3"), Decimal("4"))),
+                    SemanticIntentEmbedding("refund_request", (Decimal("4"), Decimal("3"))),
                 ),
             ),
         ),

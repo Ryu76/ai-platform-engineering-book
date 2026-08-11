@@ -20,7 +20,7 @@
 ## intent Router와 평가
 
 - [ ] Keyword Router의 token match, confidence threshold, intent capability 추가 과정을 설명할 수 있다.
-- [ ] Semantic Router가 실제 embedding 대신 request ID별 고정 score fixture를 사용하는 이유를 설명할 수 있다.
+- [ ] Semantic Router가 request ID별 고정 local embedding cosine fixture 또는 검토된 score fixture를 사용해 외부 호출 없이 재현되는 이유를 설명할 수 있다.
 - [ ] LLM Router가 prompt나 raw response 없이 검토된 intent·confidence fixture만 보관하는 이유를 설명할 수 있다.
 - [ ] 모든 classifier 결과가 `PolicyRouter`를 다시 통과해야 함을 확인했다.
 - [ ] 고정 평가 dataset의 routing accuracy와 safety failure 결과를 해석할 수 있다.

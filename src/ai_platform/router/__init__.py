@@ -62,6 +62,8 @@ from ai_platform.router.rule import (
 from ai_platform.router.semantic import (
     NoConfidentSemanticRouteError,
     NoSemanticScoreFixtureError,
+    SemanticEmbeddingFixture,
+    SemanticIntentEmbedding,
     SemanticIntentScore,
     SemanticRoute,
     SemanticRouteDecision,
@@ -115,6 +117,8 @@ __all__ = [
     "RoutingRequest",
     "RoutingRequirements",
     "RoutingStage",
+    "SemanticEmbeddingFixture",
+    "SemanticIntentEmbedding",
     "SemanticIntentScore",
     "SemanticRoute",
     "SemanticRouteDecision",

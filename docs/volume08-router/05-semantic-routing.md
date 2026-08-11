@@ -1,30 +1,33 @@
-# Semantic Router: 고정 score fixture와 정책 경계
+# Semantic Router: 고정 local embedding·score fixture와 정책 경계
 
 ## 1. 학습 목표
 
-이 장에서는 실제 embedding 모델, LLM, API, 네트워크를 호출하지 않습니다. 대신 요청 ID별로 사전 계산한 고정 semantic similarity fixture를 사용해 `SemanticRouter`를 재현 가능하게 검증합니다. 선택된 intent는 기존 `PolicyRouter`로 전달되어 capability·허용 대상·비용·지연 시간·상태 제약을 다시 통과해야 합니다.
+이 장에서는 실제 embedding 모델, LLM, API, 네트워크를 호출하지 않습니다. 대신 요청 ID별 고정 local embedding vector로 cosine similarity를 계산하거나, 사전 검토한 semantic similarity score fixture를 사용해 `SemanticRouter`를 재현 가능하게 검증합니다. 선택된 intent는 기존 `PolicyRouter`로 전달되어 capability·허용 대상·비용·지연 시간·상태 제약을 다시 통과해야 합니다.
 
-## 2. 고정 score fixture를 먼저 사용하는 이유
+## 2. 고정 embedding과 score fixture를 먼저 사용하는 이유
 
 실제 semantic routing은 임베딩 모델 버전, 전처리, 인덱스 상태에 따라 결과가 달라질 수 있습니다. 학습과 단위 테스트에서는 다음 계약을 먼저 고정합니다.
 
+- `SemanticIntentEmbedding`: intent 하나와 비음수·비영 `Decimal` embedding vector 하나
+- `SemanticEmbeddingFixture`: 요청 ID 하나의 query vector와 모든 configured intent vector. Router가 local cosine similarity를 계산합니다.
 - `SemanticIntentScore`: intent 하나와 `Decimal` 0~1 similarity 하나
-- `SemanticScoreFixture`: 요청 ID 하나에 대한 모든 configured intent의 점수
+- `SemanticScoreFixture`: 요청 ID 하나에 대한 모든 configured intent의 사전 검토 score
 - `minimum_similarity`: route 성공에 필요한 명시적 threshold
 
-fixture는 각 configured intent를 정확히 한 번씩 포함해야 합니다. 누락된 score나 알려지지 않은 intent를 조용히 0점으로 취급하지 않으므로, fixture 변경을 명시적으로 검토할 수 있습니다.
+한 Router에는 embedding fixture와 score fixture 중 하나만 구성합니다. 두 fixture mode 모두 각 configured intent를 정확히 한 번씩 포함해야 하며, embedding의 query와 intent vector는 같은 차원이어야 합니다. 누락된 score·embedding이나 알려지지 않은 intent를 조용히 0점으로 취급하지 않으므로 fixture 변경을 명시적으로 검토할 수 있습니다.
 
 ```python
-SemanticScoreFixture(
+SemanticEmbeddingFixture(
     request_id="lesson-08-semantic-001",
-    intent_scores=(
-        SemanticIntentScore("order_tracking", Decimal("0.93")),
-        SemanticIntentScore("refund_request", Decimal("0.18")),
+    query_embedding=(Decimal("3"), Decimal("4")),
+    intent_embeddings=(
+        SemanticIntentEmbedding("order_tracking", (Decimal("3"), Decimal("4"))),
+        SemanticIntentEmbedding("refund_request", (Decimal("4"), Decimal("3"))),
     ),
 )
 ```
 
-점수는 요청 원문이 아니라 `request_id`로 조회합니다. 이 구현은 semantic score를 계산하지 않으며, 고정된 fixture만 읽습니다.
+fixture는 요청 원문이 아니라 `request_id`로 조회합니다. embedding mode는 fixture vector만으로 local cosine score를 계산하며 모델·API를 호출하지 않습니다. score mode는 검토된 고정 score를 그대로 읽습니다.
 
 ## 3. 결정론적 선택과 안전 실패
 
@@ -58,12 +61,12 @@ uv run python examples/volume08/semantic_router.py
 uv run pytest tests/unit/test_volume08_semantic_router.py -q
 ```
 
-예제는 `order_tracking`의 0.93 고정 score와 0.80 threshold를 사용합니다. 허용 대상도 `offline-order-agent`로 고정합니다. 외부 서비스·환경 변수·API 키·네트워크를 사용하지 않습니다.
+예제는 `(3, 4)` query와 같은 `order_tracking` vector의 local cosine similarity `1` 및 0.80 threshold를 사용합니다. 허용 대상도 `offline-order-agent`로 고정합니다. 외부 서비스·환경 변수·API 키·네트워크를 사용하지 않습니다.
 
 정상 실행 출력은 사용자 원문 없이 다음과 같습니다.
 
 ```text
-{"classifier_name": "offline-semantic-intent-router", "confidence": "1", "estimated_cost": "0.003", "estimated_latency_ms": "70", "intent": "order_tracking", "policy_name": "offline-semantic-support-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-semantic-001", "semantic_similarity": "0.93", "target_kind": "agent", "target_name": "offline-order-agent"}
+{"classifier_name": "offline-semantic-intent-router", "confidence": "1", "estimated_cost": "0.003", "estimated_latency_ms": "70", "intent": "order_tracking", "policy_name": "offline-semantic-support-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-semantic-001", "semantic_similarity": "1", "target_kind": "agent", "target_name": "offline-order-agent"}
 ```
 
 ## 6. 감사 로그
@@ -83,15 +86,16 @@ uv run pytest tests/unit/test_volume08_semantic_router.py -q
 `tests/unit/test_volume08_semantic_router.py`는 고정 fixture만 사용해 다음을 검증합니다.
 
 - 최고 similarity intent와 policy 대상의 선택
+- local embedding vector에서 계산한 cosine similarity와 policy 대상의 선택
 - 동일 score에서 intent 이름으로 해소하는 결정론적 동점
 - fixture 누락과 threshold 미달의 안전 실패
 - semantic route가 policy의 permission·capability 경계를 우회하지 못하는 동작
 - JSON 로그의 직렬화 가능성과 사용자 원문 부재
-- 범위 밖 score, 불완전 fixture, `NaN` threshold의 거부
+- 범위 밖 score, 불완전·혼합 fixture, embedding 차원 불일치, `NaN` threshold의 거부
 
 ## 8. 완료 체크리스트
 
-- [ ] semantic score가 외부 호출이 아닌 고정 `Decimal` fixture임을 확인했다.
+- [ ] semantic embedding 또는 score가 외부 호출이 아닌 고정 `Decimal` fixture임을 확인했다.
 - [ ] `minimum_similarity`를 명시적으로 선언했다.
 - [ ] fixture 누락과 threshold 미달을 성공 route로 대체하지 않음을 확인했다.
 - [ ] semantic intent가 `PolicyRouter`의 capability·권한·비용·지연 시간 경계를 통과해야 함을 확인했다.
@@ -100,4 +104,4 @@ uv run pytest tests/unit/test_volume08_semantic_router.py -q
 
 ## 9. 핵심 정리
 
-semantic routing을 안전하게 도입하는 첫 단계는 실제 모델 호출이 아닙니다. 먼저 완전한 고정 score fixture, 명시적인 threshold, 결정론적 동점 해소, policy 재검증을 계약으로 만들면 모델·임베딩 구현을 나중에 바꾸더라도 권한 경계와 안전 실패를 독립적으로 회귀 테스트할 수 있습니다.
+semantic routing을 안전하게 도입하는 첫 단계는 실제 모델 호출이 아닙니다. 먼저 완전한 고정 local embedding 또는 score fixture, 명시적인 threshold, 결정론적 동점 해소, policy 재검증을 계약으로 만들면 모델·임베딩 구현을 나중에 바꾸더라도 권한 경계와 안전 실패를 독립적으로 회귀 테스트할 수 있습니다.
