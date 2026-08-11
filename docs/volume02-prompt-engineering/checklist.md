@@ -68,7 +68,7 @@ bash scripts/run_all_tests.sh
 - [x] `src/ai_platform/prompts/`에 템플릿, few-shot, 구조화 출력, 구조적 추론, 입력 방어, 버전 비교, 고정 fixture, 회귀 보고서 코드가 있다.
 - [x] `examples/volume02/`에 외부 API를 호출하지 않는 각 장의 데모가 있다.
 - [x] `tests/unit/test_prompts.py`와 `tests/integration/test_volume02_exercises.py`가 정상·실패 계약을 검사한다.
-- [ ] 각 장과 권 단위 Definition of Done의 최종 재실행 결과는 별도 출고 감사에서 확인한다.
+- [x] 각 장과 권 단위 Definition of Done의 최종 재실행 결과는 별도 출고 감사에서 확인했다. 실행 근거는 [PROGRESS.md](PROGRESS.md)에 기록한다.
 
 > [!WARNING]
 > 이 체크리스트의 제작 검수 항목만으로 Volume 02 완료나 운영 배포를 선언하지 않습니다. `release_candidate`는 작은 고정 교육용 fixture를 모두 통과한 사람 검토 후보 표식일 뿐이며, Tool 실행·권한 부여·데이터 전송의 승인이 아닙니다.

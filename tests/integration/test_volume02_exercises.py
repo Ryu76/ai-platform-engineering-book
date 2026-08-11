@@ -9,6 +9,7 @@ EXERCISES = VOLUME / "09-exercises.md"
 CHECKLIST = VOLUME / "checklist.md"
 GLOSSARY = VOLUME / "glossary.md"
 README = VOLUME / "README.md"
+PROGRESS = VOLUME / "PROGRESS.md"
 
 
 def test_volume02_exercises_preserve_all_assignment_levels_and_offline_boundaries() -> None:
@@ -90,3 +91,41 @@ def test_volume02_glossary_covers_required_concepts_and_safe_handoff() -> None:
         assert term in content
     assert "권한 통제를 대체하지 않습니다" in content
     assert "[Volume 03. Tool Calling & MCP](../volume03-tool-calling-mcp/README.md)" in content
+
+
+def test_volume02_release_audit_maps_prd_requirements_to_offline_artifacts() -> None:
+    """Volume 02의 PRD 개념·실습·결과물이 오프라인 출고 경계에 남아 있는지 검사한다."""
+    readme = README.read_text(encoding="utf-8")
+    progress = PROGRESS.read_text(encoding="utf-8")
+    checklist = CHECKLIST.read_text(encoding="utf-8")
+
+    expected_chapters = (
+        "01-prompt-components.md",
+        "02-zero-one-few-shot.md",
+        "03-role-structured-output.md",
+        "04-react-without-cot-exposure.md",
+        "05-prompt-injection-input-validation.md",
+        "06-prompt-versioning-comparison.md",
+        "07-prompt-test-data.md",
+        "08-mini-project-offline-prompt-regression.md",
+        "09-exercises.md",
+    )
+    expected_artifacts = (
+        ROOT / "src" / "ai_platform" / "prompts" / "prompt_templates.py",
+        ROOT / "src" / "ai_platform" / "prompts" / "shot_prompts.py",
+        ROOT / "src" / "ai_platform" / "prompts" / "structured_output.py",
+        ROOT / "src" / "ai_platform" / "prompts" / "structured_reasoning.py",
+        ROOT / "src" / "ai_platform" / "prompts" / "injection_defense.py",
+        ROOT / "src" / "ai_platform" / "prompts" / "prompt_runner.py",
+        ROOT / "src" / "ai_platform" / "prompts" / "prompt_test_data.py",
+        ROOT / "src" / "ai_platform" / "prompts" / "prompt_mini_project.py",
+        ROOT / "tests" / "unit" / "test_prompts.py",
+    )
+
+    assert all((VOLUME / chapter).is_file() for chapter in expected_chapters)
+    assert all(path.is_file() for path in expected_artifacts)
+    assert all(f"]({chapter})" in readme for chapter in expected_chapters)
+    assert "VOLUME02_COMPLETE=true" in progress
+    assert "API 키와 외부 LLM 호출 없이" in readme
+    assert "[학습자·제작 검수 체크리스트](checklist.md)" in readme
+    assert "[Volume 03. Tool Calling & MCP](../volume03-tool-calling-mcp/README.md)" in checklist
