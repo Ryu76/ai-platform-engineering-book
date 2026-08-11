@@ -1,5 +1,42 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 선택적 FastAPI 요청 어댑터 계약 슬라이스 완료
+
+### 완료
+
+- `create_fastapi_rag_app()`과 고정 `POST /rag/query` 경로를 추가했습니다. 이 팩토리는 기존 `RagPipeline`과 `LocalRagApi`만 연결하며 서버 실행·포트 바인딩·네트워크·라이브 API·비밀값·배포를 수행하지 않습니다.
+- 유효 JSON은 기존의 답변·No-answer·인용 JSON 계약으로 전달하고, 기존 공개 요청 오류는 400 `invalid_request`로 보존했습니다. FastAPI의 누락/잘못된 JSON 본문 검증 오류도 같은 공개 400 JSON으로 정규화했습니다. OpenAPI·Swagger·ReDoc 자동 노출은 비활성화했습니다.
+- FastAPI가 이 저장소의 현재 의존성에 없다는 것을 확인했습니다. 따라서 모듈 import와 기존 예제 실행에는 선택적 프레임워크를 요구하지 않고, 팩토리를 호출할 때만 명확한 `RagConfigurationError`로 설치 필요성을 안내합니다.
+- 로컬 FastAPI Mock으로 앱 설정, 라우트·오류 처리기 등록, Mock 생성기 기반 200 인용 응답, 지원하지 않는 필드의 400 응답, 잘못된 JSON의 400 응답을 단위 테스트했습니다. 실제 `TestClient` 통합 테스트는 FastAPI 의존성을 추가할 수 있는 별도 허용 범위가 필요합니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 9 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 7 source files
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 197 passed
+uv run python examples/volume05/local_rag.py
+# Mock 임베딩·메모리 벡터 검색, 고정 평가/승인 기준선 회귀, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- FastAPI를 프로젝트 의존성으로 명시할 수 있는 허용 범위에서 실제 `TestClient`로 `/rag/query`의 JSON 파싱·성공·No-answer·400 경계를 통합 검증합니다. 그 전까지는 이 Volume의 모든 PRD DoD가 완료된 상태가 아닙니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 주입 가능한 로컬/Mock 임베딩·메모리 벡터 저장소 슬라이스 완료
 
 ### 완료

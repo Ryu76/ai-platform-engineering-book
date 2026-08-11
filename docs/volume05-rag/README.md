@@ -84,6 +84,22 @@ payload = response.to_payload()
 
 `query`는 공백이 아닌 문자열이어야 하고 `top_k`는 선택적 1~20 정수입니다. 입력 객체는 이 두 필드만 허용합니다. 잘못된 요청은 `400` 및 공개 `invalid_request` 오류가 되며, 검색기·Mock 생성기는 호출되지 않습니다. 성공한 No-answer는 여전히 `200`이고 `citations: []`, `no_answer: true`를 반환합니다. 검색·생성의 내부 구성 오류는 요청 오류로 위장하지 않고 호출자에게 전파됩니다.
 
+## 선택적 FastAPI HTTP 어댑터
+
+`create_fastapi_rag_app()`은 위의 프레임워크 독립 계약을 실제 FastAPI 앱의 단일 `POST /rag/query` 라우트에 연결합니다. 팩토리는 서버를 실행하거나 포트를 열지 않으며, 문서 로더·검색기·생성기는 기존에 만든 로컬/Mock 인스턴스를 그대로 주입받습니다. OpenAPI와 문서 UI도 자동 노출하지 않습니다.
+
+```python
+from ai_platform.rag import RagPipeline, create_fastapi_rag_app
+
+pipeline = RagPipeline(index=index, generator=mock_generator)
+app = create_fastapi_rag_app(pipeline=pipeline)
+# FastAPI를 설치한 뒤에만 TestClient 또는 명시적인 로컬 서버에 app을 전달한다.
+```
+
+현재 실습 의존성에는 FastAPI가 포함되지 않으므로, 이 팩토리를 호출했는데 패키지가 없으면 `RagConfigurationError`가 설치 필요성을 명확히 알립니다. 모듈을 import하거나 기존 로컬 예제를 실행하는 것만으로는 FastAPI·서버·네트워크가 생성되지 않습니다. 설치된 FastAPI에서 JSON 본문 파싱에 실패하거나 본문이 누락된 경우도 `400 {"error": {"code": "invalid_request", "message": "request payload must be valid JSON"}}`로 정규화합니다. 유효 JSON은 `LocalRagApi`에 그대로 위임하므로 응답 본문, 인용, No-answer와 잘못된 필드의 400 계약은 프레임워크 독립 경계와 동일합니다.
+
+테스트는 FastAPI 프레임워크 객체를 로컬 Mock으로 바꿔 라우트·오류 처리기 등록, 200 인용 응답, 400 요청 오류를 서버나 네트워크 없이 검증합니다. 실제 `TestClient` 통합 검증은 FastAPI를 프로젝트 의존성으로 명시할 수 있는 별도 범위에서 추가해야 합니다.
+
 ## 고정 검색 품질 평가 계약
 
 `RetrievalEvaluator`는 생성 품질이나 라이브 제공자 호출을 측정하지 않습니다. 명시한 로컬 질의와 기대 청크 ID만 사용해 검색 회귀를 검출하는 경계입니다. 사례별 `recall_at_k`는 기대 청크 중 상위 k에서 회수한 비율이고, `passed`와 `reciprocal_rank`는 첫 기대 청크가 상위 k에 나타났는지와 그 역순위를 나타냅니다. 보고서의 `recall_at_k`는 모든 기대 청크의 마이크로 평균, `hit_rate`는 하나 이상 회수한 사례 비율, `mean_reciprocal_rank`는 사례별 역순위 평균입니다.

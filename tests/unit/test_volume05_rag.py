@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import sys
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
 from ai_platform.rag import (
+    FASTAPI_RAG_QUERY_PATH,
     ChunkingConfig,
     ConfidenceThresholdConfig,
     ConfidenceThresholdIndex,
@@ -54,6 +58,7 @@ from ai_platform.rag import (
     VectorRagIndexConfig,
     VectorRecord,
     VectorSearchResult,
+    create_fastapi_rag_app,
     retrieval_regression_baseline_content_id,
 )
 
@@ -166,6 +171,41 @@ class RecordingVectorStore:
     ) -> tuple[VectorSearchResult, ...]:
         self.calls.append((query_vector, top_k))
         return self.results  # type: ignore[return-value]
+
+
+class RecordingJsonResponse:
+    """FastAPI 어댑터가 반환할 상태 코드와 JSON 본문을 기록하는 로컬 응답 Mock이다."""
+
+    def __init__(self, *, status_code: int, content: dict[str, object]) -> None:
+        self.status_code = status_code
+        self.content = content
+
+
+class RecordingFastApi:
+    """서버·네트워크 없이 FastAPI 팩토리의 라우트 연결을 검증하는 프레임워크 Mock이다."""
+
+    def __init__(self, **kwargs: object) -> None:
+        self.kwargs = kwargs
+        self.routes: list[tuple[str, dict[str, object], Callable[..., object]]] = []
+        self.exception_handlers: list[tuple[object, Callable[..., object]]] = []
+
+    def post(
+        self, path: str, **kwargs: object
+    ) -> Callable[[Callable[..., object]], Callable[..., object]]:
+        def register(handler: Callable[..., object]) -> Callable[..., object]:
+            self.routes.append((path, kwargs, handler))
+            return handler
+
+        return register
+
+    def exception_handler(
+        self, error_type: object
+    ) -> Callable[[Callable[..., object]], Callable[..., object]]:
+        def register(handler: Callable[..., object]) -> Callable[..., object]:
+            self.exception_handlers.append((error_type, handler))
+            return handler
+
+        return register
 
 
 def _hit(*, chunk_id: str, document_id: str, text: str, score: float = 1.0) -> SearchHit:
@@ -1094,6 +1134,81 @@ def test_local_rag_api_accepts_a_prevalidated_request_object() -> None:
     assert response.no_answer is False
     assert response.citations[0].chunk_id == "shipping#1"
     assert generator.calls[0][0] == "배송"
+
+
+def test_fastapi_adapter_wires_mocked_pipeline_to_stable_json_routes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fastapi_module = ModuleType("fastapi")
+    fastapi_module.FastAPI = RecordingFastApi  # type: ignore[attr-defined]
+    responses_module = ModuleType("fastapi.responses")
+    responses_module.JSONResponse = RecordingJsonResponse  # type: ignore[attr-defined]
+    exceptions_module = ModuleType("fastapi.exceptions")
+    request_validation_error = type("RequestValidationError", (Exception,), {})
+    exceptions_module.RequestValidationError = request_validation_error  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "fastapi", fastapi_module)
+    monkeypatch.setitem(sys.modules, "fastapi.responses", responses_module)
+    monkeypatch.setitem(sys.modules, "fastapi.exceptions", exceptions_module)
+    generator = RecordingGenerator(response="배송 안내를 확인하세요.")
+
+    app = create_fastapi_rag_app(pipeline=RagPipeline(index=_index(), generator=generator))
+
+    assert isinstance(app, RecordingFastApi)
+    assert app.kwargs == {
+        "title": "Volume 05 Local RAG API",
+        "version": "1.0.0",
+        "docs_url": None,
+        "redoc_url": None,
+        "openapi_url": None,
+    }
+    assert len(app.routes) == 1
+    path, route_kwargs, handler = app.routes[0]
+    assert path == FASTAPI_RAG_QUERY_PATH
+    assert route_kwargs == {"response_model": None}
+    response = handler({"query": "배송 상태는 어떻게 확인하나요?", "top_k": 1})
+    assert isinstance(response, RecordingJsonResponse)
+    assert response.status_code == 200
+    assert response.content["no_answer"] is False
+    assert response.content["citations"] == [
+        {
+            "label": 1,
+            "chunk_id": "shipping#1",
+            "title": "배송 안내",
+            "source_uri": "local://handbook/shipping",
+            "start_offset": 0,
+            "end_offset": 54,
+        }
+    ]
+    invalid_response = handler({"query": "배송", "unsupported": True})
+    assert isinstance(invalid_response, RecordingJsonResponse)
+    assert invalid_response.status_code == 400
+    assert invalid_response.content == {
+        "error": {
+            "code": "invalid_request",
+            "message": "request payload contains unsupported fields: unsupported",
+        }
+    }
+    assert len(app.exception_handlers) == 1
+    registered_error, invalid_json_handler = app.exception_handlers[0]
+    assert registered_error is request_validation_error
+    json_error_response = asyncio.run(invalid_json_handler(object(), request_validation_error()))
+    assert isinstance(json_error_response, RecordingJsonResponse)
+    assert json_error_response.status_code == 400
+    assert json_error_response.content == {
+        "error": {"code": "invalid_request", "message": "request payload must be valid JSON"}
+    }
+
+
+def test_fastapi_adapter_explains_missing_optional_framework(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_fastapi(_: str) -> object:
+        raise ModuleNotFoundError("No module named 'fastapi'", name="fastapi")
+
+    monkeypatch.setattr("ai_platform.rag.fastapi_adapter.import_module", missing_fastapi)
+
+    with pytest.raises(RagConfigurationError, match="FastAPI is required"):
+        create_fastapi_rag_app(pipeline=RagPipeline(index=_index(), generator=RecordingGenerator()))
 
 
 def test_retrieval_evaluator_reports_deterministic_fixed_query_metrics_without_generation() -> None:

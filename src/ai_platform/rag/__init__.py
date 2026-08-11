@@ -34,6 +34,7 @@ from ai_platform.rag.evaluation import (
     RetrievalRegressionPolicy,
     retrieval_regression_baseline_content_id,
 )
+from ai_platform.rag.fastapi_adapter import FASTAPI_RAG_QUERY_PATH, create_fastapi_rag_app
 from ai_platform.rag.loader import (
     LocalMarkdownLoader,
     LocalPdfLoader,
@@ -92,6 +93,8 @@ __all__ = [
     "RagErrorResponse",
     "RagQueryRequest",
     "RagRequestError",
+    "FASTAPI_RAG_QUERY_PATH",
+    "create_fastapi_rag_app",
     "LocalRetrievalEvaluationSetLoader",
     "LocalRetrievalEvaluationReportStore",
     "LocalRetrievalRegressionBaselineLoader",
