@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 신규 run ID 생성의 조회-저장 경쟁을 제거했습니다. `WorkflowApiAdapter.start()`는 `DeterministicWorkflow.invoke_new()`를 거쳐 Checkpointer의 원자적 `save_if_absent()`만 사용하므로, 같은 프로세스·동일 `JsonFileCheckpointer` 인스턴스 범위에서 중복 시작이 기존 위험 작업의 `WAITING_FOR_APPROVAL` Checkpoint를 덮어쓰지 못합니다. 기존처럼 별도의 엄격한 Boolean 승인 요청 뒤에만 오프라인 `execute` 시뮬레이션으로 이동합니다. 서버·네트워크·실제 위험 작업은 실행하지 않았습니다.
+- 이번 슬라이스: 같은 `MemoryCheckpointer` 인스턴스를 공유하는 8개의 동시 `DEPLOY` 시작 요청에서도 정확히 하나만 `WAITING_FOR_APPROVAL` Checkpoint를 생성하고, 나머지 7개는 `WorkflowRunConflictError`로 끝나는 계약을 추가했습니다. 성공한 run도 별도의 엄격한 Boolean 승인 요청 뒤에만 오프라인 `execute` 시뮬레이션으로 이동합니다. 서버·네트워크·실제 위험 작업은 실행하지 않았습니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
@@ -105,6 +105,12 @@
   - `Checkpointer.save_if_absent()`와 메모리·로컬 JSON 구현을 추가했습니다. API 시작은 분리된 사전 조회를 하지 않고 `invoke_new()`의 원자적 생성 결과로 충돌을 판정합니다. JSON의 원자성은 동일 Checkpointer 인스턴스의 스레드 범위임을 명시했습니다.
 - `tests/unit/test_volume09_graph.py`
   - 메모리·로컬 JSON Checkpointer의 첫 생성 성공, 중복 생성 거부, 기존 위험 Action 상태 보존 계약을 추가했습니다.
+- `docs/volume09-langgraph/11-concurrent-start-approval-safety.md`
+  - 로컬 스레드 동시 재전송의 단일 생성자 계약, 승인 대기 Checkpoint 보존, Checkpointer별 보장 범위와 운영 저장소 요구사항을 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 열한 번째 장 링크와 동시 시작 안전성 출고 범위를 반영했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 같은 메모리 Checkpointer를 공유하는 8개 동시 위험 시작에서 정확히 하나만 승인 대기에 남고, 승인 전 `execute`가 없으며 명시적 승인 뒤에만 완료되는 계약을 추가했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다.
 
@@ -366,6 +372,39 @@ $ uv run pytest tests/unit/test_volume09_graph.py -q
 
 $ uv run pytest -q
 92 passed in 1.05s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+## 최신 검증 기록 — 동시 시작 안전성 슬라이스
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+32 passed in 0.96s
+
+$ uv run pytest tests/unit/test_volume09_graph.py::test_concurrent_api_starts_create_one_risky_run_and_preserve_approval_gate -q  # 10회 반복
+각 반복: 1 passed (0.26s~0.32s), 총 10/10 통과
 
 $ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
 All checks passed!

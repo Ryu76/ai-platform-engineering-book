@@ -1,7 +1,9 @@
 """Volume 09 오프라인 상태형 Workflow의 안전 계약을 검사한다."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import pytest
 from pydantic import ValidationError
@@ -642,3 +644,42 @@ def test_json_checkpointer_creates_a_run_once_without_replacement(tmp_path: Path
     assert checkpointer.save_if_absent(run_id="atomic-file-001", state=waiting) is True
     assert checkpointer.save_if_absent(run_id="atomic-file-001", state=replacement) is False
     assert checkpointer.load(run_id="atomic-file-001") == waiting
+
+
+def test_concurrent_api_starts_create_one_risky_run_and_preserve_approval_gate() -> None:
+    """동시 재전송도 한 메모리 Checkpointer 안에서는 하나만 승인 대기로 만든다."""
+    checkpointer = MemoryCheckpointer()
+    adapter = WorkflowApiAdapter(workflow=DeterministicWorkflow(checkpointer=checkpointer))
+    request = StartWorkflowRequest(
+        run_id="atomic-concurrent-001",
+        task="학습용 배포를 준비한다",
+        action=ActionKind.DEPLOY,
+    )
+
+    barrier = Barrier(8)
+
+    def start_once() -> WorkflowStatus | str:
+        barrier.wait(timeout=5)
+        try:
+            return adapter.start(request=request).status
+        except WorkflowRunConflictError:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(lambda _: start_once(), range(8)))
+
+    assert outcomes.count(WorkflowStatus.WAITING_FOR_APPROVAL) == 1
+    assert outcomes.count("conflict") == 7
+    waiting = checkpointer.load(run_id="atomic-concurrent-001")
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert [event.node for event in waiting.events] == ["plan", "approval"]
+
+    completed = adapter.resume(
+        run_id="atomic-concurrent-001",
+        request=ApprovalRequest(approved=True),
+    )
+
+    assert completed.status is WorkflowStatus.COMPLETED
+    assert [event.node for event in completed.events] == [
+        "plan", "approval", "approval", "execute"
+    ]
