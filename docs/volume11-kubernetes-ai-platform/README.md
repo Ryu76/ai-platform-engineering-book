@@ -24,6 +24,7 @@
 16. [Runtime SecurityContext: 선언과 강제의 정적 경계](16-runtime-security-context-static-boundary.md)
 17. [Startup Probe: 초기화 시간과 재시작 판단의 정적 경계](17-startup-probe-lifecycle-static-boundary.md)
 18. [Named HTTP Port: Probe와 Service 연결의 정적 계약](18-named-http-port-static-contract.md)
+19. [Service Selector: Pod template label 연결의 정적 계약](19-service-selector-static-contract.md)
 
 ## 현재 실습 경계
 

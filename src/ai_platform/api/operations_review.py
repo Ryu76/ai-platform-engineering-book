@@ -67,6 +67,11 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
         )
         and deployment.count("port: http") == 3
         and "name: http\n      port: 80\n      targetPort: http" in service,
+        "deployment_template_and_service_selector_share_app_label": (
+            "template:\n    metadata:\n      labels:\n"
+            "        app.kubernetes.io/name: ai-platform-api" in deployment
+            and "selector:\n    app.kubernetes.io/name: ai-platform-api" in service
+        ),
         "deployment_declares_startup_probe_boundary": bool(startup_marker)
         and all(
             value in startup_probe
