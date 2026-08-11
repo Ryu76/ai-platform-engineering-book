@@ -22,6 +22,7 @@ from ai_platform.mcp.stdio import (
     McpStdioState,
     McpToolCallBoundary,
     encode_stdio_jsonrpc_message,
+    mcp_stdio_request_correlation_id,
     parse_stdio_jsonrpc_line,
 )
 
@@ -46,6 +47,7 @@ __all__ = [
     "McpToolDefinition",
     "MCP_PROTOCOL_VERSION",
     "encode_stdio_jsonrpc_message",
+    "mcp_stdio_request_correlation_id",
     "parse_mcp_tool_call_request",
     "parse_stdio_jsonrpc_line",
     "dispatch_mcp_tool_call",

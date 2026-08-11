@@ -16,10 +16,11 @@ from ai_platform.mcp.stdio import (
     McpStdioState,
     McpToolCallBoundary,
     encode_stdio_jsonrpc_message,
+    mcp_stdio_request_correlation_id,
     parse_stdio_jsonrpc_line,
 )
 from ai_platform.tools.audit import InMemoryToolAuditSink, ToolAuditOutcome
-from ai_platform.tools.authorization import ToolAuthorizationPolicy, ToolRisk
+from ai_platform.tools.authorization import ApprovalGrant, ToolAuthorizationPolicy, ToolRisk
 from ai_platform.tools.execution import ToolExecutionPolicy
 from ai_platform.tools.registry import SAFE_TEXT_CASE, ToolRegistry, ToolSpec
 
@@ -395,6 +396,71 @@ def test_stdio_session_projects_allowlisted_pure_tool_call_through_dispatcher() 
     assert sink.events[0].request_id == "mcp-stdio:string:call-001"
     assert sink.events[0].outcome is ToolAuditOutcome.SUCCEEDED
     assert session.state is McpStdioState.READY
+
+
+def test_stdio_session_runs_high_risk_pure_tool_only_with_typed_rpc_id_bound_approval() -> None:
+    sink = InMemoryToolAuditSink()
+    arguments = {"text": "Mcp", "operation": "upper"}
+    session = _ready_session(
+        tool_call_boundary=McpToolCallBoundary(
+            registry=ToolRegistry((SAFE_TEXT_CASE,)),
+            authorization_policy=ToolAuthorizationPolicy({"safe_text_case": ToolRisk.HIGH}),
+            execution_policy=ToolExecutionPolicy(timeout_seconds=0.5),
+            audit_sink=sink,
+            approval=ApprovalGrant.for_request(
+                approval_id="approval-stdio-001",
+                request_id=mcp_stdio_request_correlation_id("high-risk-001"),
+                tool_name="safe_text_case",
+                arguments=arguments,
+            ),
+        )
+    )
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"high-risk-001","method":"tools/call","params":'
+        '{"name":"safe_text_case","arguments":{"text":"Mcp","operation":"upper"}}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line)["result"]["isError"] is False
+    assert sink.events[0].request_id == "mcp-stdio:string:high-risk-001"
+    assert sink.events[0].approval_id == "approval-stdio-001"
+    assert sink.events[0].outcome is ToolAuditOutcome.SUCCEEDED
+
+
+def test_stdio_session_rejects_high_risk_approval_bound_to_same_looking_other_id_type() -> None:
+    sink = InMemoryToolAuditSink()
+    arguments = {"text": "Mcp", "operation": "upper"}
+    session = _ready_session(
+        tool_call_boundary=McpToolCallBoundary(
+            registry=ToolRegistry((SAFE_TEXT_CASE,)),
+            authorization_policy=ToolAuthorizationPolicy({"safe_text_case": ToolRisk.HIGH}),
+            execution_policy=ToolExecutionPolicy(timeout_seconds=0.5),
+            audit_sink=sink,
+            approval=ApprovalGrant.for_request(
+                approval_id="approval-integer-7",
+                request_id=mcp_stdio_request_correlation_id(7),
+                tool_name="safe_text_case",
+                arguments=arguments,
+            ),
+        )
+    )
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"7","method":"tools/call","params":'
+        '{"name":"safe_text_case","arguments":{"text":"Mcp","operation":"upper"}}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line)["result"]["isError"] is True
+    assert sink.events[0].request_id == "mcp-stdio:string:7"
+    assert sink.events[0].outcome is ToolAuditOutcome.DENIED
+
+
+@pytest.mark.parametrize("request_id", (True, 1.5, "", "\nlog-forgery"))
+def test_stdio_request_correlation_id_rejects_non_canonical_jsonrpc_ids(request_id: object) -> None:
+    with pytest.raises(McpStdioError, match="JSON-RPC"):
+        mcp_stdio_request_correlation_id(request_id)  # type: ignore[arg-type]
 
 
 def test_stdio_session_keeps_tool_calls_disabled_without_explicit_boundary() -> None:

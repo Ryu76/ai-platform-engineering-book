@@ -200,7 +200,7 @@ def _canonical_arguments(arguments: Mapping[str, object]) -> str:
     """순수 JSON 인자를 순서와 공백에 독립적인 승인 바인딩 문자열로 만든다."""
     try:
         return json.dumps(
-            arguments,
+            dict(arguments),
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),

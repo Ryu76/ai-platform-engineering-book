@@ -12,6 +12,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
+from typing import cast
 
 from ai_platform.mcp.catalog import McpServerCatalog
 from ai_platform.mcp.dispatcher import McpDispatchError, dispatch_mcp_tool_call
@@ -88,7 +89,7 @@ class McpToolCallBoundary:
             raise McpStdioError("tools/call params must be JSON serializable") from error
         return dispatch_mcp_tool_call(
             self.registry,
-            request_id=_tool_audit_request_id(request.request_id),
+            request_id=mcp_stdio_request_correlation_id(request.request_id),
             raw_request=raw_request,
             authorization_policy=self.authorization_policy,
             execution_policy=self.execution_policy,
@@ -373,15 +374,12 @@ def _validate_jsonrpc_keys(payload: Mapping[str, object]) -> None:
 
 
 def _parse_request_id(payload: Mapping[str, object]) -> str | int | None:
-    """null, boolean, float ID를 허용하지 않아 request와 notification을 명확히 구분한다."""
+    """null, boolean, float·제어 문자가 든 ID를 거부해 correlation을 명확히 구분한다."""
     if "id" not in payload:
         return None
     request_id = payload["id"]
-    if isinstance(request_id, bool) or not isinstance(request_id, (str, int)):
-        raise McpStdioError("JSON-RPC id must be a string or integer when present")
-    if isinstance(request_id, str) and not request_id.strip():
-        raise McpStdioError("JSON-RPC string id must not be empty")
-    return request_id
+    _validate_stdio_request_id(request_id)
+    return cast("str | int", request_id)
 
 
 def _validate_initialize_params(params: Mapping[str, object]) -> None:
@@ -408,11 +406,27 @@ def _validate_initialize_params(params: Mapping[str, object]) -> None:
         raise McpStdioError("initialize clientInfo name and version must be non-empty strings")
 
 
-def _tool_audit_request_id(request_id: str | int) -> str:
-    """string과 integer JSON-RPC ID가 같은 audit correlation ID로 충돌하지 않게 만든다."""
+def mcp_stdio_request_correlation_id(request_id: str | int) -> str:
+    """신뢰된 host가 승인과 audit에 쓸 typed JSON-RPC correlation ID를 만든다.
+
+    JSON-RPC string ID ``"7"``과 integer ID ``7``은 서로 다른 Tool request다. 승인
+    workflow는 이 함수를 통해 dispatcher와 같은 request binding 값을 사용해야 한다.
+    """
+    _validate_stdio_request_id(request_id)
     if isinstance(request_id, str):
         return f"mcp-stdio:string:{request_id}"
     return f"mcp-stdio:integer:{request_id}"
+
+
+def _validate_stdio_request_id(request_id: object) -> None:
+    """허용되는 JSON-RPC ID가 audit/approval log framing을 깨지 않게 제한한다."""
+    if isinstance(request_id, bool) or not isinstance(request_id, (str, int)):
+        raise McpStdioError("JSON-RPC id must be a string or integer when present")
+    if isinstance(request_id, str):
+        if not request_id.strip():
+            raise McpStdioError("JSON-RPC string id must not be empty")
+        if any(ord(character) < 32 or ord(character) == 127 for character in request_id):
+            raise McpStdioError("JSON-RPC string id must not contain control characters")
 
 
 def _mcp_tool_success_result(result: ToolResult) -> dict[str, object]:
