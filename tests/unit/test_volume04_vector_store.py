@@ -178,6 +178,16 @@ def test_delete_reports_actual_count_and_removes_points(
     )
 
 
+@pytest.mark.parametrize("point_ids", [[], (), "docker-guide", b"docker-guide", None])
+def test_delete_rejects_empty_or_non_batch_id_inputs(point_ids: object) -> None:
+    """삭제는 의도하지 않은 no-op나 단일 문자열을 ID batch로 해석하면 안 된다."""
+    store = InMemoryVectorStore()
+    store.create_collection("docs", vector_size=2)
+
+    with pytest.raises(VectorStoreError, match="non-empty sequence of strings"):
+        store.delete("docs", point_ids)  # type: ignore[arg-type]
+
+
 def test_collection_and_point_contract_errors_are_explicit() -> None:
     """존재하지 않는 collection과 잘못된 설정은 조용히 통과하면 안 된다."""
     store = InMemoryVectorStore()

@@ -203,8 +203,12 @@ def _matches_filter(
 
 def _prepare_ids(point_ids: Sequence[str]) -> list[str]:
     """삭제할 id 목록을 검증하고 중복 없이 보존한다."""
-    if isinstance(point_ids, (str, bytes)) or not isinstance(point_ids, Sequence):
-        raise VectorStoreError("point_ids must be a sequence of strings")
+    if (
+        isinstance(point_ids, (str, bytes))
+        or not isinstance(point_ids, Sequence)
+        or not point_ids
+    ):
+        raise VectorStoreError("point_ids must be a non-empty sequence of strings")
     normalized_ids: list[str] = []
     for point_id in point_ids:
         _require_point_id(point_id)

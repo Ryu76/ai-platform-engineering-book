@@ -3,7 +3,7 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME04_COMPLETE` 미설정
-- 현재 slice: 20 — immutable reindex lifecycle report 입력 계약 강화
+- 현재 slice: 21 — delete ID batch 입력 계약 강화
 - 범위: 외부 API, 다운로드 모델, Docker, Qdrant를 실행하지 않았습니다.
 
 ## 2026-08-10 — Slice 01 완료
@@ -578,3 +578,36 @@ git diff --check
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
 - Commit: `fix(volume04): validate reindex lifecycle reports`.
+
+## 2026-08-11 — Slice 21 완료: delete ID batch 입력 계약 강화
+
+### 추가한 결과물
+
+- `vector_store.py`의 `delete`가 빈 ID batch, 단일 문자열/bytes, 비-sequence 입력을 명시적으로 거부하도록 강화했습니다. 빈 삭제 요청을 성공한 no-op로 처리하거나 문자열을 문자 ID 목록으로 해석하지 않습니다.
+- `test_volume04_vector_store.py`에 빈 list/tuple, 문자열, bytes, `None` delete 입력 거부 회귀 테스트를 추가했습니다.
+- 02장 코드 설명과 오류 해결 표에 non-empty delete batch 계약과 올바른 호출 형태를 기록했습니다.
+
+### 검증 결과
+
+```bash
+# 실행 위치: 저장소 루트
+uv run pytest tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py tests/unit/test_volume04_learning_materials.py -q
+# 55 passed in 0.23s
+uv run ruff check src/ai_platform/embeddings examples/volume04 tests/unit/test_volume04_embedding_service.py tests/unit/test_volume04_vector_store.py tests/unit/test_volume04_retrieval_evaluation.py tests/unit/test_volume04_reindex_lifecycle.py tests/unit/test_volume04_learning_materials.py
+# All checks passed!
+uv run mypy src/ai_platform/embeddings
+# Success: no issues found in 5 source files
+uv run python examples/volume04/embedding_similarity.py
+uv run python examples/volume04/vector_store_search.py
+uv run python examples/volume04/retrieval_quality.py
+uv run python examples/volume04/reindex_lifecycle.py
+# 결정적 local mock 예제 네 개가 기대한 검색·품질·삭제·재색인 결과를 출력
+git diff --check
+# 공백 오류 없음
+```
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+- Commit: `fix(volume04): validate delete id batches`
