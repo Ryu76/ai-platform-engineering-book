@@ -24,6 +24,9 @@ class Checkpointer(Protocol):
     def save(self, *, run_id: str, state: WorkflowState) -> None:
         """run ID의 최신 상태를 저장한다."""
 
+    def save_if_absent(self, *, run_id: str, state: WorkflowState) -> bool:
+        """run ID가 없을 때만 상태를 저장하고 생성 성공 여부를 반환한다."""
+
     def load(self, *, run_id: str) -> WorkflowState:
         """run ID의 최신 상태를 읽는다."""
 
@@ -45,6 +48,15 @@ class MemoryCheckpointer:
         _validate_run_id(run_id)
         with self._lock:
             self._states[run_id] = state
+
+    def save_if_absent(self, *, run_id: str, state: WorkflowState) -> bool:
+        """같은 프로세스의 경쟁 시작 중 첫 상태만 원자적으로 저장한다."""
+        _validate_run_id(run_id)
+        with self._lock:
+            if run_id in self._states:
+                return False
+            self._states[run_id] = state
+            return True
 
     def load(self, *, run_id: str) -> WorkflowState:
         """run ID의 상태를 반환하고 없으면 명확하게 실패한다."""
@@ -110,6 +122,38 @@ class JsonFileCheckpointer:
             except KeyError as error:
                 raise KeyError(f"checkpoint not found: {run_id}") from error
         return _payload_to_state(payload)
+
+    def save_if_absent(self, *, run_id: str, state: WorkflowState) -> bool:
+        """이 인스턴스 안에서 새 run ID의 첫 공개 상태만 원자적으로 기록한다.
+
+        이 보장은 한 ``JsonFileCheckpointer`` 인스턴스의 스레드 범위에 한정된다. 여러
+        프로세스나 독립 인스턴스의 동시 쓰기에는 파일 잠금이나 데이터베이스가 필요하며,
+        그 운영 저장소는 이 오프라인 학습 예제의 범위 밖이다.
+        """
+        _validate_run_id(run_id)
+        _validate_public_state(state)
+        with self._lock:
+            checkpoints = self._read_checkpoints()
+            if run_id in checkpoints:
+                return False
+            checkpoints[run_id] = _state_to_payload(state)
+            payload = {
+                "schema_version": self._SCHEMA_VERSION,
+                "checkpoints": checkpoints,
+            }
+            temporary_path = self._path.with_name(
+                f".{self._path.name}.{uuid4().hex}.tmp"
+            )
+            try:
+                temporary_path.write_text(
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                temporary_path.replace(self._path)
+            finally:
+                if temporary_path.exists():
+                    temporary_path.unlink()
+            return True
 
     def _read_checkpoints(self) -> dict[str, object]:
         """파일이 없으면 빈 저장소를, 있으면 검증된 JSON 객체를 반환한다."""

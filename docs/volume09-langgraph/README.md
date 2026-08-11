@@ -18,10 +18,11 @@
 7. [부모 Workflow와 Subgraph의 승인 경계](07-parent-subgraph-approval-boundary.md)
 8. [FastAPI 요청·응답 어댑터와 승인 경계](08-fastapi-request-response-approval-boundary.md)
 9. [run ID 충돌 방지와 재전송 안전성](09-run-id-conflict-approval-safety.md)
+10. [원자적 run 생성과 승인 Checkpoint 보존](10-atomic-run-creation.md)
 
 ## 예정 장
 
-이 슬라이스에서는 FastAPI route가 소비할 요청·응답 어댑터에서 위험 ActionKind의 사람 승인 경계와 run ID 충돌 방지를 출고했습니다. FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
+이 슬라이스에서는 중복 run ID 검사의 조회-저장 경쟁을 제거하는 원자적 생성 계약을 출고했습니다. FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
 
 ## 이번 기반 결과물
 
@@ -29,7 +30,7 @@
 - `src/ai_platform/graph/nodes.py`: Plan, Router, 전문 역할, 경로 검토, Approval, Execute, Error Node
 - `src/ai_platform/graph/workflow.py`: 승인 흐름, `StreamingWorkflow`의 Checkpoint 우선 상태 출력, `RoutedWorkflow`의 Conditional Edge 참조 흐름, `PlannerDeveloperReviewerWorkflow`의 고정 역할 순서, `SubgraphWorkflow`의 부모 승인 경계, `RetryWorkflow`의 제한된 재시도, 주입 가능한 Checkpointer 경계
 - `src/ai_platform/graph/api.py`: FastAPI route가 사용할 Pydantic 시작·승인 요청, 공개 응답 스냅샷, 재전송이 기존 Checkpoint를 덮어쓰지 못하게 하는 프레임워크 독립 오프라인 어댑터
-- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer
+- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent` 계약
 
 - `examples/volume09/single_node_workflow.py`: 승인 중단 및 재개 데모
 - `examples/volume09/router_conditional_workflow.py`: 낮은 신뢰도 Router의 경로 검토와 실행 승인 데모

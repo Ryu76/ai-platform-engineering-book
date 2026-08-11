@@ -29,6 +29,10 @@ from ai_platform.graph.state import (
 )
 
 
+class WorkflowRunConflictError(ValueError):
+    """이미 존재하는 run ID의 Checkpoint를 새 시작으로 교체하려 할 때 발생한다."""
+
+
 class DeterministicWorkflow:
     """사람 승인 interrupt를 갖는 최소 상태형 Workflow를 실행한다.
 
@@ -42,12 +46,19 @@ class DeterministicWorkflow:
 
     def invoke(self, *, run_id: str, task: str, action: ActionKind) -> WorkflowState:
         """START에서 승인 interrupt 또는 END까지 한 번 실행한다."""
-        state = WorkflowState.start(task=task, action=action)
-        state = plan_node(state)
-        state = approval_node(state)
-        if state.status is WorkflowStatus.READY:
-            state = execute_node(state)
+        state = self._initial_state(task=task, action=action)
         self._checkpointer.save(run_id=run_id, state=state)
+        return state
+
+    def invoke_new(self, *, run_id: str, task: str, action: ActionKind) -> WorkflowState:
+        """새 run ID에만 시작 상태를 기록해 check-then-save 경쟁을 피한다.
+
+        이 오프라인 Workflow의 Node는 외부 부작용을 만들지 않는다. 실제 위험 작업은
+        운영 저장소의 트랜잭션·파일 잠금과 승인 정책을 별도로 사용해야 한다.
+        """
+        state = self._initial_state(task=task, action=action)
+        if not self._checkpointer.save_if_absent(run_id=run_id, state=state):
+            raise WorkflowRunConflictError(f"run_id already exists: {run_id}")
         return state
 
     def resume(self, *, run_id: str, approved: bool) -> WorkflowState:
@@ -62,6 +73,16 @@ class DeterministicWorkflow:
     def checkpoint(self, *, run_id: str) -> WorkflowState:
         """검증 또는 표시를 위해 최신 Checkpoint를 읽는다."""
         return self._checkpointer.load(run_id=run_id)
+
+    @staticmethod
+    def _initial_state(*, task: str, action: ActionKind) -> WorkflowState:
+        """START부터 승인 interrupt 또는 END까지의 결정론적 초기 전이를 만든다."""
+        state = WorkflowState.start(task=task, action=action)
+        state = plan_node(state)
+        state = approval_node(state)
+        if state.status is WorkflowStatus.READY:
+            state = execute_node(state)
+        return state
 
 
 class StreamingWorkflow:

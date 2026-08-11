@@ -7,7 +7,6 @@ from ai_platform.graph.api import (
     WorkflowApiAdapter,
     WorkflowEventResponse,
     WorkflowResponse,
-    WorkflowRunConflictError,
 )
 from ai_platform.graph.checkpointer import Checkpointer, JsonFileCheckpointer, MemoryCheckpointer
 from ai_platform.graph.state import (
@@ -29,6 +28,7 @@ from ai_platform.graph.workflow import (
     RoutedWorkflow,
     StreamingWorkflow,
     SubgraphWorkflow,
+    WorkflowRunConflictError,
 )
 
 __all__ = [

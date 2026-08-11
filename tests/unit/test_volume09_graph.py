@@ -11,6 +11,7 @@ from ai_platform.graph import (
     ApprovalRequest,
     DeterministicWorkflow,
     JsonFileCheckpointer,
+    MemoryCheckpointer,
     PlannerDeveloperReviewerWorkflow,
     RetryPlan,
     RetryWorkflow,
@@ -619,3 +620,25 @@ def test_api_adapter_rejects_duplicate_start_without_replacing_pending_approval(
         "approval",
         "execute",
     ]
+
+
+def test_memory_checkpointer_creates_a_run_once_without_replacement() -> None:
+    """원자적 생성은 두 번째 시작 상태가 기존 위험 작업을 덮어쓰지 못하게 한다."""
+    checkpointer = MemoryCheckpointer()
+    waiting = WorkflowState.start(task="학습용 배포를 준비한다", action=ActionKind.DEPLOY)
+    replacement = WorkflowState.start(task="로컬 문서를 읽는다", action=ActionKind.READ)
+
+    assert checkpointer.save_if_absent(run_id="atomic-start-001", state=waiting) is True
+    assert checkpointer.save_if_absent(run_id="atomic-start-001", state=replacement) is False
+    assert checkpointer.load(run_id="atomic-start-001") == waiting
+
+
+def test_json_checkpointer_creates_a_run_once_without_replacement(tmp_path: Path) -> None:
+    """로컬 JSON Checkpointer도 한 인스턴스 안에서 첫 시작 상태만 기록한다."""
+    checkpointer = JsonFileCheckpointer(path=tmp_path / "atomic-checkpoints.json")
+    waiting = WorkflowState.start(task="학습용 배포를 준비한다", action=ActionKind.DEPLOY)
+    replacement = WorkflowState.start(task="로컬 문서를 읽는다", action=ActionKind.READ)
+
+    assert checkpointer.save_if_absent(run_id="atomic-file-001", state=waiting) is True
+    assert checkpointer.save_if_absent(run_id="atomic-file-001", state=replacement) is False
+    assert checkpointer.load(run_id="atomic-file-001") == waiting
