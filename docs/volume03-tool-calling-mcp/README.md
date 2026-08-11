@@ -22,5 +22,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 12. [MCP STDIO `tools/list`: handshake 뒤 allowlist catalog만 읽기 전용으로 노출하기](12-mcp-stdio-tools-list.md) — READY 뒤 catalog snapshot만 JSON-RPC response로 반환하고 Tool 실행 경계를 열지 않는 adapter
 13. [MCP STDIO `resources/list`: handshake 뒤 정적 Resource metadata만 읽기 전용으로 노출하기](13-mcp-stdio-resources-list.md) — READY 뒤 정적 Resource metadata snapshot만 JSON-RPC response로 반환하고 content read·URI 해석 경계를 열지 않는 adapter
 14. [MCP STDIO `prompts/list`: handshake 뒤 고정 Prompt metadata만 읽기 전용으로 노출하기](14-mcp-stdio-prompts-list.md) — READY 뒤 allowlisted Prompt metadata snapshot만 JSON-RPC response로 반환하고 message 반환·보간 경계를 열지 않는 adapter
+15. [MCP STDIO `prompts/get`: 고정 allowlist Prompt만 보간 없이 반환하기](15-mcp-stdio-prompts-get.md) — READY 뒤 exact Prompt name과 빈 arguments만 검증해 고정 message snapshot을 반환하는 adapter
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.

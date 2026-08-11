@@ -166,6 +166,105 @@ def test_stdio_session_projects_fixed_catalog_with_read_only_prompts_list() -> N
     assert session.state is McpStdioState.READY
 
 
+def test_stdio_session_returns_fixed_allowlisted_prompt_without_rendering() -> None:
+    prompt_catalog = McpPromptCatalog(
+        (
+            McpStaticPrompt(
+                name="review-tool-boundary",
+                description="Reviews the fixed Tool Calling safety boundary.",
+                messages=(
+                    McpPromptMessage(
+                        role="system",
+                        content="Review allowlist and approval boundaries without executing Tools.",
+                    ),
+                ),
+            ),
+        )
+    )
+    session = McpStdioSession(prompt_catalog=prompt_catalog)
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    response_line = session.receive_line(
+        '{"jsonrpc":"2.0","id":"prompt-001","method":"prompts/get",'
+        '"params":{"name":"review-tool-boundary","arguments":{}}}\n'
+    )
+
+    assert response_line is not None
+    assert json.loads(response_line) == {
+        "jsonrpc": "2.0",
+        "id": "prompt-001",
+        "result": {
+            "name": "review-tool-boundary",
+            "description": "Reviews the fixed Tool Calling safety boundary.",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Review allowlist and approval boundaries without executing Tools.",
+                }
+            ],
+        },
+    }
+    assert session.state is McpStdioState.READY
+
+
+@pytest.mark.parametrize(
+    ("raw_line", "message"),
+    (
+        (
+            '{"jsonrpc":"2.0","method":"prompts/get",'
+            '"params":{"name":"review-tool-boundary"}}\n',
+            "must include",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"prompt-002","method":"prompts/get",'
+            '"params":{}}\n',
+            "name must be",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"prompt-003","method":"prompts/get",'
+            '"params":{"name":"review-tool-boundary",'
+            '"arguments":{"unreviewed":"input"}}}\n',
+            "arguments must be an empty",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"prompt-003b","method":"prompts/get",'
+            '"params":{"name":"review-tool-boundary","arguments":"not-an-object"}}\n',
+            "arguments must be an empty",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"prompt-004","method":"prompts/get",'
+            '"params":{"name":"review-tool-boundary","extra":true}}\n',
+            "contain only name",
+        ),
+        (
+            '{"jsonrpc":"2.0","id":"prompt-005","method":"prompts/get",'
+            '"params":{"name":"review-tool-boundary "}}\n',
+            "not allowlisted",
+        ),
+    ),
+)
+def test_stdio_session_rejects_ambiguous_or_non_allowlisted_prompt_get(
+    raw_line: str, message: str
+) -> None:
+    session = McpStdioSession(
+        prompt_catalog=McpPromptCatalog(
+            (
+                McpStaticPrompt(
+                    name="review-tool-boundary",
+                    description="Fixed prompt.",
+                    messages=(McpPromptMessage(role="system", content="Fixed message."),),
+                ),
+            )
+        )
+    )
+    session.receive_line(_initialize_line())
+    session.receive_line('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+
+    with pytest.raises(McpStdioError, match=message):
+        session.receive_line(raw_line)
+
+
 @pytest.mark.parametrize(
     ("raw_line", "message"),
     (
@@ -192,7 +291,11 @@ def test_stdio_session_projects_fixed_catalog_with_read_only_prompts_list() -> N
             "no MCP methods",
         ),
         ('{"jsonrpc":"2.0","id":"call-001","method":"tools/call","params":{}}\n', "no MCP methods"),
-        ('{"jsonrpc":"2.0","id":"get-001","method":"prompts/get","params":{}}\n', "no MCP methods"),
+        (
+            '{"jsonrpc":"2.0","id":"unknown-001","method":"unknown/method",'
+            '"params":{}}\n',
+            "no MCP methods",
+        ),
     ),
 )
 def test_stdio_session_rejects_non_read_only_or_ambiguous_ready_methods(

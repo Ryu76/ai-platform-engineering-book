@@ -13,7 +13,7 @@ from enum import StrEnum
 from types import MappingProxyType
 
 from ai_platform.mcp.catalog import McpServerCatalog
-from ai_platform.mcp.prompts import McpPromptCatalog
+from ai_platform.mcp.prompts import McpPromptCatalog, McpPromptError
 from ai_platform.mcp.resources import McpResourceCatalog
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
@@ -55,9 +55,10 @@ class McpStdioSession:
     """고정 lifecycle 뒤 catalog를 read-only 목록 method로만 노출한다.
 
     ``tools/list``, ``resources/list``, ``prompts/list``은 고정된 catalog snapshot만
-    응답한다. ``tools/call``, ``resources/read``, ``prompts/get``을 포함한 다른 모든
-    method는 dispatcher, loader, prompt renderer에 전달하지 않으므로 transport metadata가
-    Tool 실행 인자나 승인 입력으로 섞이거나 URI가 파일 경로로 해석될 수 없다.
+    응답하고, ``prompts/get``은 exact allowlist name과 빈 arguments만 받아 고정 message
+    snapshot을 응답한다. ``tools/call``, ``resources/read``를 포함한 다른 모든 method는
+    dispatcher, loader에 전달하지 않으므로 transport metadata가 Tool 실행 인자나 승인
+    입력으로 섞이거나 URI가 파일 경로로 해석될 수 없다.
     """
 
     def __init__(
@@ -131,18 +132,19 @@ class McpStdioSession:
         self._state = McpStdioState.READY
 
     def _receive_ready_request(self, request: McpJsonRpcRequest) -> str:
-        """READY에서는 execution-free catalog list request만 허용한다."""
-        if request.method not in {"tools/list", "resources/list", "prompts/list"}:
+        """READY에서는 execution-free catalog와 고정 Prompt snapshot만 허용한다."""
+        if request.method not in {"tools/list", "resources/list", "prompts/list", "prompts/get"}:
             raise McpStdioError(
                 "no MCP methods are enabled besides read-only tools/list, resources/list, "
-                "and prompts/list in this adapter"
+                "prompts/list, and fixed prompts/get in this adapter"
             )
         if request.is_notification:
             raise McpStdioError(f"{request.method} must include a JSON-RPC request id")
-        if request.params:
+        if request.method == "prompts/get":
+            result = self._get_fixed_prompt(request.params)
+        elif request.params:
             raise McpStdioError(f"{request.method} params must be empty when present")
-        result: dict[str, object]
-        if request.method == "tools/list":
+        elif request.method == "tools/list":
             result = {"tools": list(self._catalog.list_tools())}
         elif request.method == "resources/list":
             result = {"resources": list(self._resource_catalog.list_resources())}
@@ -156,6 +158,24 @@ class McpStdioSession:
             },
             max_message_bytes=self._max_message_bytes,
         )
+
+    def _get_fixed_prompt(self, params: Mapping[str, object]) -> dict[str, object]:
+        """보간 없이 exact allowlist name의 정적 Prompt message snapshot만 반환한다."""
+        name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise McpStdioError("prompts/get name must be a non-empty string")
+        if set(params) not in ({"name"}, {"name", "arguments"}):
+            raise McpStdioError("prompts/get params must contain only name and optional arguments")
+        if "arguments" in params:
+            arguments = params["arguments"]
+            if not isinstance(arguments, Mapping) or arguments:
+                raise McpStdioError(
+                    "prompts/get arguments must be an empty JSON object when present"
+                )
+        try:
+            return self._prompt_catalog.get_prompt(name)
+        except McpPromptError as error:
+            raise McpStdioError("prompts/get name is not allowlisted") from error
 
 
 def parse_stdio_jsonrpc_line(
