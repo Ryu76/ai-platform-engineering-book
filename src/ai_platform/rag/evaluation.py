@@ -13,6 +13,7 @@ import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
+from hashlib import sha256
 from pathlib import Path
 from typing import NoReturn
 
@@ -490,6 +491,61 @@ class RetrievalRegressionPolicy:
             _validate_unit_interval_score(field_name=field_name, value=value)
 
 
+def retrieval_regression_baseline_content_id(
+    baseline: RetrievalEvaluationBaseline, policy: RetrievalRegressionPolicy
+) -> str:
+    """기준선·정책의 의미론적 JSON 콘텐츠 식별자를 결정론적으로 반환한다.
+
+    식별자는 감사 필드 자신, 파일 공백 또는 JSON 키 순서에는 영향받지 않는다. 반면 사례,
+    집계 지표 또는 허용 하락 정책의 모든 변경은 새 SHA-256 식별자를 만든다.
+    """
+    if not isinstance(baseline, RetrievalEvaluationBaseline):
+        raise RagConfigurationError(
+            "content identifier baseline must be a RetrievalEvaluationBaseline"
+        )
+    if not isinstance(policy, RetrievalRegressionPolicy):
+        raise RagConfigurationError("content identifier policy must be a RetrievalRegressionPolicy")
+    payload = {
+        "baseline": {
+            "top_k": baseline.top_k,
+            "cases": [
+                {
+                    "case_id": case.case_id,
+                    "query": case.query,
+                    "expected_chunk_ids": list(case.expected_chunk_ids),
+                }
+                for case in baseline.cases
+            ],
+            "recall_at_k": baseline.recall_at_k,
+            "hit_rate": baseline.hit_rate,
+            "mean_reciprocal_rank": baseline.mean_reciprocal_rank,
+        },
+        "policy": {
+            "maximum_recall_at_k_drop": policy.maximum_recall_at_k_drop,
+            "maximum_hit_rate_drop": policy.maximum_hit_rate_drop,
+            "maximum_mean_reciprocal_rank_drop": policy.maximum_mean_reciprocal_rank_drop,
+        },
+    }
+    canonical_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return f"sha256:{sha256(canonical_bytes).hexdigest()}"
+
+
+def _is_sha256_content_id(value: object) -> bool:
+    """고정 소문자 SHA-256 콘텐츠 식별자의 공개 문자열 형식을 확인한다."""
+    return (
+        isinstance(value, str)
+        and len(value) == 71
+        and value.startswith("sha256:")
+        and all(character in "0123456789abcdef" for character in value[7:])
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class RetrievalRegressionBaselineLoadingConfig:
     """명시한 로컬 기준선·정책 JSON 파일의 크기와 사례 수 제한이다."""
@@ -510,10 +566,11 @@ class RetrievalRegressionBaselineLoadingConfig:
 
 @dataclass(frozen=True, slots=True)
 class RetrievalRegressionBaselineAuditMetadata:
-    """승인된 고정 기준선의 불변 식별자·승인 참조·보존 수명이다."""
+    """승인된 고정 기준선의 식별자·콘텐츠 참조·승인 참조·보존 수명이다."""
 
     baseline_id: str
     approval_reference: str
+    content_id: str
     approved_on: date
     retained_until: date
 
@@ -521,11 +578,16 @@ class RetrievalRegressionBaselineAuditMetadata:
         for field_name, value in (
             ("baseline_id", self.baseline_id),
             ("approval_reference", self.approval_reference),
+            ("content_id", self.content_id),
         ):
             if not isinstance(value, str) or not value.strip():
                 raise RagConfigurationError(
                     f"regression baseline audit {field_name} must be a non-empty string"
                 )
+        if not _is_sha256_content_id(self.content_id):
+            raise RagConfigurationError(
+                "regression baseline audit content_id must be a lowercase sha256 content identifier"
+            )
         if not isinstance(self.approved_on, date) or not isinstance(self.retained_until, date):
             raise RagConfigurationError(
                 "regression baseline audit approved_on and retained_until "
@@ -545,6 +607,10 @@ class RetrievalRegressionBaselineAuditMetadata:
         if self.approval_reference != requirement.comparison_approval_reference:
             raise RagConfigurationError(
                 "regression baseline audit approval_reference must match the requested target"
+            )
+        if self.content_id != requirement.comparison_content_id:
+            raise RagConfigurationError(
+                "regression baseline audit content_id must match the requested target"
             )
         if requirement.as_of_date < self.approved_on:
             raise RagConfigurationError(
@@ -646,6 +712,11 @@ class LocalRetrievalRegressionBaselineLoader:
                 "regression baseline JSON root must contain only baseline, policy, and audit"
             )
         audit = self._audit_from_json(payload["audit"])
+        expected_content_id = retrieval_regression_baseline_content_id(baseline, policy)
+        if audit.content_id != expected_content_id:
+            raise RagConfigurationError(
+                "regression baseline audit content_id must match baseline and policy content"
+            )
         return RetrievalRegressionBaselineFile(baseline=baseline, policy=policy, audit=audit)
 
     def _baseline_from_json(self, raw_baseline: object) -> RetrievalEvaluationBaseline:
@@ -718,7 +789,13 @@ class LocalRetrievalRegressionBaselineLoader:
     def _audit_from_json(raw_audit: object) -> RetrievalRegressionBaselineAuditMetadata:
         if not isinstance(raw_audit, dict):
             raise RagConfigurationError("regression baseline audit must be an object")
-        required_fields = {"baseline_id", "approval_reference", "approved_on", "retained_until"}
+        required_fields = {
+            "baseline_id",
+            "approval_reference",
+            "content_id",
+            "approved_on",
+            "retained_until",
+        }
         if set(raw_audit) != required_fields:
             raise RagConfigurationError(
                 "regression baseline audit contains unsupported or missing fields"
@@ -726,6 +803,7 @@ class LocalRetrievalRegressionBaselineLoader:
         return RetrievalRegressionBaselineAuditMetadata(
             baseline_id=raw_audit["baseline_id"],
             approval_reference=raw_audit["approval_reference"],
+            content_id=raw_audit["content_id"],
             approved_on=_date_from_baseline_audit_json(raw_audit["approved_on"], "approved_on"),
             retained_until=_date_from_baseline_audit_json(
                 raw_audit["retained_until"], "retained_until"
@@ -762,6 +840,7 @@ class RetrievalEvaluationAuditRequirement:
 
     comparison_target_id: str
     comparison_approval_reference: str
+    comparison_content_id: str
     as_of_date: date
 
     def __post_init__(self) -> None:
@@ -773,6 +852,10 @@ class RetrievalEvaluationAuditRequirement:
         ):
             raise RagConfigurationError(
                 "audit comparison_approval_reference must be a non-empty string"
+            )
+        if not _is_sha256_content_id(self.comparison_content_id):
+            raise RagConfigurationError(
+                "audit comparison_content_id must be a lowercase sha256 content identifier"
             )
         if not isinstance(self.as_of_date, date):
             raise RagConfigurationError("audit as_of_date must be a datetime.date")
@@ -790,6 +873,7 @@ class RetrievalEvaluationAuditMetadata:
     record_id: str
     comparison_target_id: str
     comparison_approval_reference: str
+    comparison_content_id: str
     approval_state: str
     retained_until: date
     approval_reference: str | None = None
@@ -803,9 +887,14 @@ class RetrievalEvaluationAuditMetadata:
             ("record_id", self.record_id),
             ("comparison_target_id", self.comparison_target_id),
             ("comparison_approval_reference", self.comparison_approval_reference),
+            ("comparison_content_id", self.comparison_content_id),
         ):
             if not isinstance(value, str) or not value.strip():
                 raise RagConfigurationError(f"audit {field_name} must be a non-empty string")
+        if not _is_sha256_content_id(self.comparison_content_id):
+            raise RagConfigurationError(
+                "audit comparison_content_id must be a lowercase sha256 content identifier"
+            )
         if self.approval_state not in self._APPROVAL_STATES:
             raise RagConfigurationError("audit approval_state is not supported")
         if not isinstance(self.retained_until, date):
@@ -862,6 +951,7 @@ class RetrievalEvaluationAuditMetadata:
             "record_id": self.record_id,
             "comparison_target_id": self.comparison_target_id,
             "comparison_approval_reference": self.comparison_approval_reference,
+            "comparison_content_id": self.comparison_content_id,
             "approval_state": self.approval_state,
             "retained_until": self.retained_until.isoformat(),
             "approval_reference": self.approval_reference,
@@ -882,6 +972,10 @@ class RetrievalEvaluationAuditMetadata:
         if self.comparison_approval_reference != requirement.comparison_approval_reference:
             raise RagConfigurationError(
                 "audit comparison_approval_reference must match the requested target"
+            )
+        if self.comparison_content_id != requirement.comparison_content_id:
+            raise RagConfigurationError(
+                "audit comparison_content_id must match the requested target"
             )
         if self.approval_state != "approved":
             raise RagConfigurationError("audit record must be approved for regression comparison")
@@ -1049,6 +1143,7 @@ class LocalRetrievalEvaluationReportStore:
             "record_id",
             "comparison_target_id",
             "comparison_approval_reference",
+            "comparison_content_id",
             "approval_state",
             "retained_until",
             "approval_reference",
@@ -1070,6 +1165,7 @@ class LocalRetrievalEvaluationReportStore:
             record_id=raw_audit["record_id"],
             comparison_target_id=raw_audit["comparison_target_id"],
             comparison_approval_reference=raw_audit["comparison_approval_reference"],
+            comparison_content_id=raw_audit["comparison_content_id"],
             approval_state=raw_audit["approval_state"],
             retained_until=retained_until,
             approval_reference=raw_audit["approval_reference"],
@@ -1202,6 +1298,14 @@ class RetrievalRegressionChecker:
         self._baseline = baseline
         self._policy = policy or RetrievalRegressionPolicy()
         self._baseline_audit = baseline_audit
+        if (
+            baseline_audit is not None
+            and baseline_audit.content_id
+            != retrieval_regression_baseline_content_id(baseline, self._policy)
+        ):
+            raise RagConfigurationError(
+                "baseline_audit content_id must match the supplied baseline and policy content"
+            )
 
     def evaluate(self, report: RetrievalEvaluationReport) -> RetrievalRegressionDecision:
         """현재 보고서가 같은 기준선의 품질 하락 정책을 통과하는지 판정한다."""

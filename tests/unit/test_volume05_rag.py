@@ -49,6 +49,7 @@ from ai_platform.rag import (
     RetrievalRegressionPolicy,
     SearchHit,
     SourceDocument,
+    retrieval_regression_baseline_content_id,
 )
 
 
@@ -146,10 +147,22 @@ def _hit(*, chunk_id: str, document_id: str, text: str, score: float = 1.0) -> S
     )
 
 
-def _baseline_audit() -> RetrievalRegressionBaselineAuditMetadata:
+def _baseline_audit(
+    baseline: RetrievalEvaluationBaseline | None = None,
+    policy: RetrievalRegressionPolicy | None = None,
+) -> RetrievalRegressionBaselineAuditMetadata:
+    baseline = baseline or RetrievalEvaluationBaseline(
+        top_k=1,
+        cases=(RetrievalEvaluationBaselineCase("shipping", "배송", ("shipping#1",)),),
+        recall_at_k=1.0,
+        hit_rate=1.0,
+        mean_reciprocal_rank=1.0,
+    )
+    policy = policy or RetrievalRegressionPolicy()
     return RetrievalRegressionBaselineAuditMetadata(
         baseline_id="volume05-retrieval-baseline-001",
         approval_reference="baseline-approval-001",
+        content_id=retrieval_regression_baseline_content_id(baseline, policy),
         approved_on=date(2026, 8, 11),
         retained_until=date(2030, 1, 1),
     )
@@ -160,6 +173,7 @@ def _approved_audit() -> RetrievalEvaluationAuditMetadata:
         record_id="volume05-fixed-report-001",
         comparison_target_id="volume05-retrieval-baseline-001",
         comparison_approval_reference="baseline-approval-001",
+        comparison_content_id=_baseline_audit().content_id,
         approval_state="approved",
         retained_until=date(2030, 1, 1),
         approval_reference="local-approval-001",
@@ -1235,6 +1249,7 @@ def test_local_regression_baseline_loader_reads_explicit_baseline_and_policy(
   "audit": {
     "baseline_id": "volume05-retrieval-baseline-001",
     "approval_reference": "baseline-approval-001",
+    "content_id": "sha256:1c14cbfc8593f1b10a0863e38c5f57dee2ddb24d3b900457ae88bae2239ae921",
     "approved_on": "2026-08-11",
     "retained_until": "2030-01-01"
   }
@@ -1256,13 +1271,49 @@ def test_local_regression_baseline_loader_reads_explicit_baseline_and_policy(
     assert loaded.policy.maximum_recall_at_k_drop == 0.1
     assert loaded.policy.maximum_hit_rate_drop == 0.2
     assert loaded.policy.maximum_mean_reciprocal_rank_drop == 0.3
-    assert loaded.audit == _baseline_audit()
+    assert loaded.audit == _baseline_audit(loaded.baseline, loaded.policy)
     assert (
         RetrievalRegressionChecker(baseline=loaded.baseline, policy=loaded.policy)
         .evaluate(report)
         .passed
         is True
     )
+
+
+def test_local_regression_baseline_loader_rejects_content_changed_without_new_content_id(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "evaluation"
+    root.mkdir()
+    (root / "baseline.json").write_text(
+        """{
+  "baseline": {
+    "top_k": 1,
+    "cases": [{"case_id":"shipping","query":"배송","expected_chunk_ids":["shipping#1"]}],
+    "recall_at_k": 1.0,
+    "hit_rate": 0.9,
+    "mean_reciprocal_rank": 1.0
+  },
+  "policy": {
+    "maximum_recall_at_k_drop": 0.1,
+    "maximum_hit_rate_drop": 0.2,
+    "maximum_mean_reciprocal_rank_drop": 0.3
+  },
+  "audit": {
+    "baseline_id": "volume05-retrieval-baseline-001",
+    "approval_reference": "baseline-approval-001",
+    "content_id": "sha256:1c14cbfc8593f1b10a0863e38c5f57dee2ddb24d3b900457ae88bae2239ae921",
+    "approved_on": "2026-08-11",
+    "retained_until": "2030-01-01"
+  }
+}""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RagConfigurationError, match="content_id must match baseline and policy content"
+    ):
+        LocalRetrievalRegressionBaselineLoader(root=root).load(Path("baseline.json"))
 
 
 @pytest.mark.parametrize(
@@ -1584,6 +1635,7 @@ def test_local_evaluation_report_store_round_trips_a_fixed_report_for_baseline_c
             audit_requirement=RetrievalEvaluationAuditRequirement(
                 comparison_target_id="volume05-retrieval-baseline-001",
                 comparison_approval_reference="baseline-approval-001",
+                comparison_content_id=_baseline_audit().content_id,
                 as_of_date=date(2026, 8, 11),
             ),
         )
@@ -1611,6 +1663,7 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
         record_id="pending-report",
         comparison_target_id="volume05-retrieval-baseline-001",
         comparison_approval_reference="baseline-approval-001",
+        comparison_content_id=_baseline_audit().content_id,
         approval_state="pending",
         retained_until=date(2030, 1, 1),
     )
@@ -1623,6 +1676,7 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
             audit_requirement=RetrievalEvaluationAuditRequirement(
                 comparison_target_id="volume05-retrieval-baseline-001",
                 comparison_approval_reference="baseline-approval-001",
+                comparison_content_id=_baseline_audit().content_id,
                 as_of_date=date(2026, 8, 11),
             ),
         )
@@ -1633,6 +1687,7 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
             record_id="approved-report",
             comparison_target_id="volume05-retrieval-baseline-001",
             comparison_approval_reference="baseline-approval-001",
+            comparison_content_id=_baseline_audit().content_id,
             approval_state="approved",
             retained_until=date(2026, 8, 11),
             approval_reference="local-approval-002",
@@ -1645,6 +1700,7 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
             audit_requirement=RetrievalEvaluationAuditRequirement(
                 comparison_target_id="volume05-retrieval-baseline-002",
                 comparison_approval_reference="baseline-approval-001",
+                comparison_content_id=_baseline_audit().content_id,
                 as_of_date=date(2026, 8, 11),
             ),
         )
@@ -1654,6 +1710,29 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
             audit_requirement=RetrievalEvaluationAuditRequirement(
                 comparison_target_id="volume05-retrieval-baseline-001",
                 comparison_approval_reference="different-baseline-approval",
+                comparison_content_id=_baseline_audit().content_id,
+                as_of_date=date(2026, 8, 11),
+            ),
+        )
+    with pytest.raises(RagConfigurationError, match="comparison_content_id must match"):
+        checker.evaluate_record(
+            type(approved_record)(
+                report=report,
+                audit=RetrievalEvaluationAuditMetadata(
+                    record_id="wrong-content-report",
+                    comparison_target_id="volume05-retrieval-baseline-001",
+                    comparison_approval_reference="baseline-approval-001",
+                    comparison_content_id="sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    approval_state="approved",
+                    retained_until=date(2030, 1, 1),
+                    approval_reference="local-approval-003",
+                    approved_on=date(2026, 8, 11),
+                ),
+            ),
+            audit_requirement=RetrievalEvaluationAuditRequirement(
+                comparison_target_id="volume05-retrieval-baseline-001",
+                comparison_approval_reference="baseline-approval-001",
+                comparison_content_id=_baseline_audit().content_id,
                 as_of_date=date(2026, 8, 11),
             ),
         )
@@ -1663,6 +1742,7 @@ def test_audited_regression_comparison_rejects_pending_expired_or_retargeted_rec
             audit_requirement=RetrievalEvaluationAuditRequirement(
                 comparison_target_id="volume05-retrieval-baseline-001",
                 comparison_approval_reference="baseline-approval-001",
+                comparison_content_id=_baseline_audit().content_id,
                 as_of_date=date(2026, 8, 12),
             ),
         )
@@ -1706,6 +1786,7 @@ def test_audit_metadata_rejects_invalid_lifecycle_combinations(
         "record_id": "record-1",
         "comparison_target_id": "target-1",
         "comparison_approval_reference": "target-approval-1",
+        "comparison_content_id": _baseline_audit().content_id,
         "approval_state": "pending",
         "retained_until": date(2030, 1, 1),
     }
@@ -1779,6 +1860,8 @@ def test_local_evaluation_report_store_rejects_unsafe_or_forged_records(
                     '"audit": {"record_id": "record-1", '
                     '"comparison_target_id": "target-1", '
                     '"comparison_approval_reference": "target-approval-1", '
+                    '"comparison_content_id": "sha256:'
+                    '0000000000000000000000000000000000000000000000000000000000000000", '
                     '"approval_state": "pending", '
                     '"retained_until": "2030-01-01", "approval_reference": null, '
                     '"approved_on": null, "superseded_by": null}, "results":',

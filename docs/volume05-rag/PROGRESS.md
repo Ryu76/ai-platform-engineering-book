@@ -1,5 +1,45 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 승인 기준선 콘텐츠 식별자·평가 기록 참조 무결성 슬라이스 완료
+
+### 완료
+
+- `retrieval_regression_baseline_content_id()`를 추가했습니다. 기준선 사례·집계 지표와 회귀 정책의 의미론적 정규 JSON을 소문자 `sha256:` 식별자로 결정론적으로 고정하므로, 파일 공백이나 JSON 키 순서는 무시하면서 사례·지표·정책 변경은 감지합니다.
+- `RetrievalRegressionBaselineAuditMetadata`와 고정 기준선 JSON `audit`에 필수 `content_id`를 추가했습니다. 로더는 감사 ID 형식과 실제 로드한 기준선/정책 콘텐츠의 일치를 확인하며, `RetrievalRegressionChecker`도 외부에서 전달된 감사 메타데이터가 비교 대상 객체와 맞지 않으면 비교 전에 거부합니다.
+- `RetrievalEvaluationAuditMetadata`·`RetrievalEvaluationAuditRequirement` 및 로컬 기록 JSON에 `comparison_content_id`를 추가했습니다. 감사된 회귀 비교는 대상 ID·승인 참조·콘텐츠 ID 세 값이 기준선과 승인 평가 기록 모두에 일치할 때만 실행됩니다.
+- 샘플 기준선과 로컬 예제는 로드한 기준선 감사의 콘텐츠 ID를 평가 기록과 비교 요구사항에 그대로 연결합니다. 여전히 local/sample data, 임시 로컬 기록과 Mock 제공자 경계만 사용하며 라이브 API·비밀값·배포를 사용하지 않았습니다.
+- 기준선 내용을 ID 갱신 없이 편집한 파일 거부와, 승인 평가 기록의 콘텐츠 참조 변경 거부를 Volume 05 단위 테스트로 추가했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 7 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 5 source files
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 179 passed
+uv run python examples/volume05/local_rag.py
+# 고정 JSON 평가 세트 Recall@1·Hit rate·MRR 모두 1.00, 콘텐츠 참조가 연결된 승인 기준선/기록 회귀 판정 통과, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- PRD의 남은 RAG 실습 DoD(주입 가능한 로컬/Mock embedding·벡터 저장소 경계와 FastAPI 어댑터)를 별도 테스트 가능한 단계로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 승인 기준선·평가 기록 참조 무결성 슬라이스 완료
 
 ### 완료

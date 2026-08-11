@@ -32,6 +32,7 @@ from ai_platform.rag.evaluation import (
     RetrievalRegressionDecision,
     RetrievalRegressionMetricResult,
     RetrievalRegressionPolicy,
+    retrieval_regression_baseline_content_id,
 )
 from ai_platform.rag.loader import (
     LocalMarkdownLoader,
@@ -104,6 +105,7 @@ __all__ = [
     "RetrievalRegressionDecision",
     "RetrievalRegressionMetricResult",
     "RetrievalRegressionPolicy",
+    "retrieval_regression_baseline_content_id",
     "Citation",
     "ConfidenceThresholdConfig",
     "ConfidenceThresholdIndex",

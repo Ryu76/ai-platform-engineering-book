@@ -131,10 +131,14 @@ def main() -> None:
     evaluation_report = RetrievalEvaluator(
         index=index, config=RetrievalEvaluationConfig(top_k=1)
     ).evaluate(evaluation_cases)
+    regression_file = LocalRetrievalRegressionBaselineLoader(root=sample_root).load(
+        Path("retrieval-regression-baseline.json")
+    )
     audit = RetrievalEvaluationAuditMetadata(
         record_id="volume05-sample-retrieval-report-001",
         comparison_target_id="volume05-sample-retrieval-baseline-001",
         comparison_approval_reference="volume05-local-sample-baseline-approval-001",
+        comparison_content_id=regression_file.audit.content_id,
         approval_state="approved",
         retained_until=date(2030, 1, 1),
         approval_reference="volume05-local-sample-approval-001",
@@ -144,9 +148,6 @@ def main() -> None:
         report_store = LocalRetrievalEvaluationReportStore(root=Path(report_directory))
         report_store.record(Path("fixed-retrieval-report.json"), evaluation_report, audit=audit)
         revalidated_record = report_store.load_record(Path("fixed-retrieval-report.json"))
-    regression_file = LocalRetrievalRegressionBaselineLoader(root=sample_root).load(
-        Path("retrieval-regression-baseline.json")
-    )
     regression = RetrievalRegressionChecker(
         baseline=regression_file.baseline,
         policy=regression_file.policy,
@@ -156,6 +157,7 @@ def main() -> None:
         audit_requirement=RetrievalEvaluationAuditRequirement(
             comparison_target_id="volume05-sample-retrieval-baseline-001",
             comparison_approval_reference="volume05-local-sample-baseline-approval-001",
+            comparison_content_id=regression_file.audit.content_id,
             as_of_date=date(2026, 8, 11),
         ),
     )
