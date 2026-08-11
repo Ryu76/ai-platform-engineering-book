@@ -39,6 +39,12 @@ from ai_platform.mcp.stdio import (
     parse_stdio_jsonrpc_line,
     run_mcp_stdio_session,
 )
+from ai_platform.mcp.stream_drain import (
+    McpStdioReadableBinaryStream,
+    McpStdioStreamCapture,
+    McpStdioStreamDrainError,
+    drain_mcp_stdio_binary_stream,
+)
 from ai_platform.mcp.subprocess_factory import (
     McpStdioPopenFactory,
     McpStdioPopenProcess,
@@ -60,6 +66,9 @@ __all__ = [
     "McpStdioHostShutdownResult",
     "McpStdioPopenFactory",
     "McpStdioPopenProcess",
+    "McpStdioReadableBinaryStream",
+    "McpStdioStreamCapture",
+    "McpStdioStreamDrainError",
     "McpStdioSubprocessChild",
     "McpStdioSubprocessConfig",
     "McpStdioSubprocessError",
@@ -91,4 +100,5 @@ __all__ = [
     "shutdown_mcp_stdio_child",
     "start_mcp_stdio_child",
     "dispatch_mcp_tool_call",
+    "drain_mcp_stdio_binary_stream",
 ]
