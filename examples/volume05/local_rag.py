@@ -16,6 +16,7 @@ from ai_platform.rag import (
     DocumentDiversityConfig,
     DocumentDiversityIndex,
     HybridRagIndex,
+    InMemoryVectorStore,
     LocalMarkdownLoader,
     LocalPdfLoader,
     LocalRagApi,
@@ -33,6 +34,7 @@ from ai_platform.rag import (
     RetrievalEvaluator,
     RetrievalRegressionChecker,
     SearchHit,
+    VectorRagIndex,
 )
 
 
@@ -61,6 +63,23 @@ class SampleDenseRanker:
         if candidate_id not in allowed_chunk_ids:
             return ()
         return (DenseCandidate(candidate_id),)[:top_k]
+
+
+class SampleTextEmbedder:
+    """고정 주제 벡터만 반환하는 로컬/Mock 임베딩 제공자다."""
+
+    def embed(self, *, texts: tuple[str, ...]) -> tuple[tuple[float, ...], ...]:
+        return tuple(self._vector_for(text) for text in texts)
+
+    @staticmethod
+    def _vector_for(text: str) -> tuple[float, ...]:
+        if "배송" in text or "도착" in text:
+            return (1.0, 0.0, 0.0, 0.0)
+        if "반품" in text:
+            return (0.0, 1.0, 0.0, 0.0)
+        if "교환" in text:
+            return (0.0, 0.0, 1.0, 0.0)
+        return (0.0, 0.0, 0.0, 1.0)
 
 
 class SampleQueryTransformer:
@@ -106,6 +125,11 @@ def main() -> None:
         *pdf_loader.load(Path("exchange-notice.pdf")),
     )
     sparse_index = LocalRagIndex(documents)
+    semantic_index = VectorRagIndex(
+        source_index=sparse_index,
+        embedder=SampleTextEmbedder(),
+        vector_store=InMemoryVectorStore(),
+    )
     hybrid_index = HybridRagIndex(sparse_index=sparse_index, dense_ranker=SampleDenseRanker())
     transformed_index = QueryTransformingIndex(
         index=hybrid_index, transformer=SampleQueryTransformer()
@@ -171,6 +195,10 @@ def main() -> None:
     )
     print("고정 로컬 평가 보고서 기록·재검증: 통과 (임시 허용 루트, 기존 파일 덮어쓰기 없음)")
     print("검색 회귀 판정: 통과 (고정 기준선 대비 지표 하락 없음)")
+    semantic_hits = semantic_index.search("배송은 언제 도착하나요?", top_k=1)
+    if len(semantic_hits) != 1 or semantic_hits[0].chunk.document_id != "local:handbook.md":
+        raise RuntimeError("sample Mock vector search did not return the local delivery evidence")
+    print("Mock 임베딩·메모리 벡터 검색: 배송 근거 및 인용 경계 확인")
     print()
 
     for query in (

@@ -18,6 +18,7 @@ from ai_platform.rag import (
     DocumentDiversityIndex,
     HybridRagIndex,
     HybridSearchConfig,
+    InMemoryVectorStore,
     LocalMarkdownLoader,
     LocalPdfLoader,
     LocalRagApi,
@@ -49,6 +50,10 @@ from ai_platform.rag import (
     RetrievalRegressionPolicy,
     SearchHit,
     SourceDocument,
+    VectorRagIndex,
+    VectorRagIndexConfig,
+    VectorRecord,
+    VectorSearchResult,
     retrieval_regression_baseline_content_id,
 )
 
@@ -129,6 +134,38 @@ class RecordingSearchIndex:
     def search(self, query: str, *, top_k: int = 3) -> tuple[SearchHit, ...]:
         self.calls.append((query, top_k))
         return self.hits  # type: ignore[return-value]
+
+
+class RecordingEmbedder:
+    """텍스트별 고정 벡터만 반환하는 로컬/Mock 임베딩 제공자다."""
+
+    def __init__(self, vectors_by_text: dict[str, tuple[float, ...]] | object) -> None:
+        self.vectors_by_text = vectors_by_text
+        self.calls: list[tuple[str, ...]] = []
+
+    def embed(self, *, texts: tuple[str, ...]) -> tuple[tuple[float, ...], ...]:
+        self.calls.append(texts)
+        if not isinstance(self.vectors_by_text, dict):
+            return self.vectors_by_text  # type: ignore[return-value]
+        return tuple(self.vectors_by_text[text] for text in texts)
+
+
+class RecordingVectorStore:
+    """원문 없이 VectorRecord와 검색 결과만 기록하는 주입 저장소 Mock이다."""
+
+    def __init__(self, results: tuple[VectorSearchResult, ...] | object = ()) -> None:
+        self.results = results
+        self.replaced_records: list[tuple[VectorRecord, ...]] = []
+        self.calls: list[tuple[tuple[float, ...], int]] = []
+
+    def replace(self, *, records: tuple[VectorRecord, ...]) -> None:
+        self.replaced_records.append(records)
+
+    def search(
+        self, *, query_vector: tuple[float, ...], top_k: int
+    ) -> tuple[VectorSearchResult, ...]:
+        self.calls.append((query_vector, top_k))
+        return self.results  # type: ignore[return-value]
 
 
 def _hit(*, chunk_id: str, document_id: str, text: str, score: float = 1.0) -> SearchHit:
@@ -383,6 +420,129 @@ def _index() -> LocalRagIndex:
         ],
         chunking=ChunkingConfig(chunk_size=120, overlap=10),
     )
+
+
+def _vector_embedder(index: LocalRagIndex, *, query_vector: tuple[float, ...]) -> RecordingEmbedder:
+    vectors_by_text = {
+        index.chunks[0].text: (1.0, 0.0),
+        index.chunks[1].text: (0.0, 1.0),
+        "언제 도착하나요?": query_vector,
+    }
+    return RecordingEmbedder(vectors_by_text)
+
+
+def test_vector_index_uses_injected_mock_embeddings_and_store_without_raw_text() -> None:
+    source_index = _index()
+    embedder = _vector_embedder(source_index, query_vector=(1.0, 0.0))
+    store = RecordingVectorStore(
+        (
+            VectorSearchResult("shipping#1", 1.0),
+            VectorSearchResult("returns#1", 0.5),
+        )
+    )
+    index = VectorRagIndex(
+        source_index=source_index,
+        embedder=embedder,
+        vector_store=store,
+    )
+
+    hits = index.search("언제 도착하나요?", top_k=2)
+
+    assert [hit.chunk.chunk_id for hit in hits] == ["shipping#1", "returns#1"]
+    assert [hit.score for hit in hits] == [1.0, 0.5]
+    assert all(hit.matched_terms == () for hit in hits)
+    assert hits[0].citation(label=1).source_uri == "local://handbook/shipping"
+    assert embedder.calls == [
+        tuple(chunk.text for chunk in source_index.chunks),
+        ("언제 도착하나요?",),
+    ]
+    assert [record.chunk_id for record in store.replaced_records[0]] == ["shipping#1", "returns#1"]
+    assert [record.values for record in store.replaced_records[0]] == [(1.0, 0.0), (0.0, 1.0)]
+    assert store.calls == [((1.0, 0.0), 2)]
+
+
+def test_in_memory_vector_store_ranks_normalized_cosine_similarity_deterministically() -> None:
+    store = InMemoryVectorStore()
+    store.replace(
+        records=(
+            VectorRecord("second", (0.0, 1.0)),
+            VectorRecord("first", (1.0, 0.0)),
+            VectorRecord("tie", (1.0, 0.0)),
+        )
+    )
+
+    results = store.search(query_vector=(1.0, 0.0), top_k=3)
+
+    assert [(result.chunk_id, result.similarity) for result in results] == [
+        ("first", 1.0),
+        ("tie", 1.0),
+        ("second", 0.5),
+    ]
+
+
+@pytest.mark.parametrize(
+    "vectors, message",
+    [
+        ([(1.0, 0.0), (0.0, 1.0)], "one tuple vector"),
+        (((1.0, 0.0),), "one tuple vector per index text"),
+        (((0.0, 0.0), (0.0, 1.0)), "must not be a zero vector"),
+        (((1.0, 0.0), (0.0, float("nan"))), "must contain finite numbers"),
+        (((1.0, 0.0), (0.0, 1.0, 2.0)), "same dimensions"),
+    ],
+)
+def test_vector_index_rejects_untrusted_mock_embedding_output(
+    vectors: object, message: str
+) -> None:
+    with pytest.raises(RagConfigurationError, match=message):
+        VectorRagIndex(
+            source_index=_index(),
+            embedder=RecordingEmbedder(vectors),
+            vector_store=InMemoryVectorStore(),
+        )
+
+
+@pytest.mark.parametrize(
+    "results, message",
+    [
+        ([VectorSearchResult("shipping#1", 1.0)], "tuple of VectorSearchResult"),
+        ((VectorSearchResult("unknown#1", 1.0),), "indexed local chunk"),
+        (
+            (VectorSearchResult("shipping#1", 1.0), VectorSearchResult("shipping#1", 0.9)),
+            "duplicate chunk IDs",
+        ),
+        (
+            (VectorSearchResult("shipping#1", 0.8), VectorSearchResult("returns#1", 0.9)),
+            "sorted by descending similarity",
+        ),
+    ],
+)
+def test_vector_index_rejects_untrusted_store_results(results: object, message: str) -> None:
+    source_index = _index()
+    with pytest.raises(RagConfigurationError, match=message):
+        VectorRagIndex(
+            source_index=source_index,
+            embedder=_vector_embedder(source_index, query_vector=(1.0, 0.0)),
+            vector_store=RecordingVectorStore(results),
+        ).search("언제 도착하나요?", top_k=2)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: VectorRecord("record", ()),
+        lambda: VectorSearchResult("result", 1.1),
+        lambda: VectorRagIndexConfig(max_embedding_dimensions=0),
+        lambda: VectorRagIndexConfig(max_indexed_chunks=True),
+        lambda: InMemoryVectorStore().replace(
+            records=(VectorRecord("same", (1.0,)), VectorRecord("same", (1.0,)))
+        ),
+    ],
+)
+def test_vector_contract_rejects_invalid_records_configuration_and_store_state(
+    factory: Callable[[], object],
+) -> None:
+    with pytest.raises(RagConfigurationError):
+        factory()
 
 
 def test_index_chunks_local_document_with_bounded_ranges() -> None:

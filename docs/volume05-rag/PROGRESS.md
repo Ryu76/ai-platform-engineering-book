@@ -1,5 +1,44 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 주입 가능한 로컬/Mock 임베딩·메모리 벡터 저장소 슬라이스 완료
+
+### 완료
+
+- `TextEmbedder`와 `VectorStore` Protocol, `VectorRecord`·`VectorSearchResult`, 결정론적 `InMemoryVectorStore`, `VectorRagIndex`를 추가했습니다. 임베딩/저장소 SDK·네트워크·파일·라이브 API를 직접 만들지 않고, `LocalRagIndex`의 검증된 청크만 명시적으로 주입한 Mock 경계에 전달합니다.
+- 저장소에는 청크 ID와 유한한 비영 벡터만 전달되며 원문·제목·URI·오프셋은 저장하지 않습니다. 검색 결과는 동일한 로컬 청크 ID에만 다시 연결하므로 기존 인용 범위가 보존됩니다.
+- Mock 임베더의 반환 수·tuple 벡터·차원·유한성·영 벡터와 저장소의 결과 타입·요청 수·알 수 없는/중복 ID·정렬을 엄격히 검증했습니다. `InMemoryVectorStore`는 같은 차원 벡터의 cosine 유사도를 0~1로 정규화하고 청크 ID로 동점을 결정론적으로 해소합니다.
+- 로컬 예제에 고정 4차원 `SampleTextEmbedder`와 `InMemoryVectorStore`를 추가해 배송 의미 검색과 기존 로컬 인용 경계를 확인했습니다. 기존 Hybrid/RRF 평가·승인 기준선은 그대로 유지하며, 라이브 API·비밀값·배포는 사용하지 않았습니다.
+- Volume 05 단위 테스트는 정상 의미 검색·원문 비저장 레코드·인용 보존, 메모리 cosine 순위, 신뢰하지 않는 임베더/저장소 출력, 레코드·설정·저장소 상태 거부를 포함합니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 8 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 6 source files
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 195 passed
+uv run python examples/volume05/local_rag.py
+# Mock 임베딩·메모리 벡터 검색의 배송 근거/인용 경계, 고정 JSON 평가 Recall@1·Hit rate·MRR 1.00,
+# 승인 기준선/기록 회귀 판정, 인용 답변 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- PRD의 남은 RAG 실습 DoD인 프레임워크 독립 `LocalRagApi`를 실제 FastAPI 요청/응답 어댑터로 연결하되, 서버 실행·라이브 API·비밀값·배포 없이 TestClient와 Mock 파이프라인으로 검증합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 승인 기준선 콘텐츠 식별자·평가 기록 참조 무결성 슬라이스 완료
 
 ### 완료

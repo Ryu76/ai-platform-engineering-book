@@ -29,8 +29,9 @@
 18. `RetrievalEvaluationAuditRequirement`은 회귀 비교 시 대상 기준선 ID·그 기준선의 승인 참조·콘텐츠 ID·명시 기준일을 요구합니다. `RetrievalRegressionChecker.evaluate_record()`는 감사된 승인 기준선의 실제 기준선/정책 콘텐츠 ID와 `approved` 기록의 세 참조가 모두 일치하고, 양쪽 보존 종료일이 지나지 않은 경우에만 비교합니다. 대상/승인 참조/콘텐츠 변경, 승인 전 기준일, 만료 및 미승인 기록은 회귀 비교 전에 거부합니다.
 19. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
 20. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
+21. `VectorRagIndex`는 이미 검증한 `LocalRagIndex` 청크만 주입된 `TextEmbedder`에 전달하고, 주입된 `VectorStore`에는 청크 ID와 유한한 비영 벡터만 기록합니다. 기본 `InMemoryVectorStore`는 외부 벡터 DB·파일·네트워크 없이 정규화 cosine 유사도(0~1)로 결정론적으로 검색합니다. 저장소가 모르는/중복 청크 ID, 요청보다 많은 결과, 순서가 잘못된 결과를 반환하면 원래 로컬 청크와 인용을 연결하기 전에 거부합니다.
 
-생성기 경계는 `Protocol`이므로 실습과 테스트는 항상 Mock 구현만 사용합니다. 이 슬라이스는 외부 제공자, 라이브 API, 비밀값, 배포를 사용하지 않습니다.
+생성기와 임베딩·벡터 저장소 경계는 모두 `Protocol`이므로 실습과 테스트는 항상 Mock 구현만 사용합니다. 이 슬라이스는 외부 제공자, 라이브 API, 비밀값, 배포를 사용하지 않습니다.
 
 ## 실행
 
@@ -42,6 +43,27 @@ uv run pytest tests/unit/test_volume05_rag.py -q
 ```
 
 예제는 명시한 `handbook.md`·`returns.md`와 `exchange-notice.pdf`만 읽습니다. PDF 파일은 실제 엔진이 아니라 `SamplePdfTextExtractor`가 읽는 고정 로컬 바이트와 Mock 페이지 텍스트를 사용합니다. 이 경계는 실제 파서의 신뢰하지 않는 출력도 검증하도록 설계되어 있으므로, 학습자가 파서를 추가할 때도 네트워크·라이브 API 없이 교체 테스트할 수 있습니다. `SampleQueryTransformer`는 원 질문을 보존한 고정 로컬 확장 질문만, `SampleDenseRanker`는 로컬에 고정한 Mock 청크 ID만 반환합니다. 그 뒤 `SampleEvidenceReranker`는 이미 검색된 제한된 로컬 후보에만 0~1의 고정 점수를 부여하고, `DocumentDiversityIndex`는 문서당 한 청크만 남겨 한 문서에 근거가 집중되지 않게 합니다. `ContextBudgetIndex`는 후보 3개와 600문자의 명시적 예산 안에서 청크 일부를 자르지 않고 근거를 선택합니다. 마지막 `ConfidenceThresholdIndex`는 정규화된 재순위화 점수가 0.8 이상인 근거만 생성기에 전달해 낮은 신뢰도의 응답을 No-answer로 바꿉니다. 예제는 배송·반품·PDF 교환의 고정 질의와 기대 청크 ID를 `sample_data/retrieval-evaluation.json`에서 명시적으로 읽어 `RetrievalEvaluator`를 실행하고 Recall@1·Hit rate·MRR을 출력합니다. 이어서 동일 사례 순서·질문·기대 청크 ID·`top_k=1`, 각 지표 1.00 및 지표별 무하락 정책을 담은 `sample_data/retrieval-regression-baseline.json`을 `LocalRetrievalRegressionBaselineLoader`로 읽어 비교합니다. `RetrievalRegressionChecker`는 지표 하락이 없을 때만 통과를 출력하며, 데이터셋·관련성 정의·반환 깊이가 바뀐 보고서는 품질 비교 대신 거부합니다. 이 JSON 파일은 루트 객체의 `cases` 배열만 허용하며, 각 사례는 `case_id`·`query`·`expected_chunk_ids` 배열을 정확히 한 번씩 가져야 합니다. `LocalRetrievalEvaluationSetLoader`는 자동으로 디렉터리를 탐색하지 않고, UTF-8·파일 크기·경로·중복 키·사례 ID를 검증합니다. 이 파이프라인은 `LocalRagApi.handle()`에 고정 로컬 요청 객체로 전달되며, API 응답도 네트워크 서버 없이 출력됩니다. 따라서 어휘가 겹치지 않는 도착 예정 질문도 배송 근거와 인용을 출력합니다. 반품과 PDF 교환 질문도 근거와 인용을 출력하고, 샘플 문서에 없는 주차장 할인 질문은 No-answer를 출력합니다. 새 파일을 샘플 디렉터리에 추가해도 명시적 `load_many()`·`load()` 또는 평가 세트 로더 호출에 넣기 전에는 색인·평가되지 않습니다.
+
+## 주입 가능한 로컬/Mock 임베딩·벡터 저장소
+
+`VectorRagIndex`는 새 문서 로더나 청커가 아닙니다. 먼저 만든 `LocalRagIndex`의 불변 청크만 `TextEmbedder.embed(texts=...)`에 한 번 전달하고, `VectorStore.replace(records=...)`에는 원문·제목·URI·오프셋 없이 `VectorRecord(chunk_id, values)`만 전달합니다. 질의마다 embedder가 벡터 하나를 반환하면 저장소 결과를 같은 로컬 청크 ID에 다시 연결하여 기존 `Citation` 범위를 보존합니다.
+
+```python
+from ai_platform.rag import InMemoryVectorStore, VectorRagIndex
+
+semantic_index = VectorRagIndex(
+    source_index=local_index,
+    embedder=sample_mock_embedder,
+    vector_store=InMemoryVectorStore(),
+)
+hits = semantic_index.search("배송은 언제 도착하나요?", top_k=1)
+assert hits[0].chunk.document_id == "local:handbook.md"
+assert hits[0].matched_terms == ()  # 어휘 일치가 아닌 Mock 의미 벡터 근거
+```
+
+`TextEmbedder`와 `VectorStore`는 모두 `Protocol`입니다. 따라서 실제 SDK나 벡터 DB를 생성하지 않고 Mock 구현을 주입해 테스트할 수 있습니다. `InMemoryVectorStore`는 같은 차원의 유한한 비영 tuple 벡터만 받아 cosine 값을 0~1로 정규화하고, 같은 점수는 청크 ID로 정렬합니다. `VectorRagIndex`는 embedder의 반환 수·tuple 타입·차원·유한성, 저장소의 결과 타입·수·알려진 ID·중복·내림차순 순서를 검증합니다. 이 계약은 저장소가 새 출처나 원문을 주입하지 못하게 하며, 잘못된 결과는 생성기 호출 전에 `RagConfigurationError`로 거부합니다.
+
+예제의 `SampleTextEmbedder`는 배송·반품·교환 주제에 대한 고정 4차원 벡터만 반환하고 `InMemoryVectorStore`만 사용해 배송 의미 검색과 인용 경계를 별도로 확인합니다. 기존 Hybrid/RRF 평가·회귀 기준선은 변하지 않으므로 각 경계를 독립적으로 재현할 수 있습니다. 라이브 임베딩 API, 비밀값, 배포는 사용하지 않습니다.
 
 ## 프레임워크 독립 API 계약
 

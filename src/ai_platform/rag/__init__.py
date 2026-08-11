@@ -73,6 +73,15 @@ from ai_platform.rag.retrieval import (
     SearchHit,
     SourceDocument,
 )
+from ai_platform.rag.vector import (
+    InMemoryVectorStore,
+    TextEmbedder,
+    VectorRagIndex,
+    VectorRagIndexConfig,
+    VectorRecord,
+    VectorSearchResult,
+    VectorStore,
+)
 
 __all__ = [
     "ChunkingConfig",
@@ -107,6 +116,13 @@ __all__ = [
     "RetrievalRegressionPolicy",
     "retrieval_regression_baseline_content_id",
     "Citation",
+    "InMemoryVectorStore",
+    "TextEmbedder",
+    "VectorRagIndex",
+    "VectorRagIndexConfig",
+    "VectorRecord",
+    "VectorSearchResult",
+    "VectorStore",
     "ConfidenceThresholdConfig",
     "ConfidenceThresholdIndex",
     "ContextBudgetConfig",
