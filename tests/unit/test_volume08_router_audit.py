@@ -126,6 +126,43 @@ def test_mini_project_report_rejects_non_mapping_records_and_route_specific_leak
         validate_router_audit_report(leaked_report, sensitive_values_by_route=request_texts)
 
 
+def test_mini_project_report_rejects_missing_or_cross_route_audit_fields() -> None:
+    report = build_router_mini_project().run()
+    request_texts = _mini_project_request_texts()
+
+    with pytest.raises(UnsafeRouterAuditRecordError, match="configured route schema"):
+        validate_router_audit_report(
+            {
+                **report,
+                "policy": {
+                    key: value for key, value in report["policy"].items() if key != "target_name"
+                },
+            },
+            sensitive_values_by_route=request_texts,
+        )
+    with pytest.raises(UnsafeRouterAuditRecordError, match="configured route schema"):
+        validate_router_audit_report(
+            {**report, "policy": {**report["policy"], "rule_name": "billing-support"}},
+            sensitive_values_by_route=request_texts,
+        )
+
+
+def test_mini_project_report_rejects_malformed_nested_api_audit_schema() -> None:
+    report = build_router_mini_project().run()
+
+    with pytest.raises(UnsafeRouterAuditRecordError, match="configured route schema"):
+        validate_router_audit_report(
+            {
+                **report,
+                "api": {
+                    **report["api"],
+                    "body": {"outcome": "routed", "decision": {"request_id": "mini-api-001"}},
+                },
+            },
+            sensitive_values_by_route=_mini_project_request_texts(),
+        )
+
+
 def test_audit_report_serializer_revalidates_and_emits_canonical_strict_json() -> None:
     report = build_router_mini_project().run()
     request_texts = _mini_project_request_texts()

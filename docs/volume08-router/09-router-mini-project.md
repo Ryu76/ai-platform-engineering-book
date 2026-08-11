@@ -74,7 +74,7 @@ uv run pytest tests/unit/test_volume08_router_audit.py -q
 7. `MultiStageEscalationRouter`는 허용된 Model만 남기는 요청 제약을 그대로 보존하며 unhealthy Agent와 Tool 뒤 Model stage를 선택합니다.
 8. `RouterAPI`는 strict JSON body를 기존 `PolicyRouter`에 한 번 전달하고 `200` body만 report에 포함합니다.
 
-`RouterMiniProject.run()`은 모든 성공 결과에 각 Router의 `as_log_record()`를 사용합니다. 이 메서드는 대상 이름, 정책 이름, 비용, 지연 시간, confidence처럼 조사에 필요한 최소 메타데이터만 반환합니다. 반환 직전에는 `validate_router_audit_report()`가 고정된 여덟 report 경로의 누락·추가를 fail closed 하고, 각 경로의 `validate_router_audit_record()`가 field allowlist, **strict JSON** 직렬화 가능 여부, 해당 요청 원문의 부분 문자열 비노출을 다시 검사합니다. `render_audit_report()`는 이 결과를 `serialize_router_audit_report()`로 다시 검증한 뒤 key 정렬·compact separator·`allow_nan=False`를 적용한 canonical JSON 한 줄로 내보냅니다. 따라서 Python의 `NaN`, `Infinity`, `-Infinity`처럼 기본 `json.dumps()`가 관대하게 허용할 수 있는 비표준 숫자도 거부하고, 검증 뒤 dict가 변경된 경우에도 export 경계에서 fail closed 합니다. 새 경로나 field를 추가할 때에는 이 경계를 넓히기 전에 해당 값이 운영 조사에 꼭 필요한지와 민감 정보가 아닌지를 검토해야 합니다.
+`RouterMiniProject.run()`은 모든 성공 결과에 각 Router의 `as_log_record()`를 사용합니다. 이 메서드는 대상 이름, 정책 이름, 비용, 지연 시간, confidence처럼 조사에 필요한 최소 메타데이터만 반환합니다. 반환 직전에는 `validate_router_audit_report()`가 고정된 여덟 report 경로의 누락·추가를 fail closed 하고, 각 경로가 자기 Router에 정해진 정확한 field schema를 따르는지도 확인합니다. 따라서 예를 들어 Policy record에 Rule field를 섞거나, API의 중첩 `decision`에서 필수 decision field를 빼면 거부됩니다. 이어 각 경로의 `validate_router_audit_record()`가 field allowlist, **strict JSON** 직렬화 가능 여부, 해당 요청 원문의 부분 문자열 비노출을 다시 검사합니다. `render_audit_report()`는 이 결과를 `serialize_router_audit_report()`로 다시 검증한 뒤 key 정렬·compact separator·`allow_nan=False`를 적용한 canonical JSON 한 줄로 내보냅니다. 따라서 Python의 `NaN`, `Infinity`, `-Infinity`처럼 기본 `json.dumps()`가 관대하게 허용할 수 있는 비표준 숫자도 거부하고, 검증 뒤 dict가 변경된 경우에도 export 경계에서 fail closed 합니다. 새 경로나 field를 추가할 때에는 이 경계를 넓히기 전에 해당 값이 운영 조사에 꼭 필요한지와 민감 정보가 아닌지를 검토해야 합니다.
 
 ## 7. 정상 실행 결과
 
@@ -101,7 +101,7 @@ uv run pytest tests/unit/test_volume08_router_audit.py -q
 | `FallbackRouteExhaustedError` | primary와 retry budget 안의 fallback 모두 정책 조건을 통과하지 못함 | health, allowlist, capability, cost, latency 및 retry budget을 확인 |
 | `EscalationRouteExhaustedError` | stage 교집합이 비었거나 budget 안에 healthy target이 없음 | request allowlist와 stage target의 교집합, stage 순서, escalation budget을 확인 |
 | API가 `400` 또는 `422` | JSON schema가 틀렸거나 policy상 대상이 없음 | `08-router-api.md`의 strict body와 `NO_ELIGIBLE_ROUTE` 계약을 확인 |
-| `UnsafeRouterAuditRecordError` | allowlist 밖 field, strict JSON이 아닌 값(`NaN`/`Infinity` 포함), 원문 부분 문자열, 또는 export 전 변경된 report가 포함됨 | `as_log_record()`를 사용하고, non-finite float을 문자열 또는 유한한 숫자로 정규화하며, field를 추가하기 전 민감 정보 여부를 검토한 뒤 audit 테스트의 예상 계약을 갱신 |
+| `UnsafeRouterAuditRecordError` | allowlist 밖 field, route별 고정 schema와 다른 field 조합, strict JSON이 아닌 값(`NaN`/`Infinity` 포함), 원문 부분 문자열, 또는 export 전 변경된 report가 포함됨 | `as_log_record()`를 사용하고, non-finite float을 문자열 또는 유한한 숫자로 정규화하며, field를 추가하기 전 민감 정보와 해당 route schema를 함께 검토한 뒤 audit 테스트의 예상 계약을 갱신 |
 | report에 원문이 포함됨 | 새 로그를 직접 조립하면서 request text를 추가함 | `as_log_record()`와 audit validator를 사용하고 privacy 회귀 테스트를 추가 |
 
 ## 9. 응용 실습과 과제
@@ -136,7 +136,7 @@ Volume 09 LangGraph는 이 Volume의 결과를 다음처럼 입력으로 사용�
 - [ ] fallback의 retry budget과 escalation의 budget이 명시적이며 제한되어 있다.
 - [ ] Agent, Tool, Model stage가 fixture 순서와 target kind를 보존한다.
 - [ ] API 결과가 strict JSON 계약 뒤 기존 policy 결정을 사용한다.
-- [ ] report는 audit field allowlist와 strict JSON 직렬화 검사를 통과하며 사용자 원문, prompt, raw classifier output, 비밀 값, `NaN`/`Infinity`를 포함하지 않는다.
+- [ ] report는 route별 고정 field schema, audit field allowlist, strict JSON 직렬화 검사를 통과하며 사용자 원문, prompt, raw classifier output, 비밀 값, `NaN`/`Infinity`를 포함하지 않는다.
 - [ ] 예제와 `test_volume08_router_mini_project.py`를 외부 호출 없이 실행했다.
 - [ ] Volume 09에 전달할 decision·audit·안전 실패 계약을 확인했다.
 

@@ -711,3 +711,49 @@ PRD DoD 상태:
 - 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
 - PRD Volume DoD의 공유 `docs/glossary.md` 핵심 용어 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
 - 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-11 — Tick 17: 경로별 고정 audit schema 경계
+
+완료한 범위:
+
+- aggregate audit report의 경로 집합 검사 뒤 각 경로가 자기 Router의 정확한 field schema를 따르는지 fail closed 검증하도록 강화했습니다. 공통 policy decision, Rule·Keyword·Semantic·LLM·fallback·escalation의 확장 field, API 최상위 body와 중첩 decision schema를 각각 고정했습니다.
+- 이 경계는 전역 allowlist만 통과하는 Policy record의 Rule field 혼입, 필수 decision field 누락, 잘린 API 중첩 decision을 export 전에 거부합니다. 기존 strict JSON, 원문 부분 문자열 비노출, canonical serialization 재검증은 유지됩니다.
+- 고정 fixture 회귀 테스트로 누락 field, 다른 Router field 혼입, 잘못된 API 중첩 schema를 결정론적으로 거부함을 추가 검증했습니다.
+- README, 미니 프로젝트 학습 장, 학습자 체크리스트에 route별 schema 검토·오류 해결 계약을 반영했습니다. live Agent·Tool·Model·LLM·embedding·HTTP API·네트워크 호출은 하지 않았습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+34 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 13 source files
+
+uv run pytest tests/unit/test_volume08_router_audit.py tests/unit/test_volume08_router_mini_project.py -q
+13 passed in 0.63s
+
+uv run pytest tests/unit/test_volume08_*.py -q
+86 passed in 0.77s
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 route별 schema·allowlist·strict JSON audit report 출력; 외부 호출 없음
+
+uv run pytest -q
+147 passed in 1.23s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- 허용된 Volume 08 Router 범위의 구현, 예제, 테스트, 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 검증 완료 상태입니다.
+- PRD Volume DoD의 공유 `docs/glossary.md` 핵심 용어 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
+- 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
