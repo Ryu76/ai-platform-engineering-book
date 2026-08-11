@@ -5,13 +5,14 @@
 ## 환경과 실행
 
 - [ ] 저장소 루트에서 `uv run pytest tests/unit/test_volume08_policy_router.py -q`를 실행했다.
-- [ ] `examples/volume08/`의 Policy, Keyword, 평가, fallback, Semantic, LLM, escalation, API, 미니 프로젝트 예제를 실행했다.
+- [ ] `examples/volume08/`의 Policy, Rule, Keyword, 평가, fallback, Semantic, LLM, escalation, API, 미니 프로젝트 예제를 실행했다.
 - [ ] 각 예제가 API 키, 환경 변수, 네트워크 연결 없이 실행됨을 확인했다.
 - [ ] `uv run pytest -q`로 전체 로컬 회귀를 실행했다.
 
 ## 정책과 결정론성
 
 - [ ] `RouteTarget`, `RoutingRequest`, `RoutingRequirements`, `RouteDecision`의 역할을 설명할 수 있다.
+- [ ] Rule Router가 검증된 request capability를 명시적 rule로 판정하고, 추가 capability를 policy에 재검증함을 설명할 수 있다.
 - [ ] capability, allowlist, 비용, 지연 시간, health가 `PolicyRouter` 선택에 미치는 영향을 설명할 수 있다.
 - [ ] 비용 → 지연 시간 → 이름 순 동점 해소가 왜 필요한지 설명할 수 있다.
 - [ ] 정책상 대상이 없을 때 임의 target 대신 `NoEligibleRouteError`로 실패해야 함을 이해한다.

@@ -25,6 +25,7 @@ from ai_platform.router.llm import (
     LLMRouter,
 )
 from ai_platform.router.policy import PolicyRouter
+from ai_platform.router.rule import RuleRoute, RuleRouter
 from ai_platform.router.semantic import (
     SemanticIntentScore,
     SemanticRoute,
@@ -38,6 +39,7 @@ class RouterMiniProject:
     """하나의 고정 요청 집합을 각 Router 계약에 전달하는 로컬 실습 조합이다."""
 
     policy_router: PolicyRouter
+    rule_router: RuleRouter
     keyword_router: KeywordRouter
     semantic_router: SemanticRouter
     llm_router: LLMRouter
@@ -49,6 +51,18 @@ class RouterMiniProject:
         """외부 호출 없이 모든 결정의 원문 없는 JSON 가능 감사 결과를 반환한다."""
         policy_decision = self.policy_router.route(
             _request("mini-policy-001", "private general support request")
+        )
+        rule_decision = self.rule_router.route(
+            RoutingRequest(
+                request_id="mini-rule-001",
+                text="private billing rule request",
+                requirements=RoutingRequirements(
+                    required_capabilities=frozenset({"billing", "respond"}),
+                    maximum_cost=Decimal("0.005"),
+                    maximum_latency_ms=100,
+                    permitted_target_names=frozenset({"mini-rule-billing-agent"}),
+                ),
+            )
         )
         keyword_decision = self.keyword_router.route(
             _request("mini-keyword-001", "private order tracking request")
@@ -81,6 +95,7 @@ class RouterMiniProject:
         )
         return {
             "policy": policy_decision.as_log_record(),
+            "rule": rule_decision.as_log_record(),
             "keyword": keyword_decision.as_log_record(),
             "semantic": semantic_decision.as_log_record(),
             "llm": llm_decision.as_log_record(),
@@ -97,6 +112,29 @@ def build_router_mini_project() -> RouterMiniProject:
         targets=(
             _target("mini-policy-agent", RouteTargetKind.AGENT, {"respond"}, "0.002", 50),
             _target("mini-policy-model", RouteTargetKind.MODEL, {"respond"}, "0.004", 90),
+        ),
+    )
+    rule_router = RuleRouter(
+        name="mini-rule-router",
+        policy_router=PolicyRouter(
+            name="mini-rule-policy",
+            targets=(
+                _target(
+                    "mini-rule-billing-agent",
+                    RouteTargetKind.AGENT,
+                    {"billing", "refund", "respond"},
+                    "0.003",
+                    70,
+                ),
+            ),
+        ),
+        routes=(
+            RuleRoute(
+                name="billing-support",
+                required_request_capabilities=frozenset({"billing"}),
+                added_required_capabilities=frozenset({"refund"}),
+                priority=10,
+            ),
         ),
     )
     keyword_router = KeywordRouter(
@@ -271,6 +309,7 @@ def build_router_mini_project() -> RouterMiniProject:
     )
     return RouterMiniProject(
         policy_router=policy_router,
+        rule_router=rule_router,
         keyword_router=keyword_router,
         semantic_router=semantic_router,
         llm_router=llm_router,

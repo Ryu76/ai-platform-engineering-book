@@ -399,3 +399,51 @@ PRD DoD 상태:
 다음 슬라이스:
 
 - 허용 범위가 공유 Glossary까지 확장되면 Volume 08 Router 주요 용어를 `docs/glossary.md`에 추가하고, 전체 Volume DoD를 다시 검증한 뒤에만 완료 marker와 self-pause를 처리합니다.
+
+## 2026-08-11 — Tick 10: 명시적 capability Rule Router와 미니 프로젝트 조합
+
+완료한 범위:
+
+- PRD의 Rule-based Router 필수 실습을 명시적으로 충족하는 `RuleRoute`/`RuleRouter`를 추가했습니다. rule은 신뢰된 request capability가 일치할 때만 추가 capability를 요구하며, 최종 대상 선택은 항상 `PolicyRouter`에 재검증을 위임합니다.
+- 일치 rule은 priority 내림차순 → rule 이름 오름차순으로 결정론적으로 선택합니다. rule 미일치는 `NoMatchingRuleRouteError`, policy상 대상 부재는 기존 `NoEligibleRouteError`로 fail closed 합니다.
+- 고정 billing fixture 예제와 priority·동점 해소·정책 allowlist 거부·안전 실패·JSON·원문 비노출 계약 테스트를 추가했습니다. live Agent·Tool·Model·LLM·API·네트워크 호출은 하지 않습니다.
+- Rule path를 `RouterMiniProject`에 추가해 고정 request ID 여덟 개의 조합 report에서 rule target과 privacy를 함께 회귀 검증했습니다.
+- `10-rule-routing.md` 학습 장, README 학습 순서·스무 개 재실행 명령, 학습자 체크리스트, 미니 프로젝트 문서를 갱신했습니다.
+
+검증 결과:
+
+```text
+uv run pytest tests/unit/test_volume08_*.py -q
+75 passed in 0.84s
+
+uv run ruff format --check src/ai_platform/router/rule.py src/ai_platform/router/mini_project.py src/ai_platform/router/__init__.py examples/volume08/rule_router.py tests/unit/test_volume08_rule_router.py tests/unit/test_volume08_router_mini_project.py
+6 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 12 source files
+
+uv run python examples/volume08/rule_router.py
+{"confidence": "1", "estimated_cost": "0.003", "estimated_latency_ms": "70", "policy_name": "offline-rule-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-rule-001", "rule_name": "billing-support", "rule_router_name": "offline-rule-router", "target_kind": "agent", "target_name": "offline-billing-agent"}
+
+uv run pytest -q
+136 passed in 1.30s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- Volume 08의 명시적 Rule-based Router 필수 실습, Router 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 문서는 완료했습니다.
+- 공유 `docs/glossary.md`의 Volume 08 주요 용어 추가만 남았습니다. 사용자 지시의 변경 허용 범위가 `docs/volume08-router/`, `examples/volume08/`, Volume 08 tests, `src/ai_platform/router/`로 한정되어 공유 Glossary는 수정하지 않았습니다.
+- 따라서 `VOLUME08_COMPLETE=true`는 추가하지 않았고 cron self-pause도 수행하지 않았습니다.
+
+다음 슬라이스:
+
+- 허용 범위가 공유 Glossary까지 확장되면 Volume 08 Router 주요 용어를 `docs/glossary.md`에 추가하고, 전체 Volume DoD를 다시 검증한 뒤에만 완료 marker와 self-pause를 처리합니다.

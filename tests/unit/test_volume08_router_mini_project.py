@@ -10,6 +10,7 @@ def test_router_mini_project_combines_every_fixed_router_with_expected_targets()
 
     assert set(report) == {
         "policy",
+        "rule",
         "keyword",
         "semantic",
         "llm",
@@ -18,6 +19,8 @@ def test_router_mini_project_combines_every_fixed_router_with_expected_targets()
         "api",
     }
     assert report["policy"]["target_name"] == "mini-policy-agent"
+    assert report["rule"]["target_name"] == "mini-rule-billing-agent"
+    assert report["rule"]["rule_name"] == "billing-support"
     assert report["keyword"]["target_name"] == "mini-order-agent"
     assert report["keyword"]["intent"] == "order_tracking"
     assert report["semantic"]["target_name"] == "mini-refund-agent"
@@ -61,6 +64,7 @@ def test_router_mini_project_is_deterministic_and_logs_no_request_text() -> None
     assert first_report == second_report
     for private_text in (
         "private general support request",
+        "private billing rule request",
         "private order tracking request",
         "private refund request",
         "private priority request",

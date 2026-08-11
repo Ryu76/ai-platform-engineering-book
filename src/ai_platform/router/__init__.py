@@ -47,6 +47,12 @@ from ai_platform.router.llm import (
 )
 from ai_platform.router.mini_project import RouterMiniProject, build_router_mini_project
 from ai_platform.router.policy import PolicyRouter
+from ai_platform.router.rule import (
+    NoMatchingRuleRouteError,
+    RuleRoute,
+    RuleRouteDecision,
+    RuleRouter,
+)
 from ai_platform.router.semantic import (
     NoConfidentSemanticRouteError,
     NoSemanticScoreFixtureError,
@@ -64,6 +70,7 @@ __all__ = [
     "NoConfidentLLMRouteError",
     "NoConfidentSemanticRouteError",
     "NoLLMClassifierResponseFixtureError",
+    "NoMatchingRuleRouteError",
     "NoSemanticScoreFixtureError",
     "EscalationFixture",
     "EscalationRouteExhaustedError",
@@ -87,6 +94,9 @@ __all__ = [
     "RouteDecision",
     "RouteTarget",
     "RouteTargetKind",
+    "RuleRoute",
+    "RuleRouteDecision",
+    "RuleRouter",
     "RouterMiniProject",
     "RouterAPI",
     "RouterAPIResponse",

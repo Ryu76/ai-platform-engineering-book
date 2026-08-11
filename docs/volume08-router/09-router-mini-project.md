@@ -2,7 +2,7 @@
 
 ## 1. 학습 목표
 
-이 미니 프로젝트에서는 Volume 08에서 만든 정책(Policy), Keyword, Semantic, LLM, fallback, multi-stage escalation, Router API 계약을 하나의 고정 요청 집합으로 조합합니다. 학습자는 각 Router가 다른 분류 방법을 쓰더라도 최종 대상 선택은 항상 capability, allowlist, 비용, 지연 시간, health 정책을 통과해야 한다는 점을 확인할 수 있어야 합니다.
+이 미니 프로젝트에서는 Volume 08에서 만든 정책(Policy), Rule, Keyword, Semantic, LLM, fallback, multi-stage escalation, Router API 계약을 하나의 고정 요청 집합으로 조합합니다. 학습자는 각 Router가 다른 분류 방법을 쓰더라도 최종 대상 선택은 항상 capability, allowlist, 비용, 지연 시간, health 정책을 통과해야 한다는 점을 확인할 수 있어야 합니다.
 
 ## 2. 왜 조합 검증이 필요한가
 
@@ -21,6 +21,7 @@
 고정 요청 ID 집합
   │
   ├── mini-policy-001 ───────► PolicyRouter ───────────────► Agent
+  ├── mini-rule-001 ─────────► RuleRouter ─────► PolicyRouter ► Agent
   ├── mini-keyword-001 ──────► KeywordRouter ─► PolicyRouter ► Agent
   ├── mini-semantic-001 ─────► Semantic fixture ─► PolicyRouter ► Agent
   ├── mini-llm-001 ──────────► LLM response fixture ─► PolicyRouter ► Agent
@@ -51,19 +52,20 @@ uv run python examples/volume08/router_mini_project.py
 uv run pytest tests/unit/test_volume08_router_mini_project.py -q
 ```
 
-첫 명령은 일곱 Router 경로의 JSON report 한 줄을 출력합니다. 두 번째 명령은 target, fallback 순서, escalation 순서, API 응답, 결정론성, 원문 비노출을 검사합니다. 두 명령 모두 네트워크 연결이나 live API를 사용하지 않습니다.
+첫 명령은 여덟 Router 경로의 JSON report 한 줄을 출력합니다. 두 번째 명령은 target, fallback 순서, escalation 순서, API 응답, 결정론성, 원문 비노출을 검사합니다. 두 명령 모두 네트워크 연결이나 live API를 사용하지 않습니다.
 
 ## 6. 코드 설명
 
 `src/ai_platform/router/mini_project.py`의 `build_router_mini_project()`는 다음 고정 계약을 구성합니다.
 
 1. `PolicyRouter`는 일반 지원 Agent와 더 비싼 Model 중 정책상 가장 적합한 Agent를 고릅니다.
-2. `KeywordRouter`는 `order`, `tracking` keyword와 `0.90` confidence를 `0.80` threshold에 대조한 후 주문 Agent의 capability를 정책에 추가합니다.
-3. `SemanticRouter`는 `refund`의 `0.93` score fixture를 `0.85` threshold에 대조한 후 환불 Agent를 정책으로 재검증합니다.
-4. `LLMRouter`는 `priority_support`의 `0.92` response fixture를 `0.85` threshold에 대조하고 우선 지원 Agent를 정책으로 재검증합니다.
-5. `PolicyFallbackRouter`는 unhealthy primary를 먼저 기록하고, 같은 요청 제약으로 healthy fallback Agent를 한 번만 시도합니다.
-6. `MultiStageEscalationRouter`는 허용된 Model만 남기는 요청 제약을 그대로 보존하며 unhealthy Agent와 Tool 뒤 Model stage를 선택합니다.
-7. `RouterAPI`는 strict JSON body를 기존 `PolicyRouter`에 한 번 전달하고 `200` body만 report에 포함합니다.
+2. `RuleRouter`는 검증된 `billing` capability에 일치하는 `billing-support` rule의 `refund` capability를 추가하고, billing Agent를 정책으로 재검증합니다.
+3. `KeywordRouter`는 `order`, `tracking` keyword와 `0.90` confidence를 `0.80` threshold에 대조한 후 주문 Agent의 capability를 정책에 추가합니다.
+4. `SemanticRouter`는 `refund`의 `0.93` score fixture를 `0.85` threshold에 대조한 후 환불 Agent를 정책으로 재검증합니다.
+5. `LLMRouter`는 `priority_support`의 `0.92` response fixture를 `0.85` threshold에 대조하고 우선 지원 Agent를 정책으로 재검증합니다.
+6. `PolicyFallbackRouter`는 unhealthy primary를 먼저 기록하고, 같은 요청 제약으로 healthy fallback Agent를 한 번만 시도합니다.
+7. `MultiStageEscalationRouter`는 허용된 Model만 남기는 요청 제약을 그대로 보존하며 unhealthy Agent와 Tool 뒤 Model stage를 선택합니다.
+8. `RouterAPI`는 strict JSON body를 기존 `PolicyRouter`에 한 번 전달하고 `200` body만 report에 포함합니다.
 
 `RouterMiniProject.run()`은 모든 성공 결과에 각 Router의 `as_log_record()`를 사용합니다. 이 메서드는 대상 이름, 정책 이름, 비용, 지연 시간, confidence처럼 조사에 필요한 최소 메타데이터만 반환합니다.
 
@@ -73,6 +75,7 @@ uv run pytest tests/unit/test_volume08_router_mini_project.py -q
 
 ```text
 "policy": {"target_name": "mini-policy-agent", ...}
+"rule": {"rule_name": "billing-support", "target_name": "mini-rule-billing-agent", ...}
 "keyword": {"intent": "order_tracking", "target_name": "mini-order-agent", ...}
 "semantic": {"semantic_similarity": "0.93", "target_name": "mini-refund-agent", ...}
 "llm": {"llm_classifier_confidence": "0.92", "target_name": "mini-priority-agent", ...}
@@ -120,8 +123,8 @@ Volume 09 LangGraph는 이 Volume의 결과를 다음처럼 입력으로 사용�
 
 ## 11. 완료 체크리스트
 
-- [ ] 일곱 Router 경로가 하나의 고정 request ID 집합에서 실행된다.
-- [ ] Keyword, Semantic, LLM 분류 결과가 각각 PolicyRouter의 capability·allowlist·cost·latency·health 검사를 통과한다.
+- [ ] 여덟 Router 경로가 하나의 고정 request ID 집합에서 실행된다.
+- [ ] Rule, Keyword, Semantic, LLM 분류 결과가 각각 PolicyRouter의 capability·allowlist·cost·latency·health 검사를 통과한다.
 - [ ] fallback의 retry budget과 escalation의 budget이 명시적이며 제한되어 있다.
 - [ ] Agent, Tool, Model stage가 fixture 순서와 target kind를 보존한다.
 - [ ] API 결과가 strict JSON 계약 뒤 기존 policy 결정을 사용한다.
