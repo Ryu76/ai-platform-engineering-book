@@ -2,6 +2,11 @@
 
 from ai_platform.mcp.catalog import McpCatalogError, McpServerCatalog, McpToolDefinition
 from ai_platform.mcp.dispatcher import McpDispatchError, dispatch_mcp_tool_call
+from ai_platform.mcp.fair_drain import (
+    McpStdioFairDrainError,
+    McpStdioStreamPairCapture,
+    drain_mcp_stdio_stream_pair_fairly,
+)
 from ai_platform.mcp.host import (
     McpStdioChildFactory,
     McpStdioChildProcess,
@@ -60,6 +65,7 @@ __all__ = [
     "McpDispatchError",
     "McpStdioChildFactory",
     "McpStdioChildProcess",
+    "McpStdioFairDrainError",
     "McpStdioHostAllowlist",
     "McpStdioHostError",
     "McpStdioHostLaunchPlan",
@@ -69,6 +75,7 @@ __all__ = [
     "McpStdioReadableBinaryStream",
     "McpStdioStreamCapture",
     "McpStdioStreamDrainError",
+    "McpStdioStreamPairCapture",
     "McpStdioSubprocessChild",
     "McpStdioSubprocessConfig",
     "McpStdioSubprocessError",
@@ -101,4 +108,5 @@ __all__ = [
     "start_mcp_stdio_child",
     "dispatch_mcp_tool_call",
     "drain_mcp_stdio_binary_stream",
+    "drain_mcp_stdio_stream_pair_fairly",
 ]

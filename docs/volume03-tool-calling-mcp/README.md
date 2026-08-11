@@ -32,5 +32,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 22. [MCP STDIO child factory: allowlisted plan만 trusted factory에 전달하기](22-mcp-stdio-injected-child-factory.md) — immutable plan의 fixed argv·bounded stream budget·`shell=False`만 injected factory에 한 번 전달하고 실제 subprocess는 열지 않는 시작 ownership 경계
 23. [MCP STDIO subprocess factory: fixed argv·cwd·environment를 fake Popen seam으로 검증하기](23-mcp-stdio-subprocess-factory.md) — OS-specific adapter를 분리하고 explicit cwd·complete environment·binary pipe topology·`shell=False`를 fake Popen으로 검증하는 시작 경계
 24. [MCP STDIO bounded output drain: 한 binary pipe를 byte ceiling 안에서 EOF까지 수집하기](24-mcp-stdio-bounded-output-drain.md) — 한 allowlisted binary stream을 fixed read와 overflow sentinel로만 수집하고 concurrent drain·decode·shutdown과 분리하는 경계
+25. [MCP STDIO fair stream pair drain: 두 fake output을 교대로 bounded 수집하기](25-mcp-stdio-fair-stream-pair-drain.md) — 실제 OS pipe를 열지 않고 two independent stream을 round-robin으로 읽되 independent ceiling failure 뒤 추가 read·partial capture를 막는 scheduling model
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.
