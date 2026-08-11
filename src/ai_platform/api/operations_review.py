@@ -61,6 +61,17 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             value in deployment
             for value in ("cpu: 100m", "memory: 128Mi", "cpu: 500m", "memory: 256Mi")
         ),
+        "deployment_declares_restricted_runtime_security": all(
+            value in deployment
+            for value in (
+                "type: RuntimeDefault",
+                "allowPrivilegeEscalation: false",
+                'drop: ["ALL"]',
+                "readOnlyRootFilesystem: true",
+                "runAsNonRoot: true",
+                "runAsUser: 10001",
+            )
+        ),
         "base_excludes_secret_example": "secret.example.yaml" not in base_kustomization,
         "compose_is_internal_placeholder_topology": "internal: true" in compose
         and "example.invalid/" in compose

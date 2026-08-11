@@ -34,6 +34,7 @@ def test_local_operations_review_combines_probe_telemetry_and_render_only_bounda
         "deployment_uses_example_image": True,
         "deployment_has_distinct_health_probes": True,
         "deployment_declares_resource_requests_and_limits": True,
+        "deployment_declares_restricted_runtime_security": True,
         "base_excludes_secret_example": True,
         "compose_is_internal_placeholder_topology": True,
         "ingress_uses_placeholder_host": True,
