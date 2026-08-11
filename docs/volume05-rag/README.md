@@ -98,7 +98,7 @@ app = create_fastapi_rag_app(pipeline=pipeline)
 
 현재 실습 의존성에는 FastAPI가 포함되지 않으므로, 이 팩토리를 호출했는데 패키지가 없으면 `RagConfigurationError`가 설치 필요성을 명확히 알립니다. 모듈을 import하거나 기존 로컬 예제를 실행하는 것만으로는 FastAPI·서버·네트워크가 생성되지 않습니다. 설치된 FastAPI에서 JSON 본문 파싱에 실패하거나 본문이 누락된 경우도 `400 {"error": {"code": "invalid_request", "message": "request payload must be valid JSON"}}`로 정규화합니다. 유효 JSON은 `LocalRagApi`에 그대로 위임하므로 응답 본문, 인용, No-answer와 잘못된 필드의 400 계약은 프레임워크 독립 경계와 동일합니다.
 
-테스트는 FastAPI 프레임워크 객체를 로컬 Mock으로 바꿔 필수 `Body(...)` 등록, 라우트·오류 처리기 등록, 200 인용 응답, 400 요청 오류를 서버나 네트워크 없이 검증합니다. 실제 `TestClient` 통합 검증은 FastAPI를 프로젝트 의존성으로 명시할 수 있는 별도 범위에서 추가해야 합니다.
+테스트는 FastAPI 프레임워크 객체를 로컬 Mock으로 바꿔 필수 `Body(...)` 등록, 라우트·오류 처리기 등록, 200 인용 응답, 400 요청 오류를 서버나 네트워크 없이 검증합니다. 선택 의존성이 설치된 로컬 환경에서는 같은 Mock 파이프라인에 실제 `fastapi.testclient.TestClient`를 붙여 필수 JSON 본문, 200 인용 응답, No-answer, 지원하지 않는 필드의 400, 누락·잘못된 JSON의 정규화된 400을 통합 검증합니다. 이 테스트는 FastAPI가 기본 프로젝트 의존성이 아니므로 `pytest.importorskip()`으로 조건부 실행되며, `TestClient`는 인프로세스 ASGI 호출만 사용해 서버·포트·라이브 API를 만들지 않습니다.
 
 ## 고정 검색 품질 평가 계약
 

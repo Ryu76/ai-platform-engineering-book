@@ -1224,6 +1224,65 @@ def test_fastapi_adapter_explains_missing_optional_framework(
         create_fastapi_rag_app(pipeline=RagPipeline(index=_index(), generator=RecordingGenerator()))
 
 
+def test_fastapi_adapter_serves_local_mock_pipeline_through_real_test_client() -> None:
+    """선택 의존성이 설치된 로컬 환경에서만 실제 ASGI 요청 경계를 검증한다."""
+    testclient_module = pytest.importorskip("fastapi.testclient")
+    generator = RecordingGenerator(response="배송 안내를 확인하세요.")
+    app = create_fastapi_rag_app(pipeline=RagPipeline(index=_index(), generator=generator))
+    client = testclient_module.TestClient(app)
+
+    cited_response = client.post(
+        FASTAPI_RAG_QUERY_PATH,
+        json={"query": "배송 상태는 어떻게 확인하나요?", "top_k": 1},
+    )
+    no_answer_response = client.post(FASTAPI_RAG_QUERY_PATH, json={"query": "주차장 할인 정책"})
+    invalid_request_response = client.post(
+        FASTAPI_RAG_QUERY_PATH,
+        json={"query": "배송", "unsupported": True},
+    )
+    missing_body_response = client.post(FASTAPI_RAG_QUERY_PATH)
+    malformed_json_response = client.post(
+        FASTAPI_RAG_QUERY_PATH,
+        content=b'{"query":',
+        headers={"content-type": "application/json"},
+    )
+
+    assert cited_response.status_code == 200
+    assert cited_response.json() == {
+        "answer": "배송 안내를 확인하세요.",
+        "no_answer": False,
+        "citations": [
+            {
+                "label": 1,
+                "chunk_id": "shipping#1",
+                "title": "배송 안내",
+                "source_uri": "local://handbook/shipping",
+                "start_offset": 0,
+                "end_offset": 54,
+            }
+        ],
+    }
+    assert no_answer_response.status_code == 200
+    assert no_answer_response.json() == {
+        "answer": RagPipeline.NO_ANSWER_TEXT,
+        "no_answer": True,
+        "citations": [],
+    }
+    assert invalid_request_response.status_code == 400
+    assert invalid_request_response.json() == {
+        "error": {
+            "code": "invalid_request",
+            "message": "request payload contains unsupported fields: unsupported",
+        }
+    }
+    for response in (missing_body_response, malformed_json_response):
+        assert response.status_code == 400
+        assert response.json() == {
+            "error": {"code": "invalid_request", "message": "request payload must be valid JSON"}
+        }
+    assert [query for query, _ in generator.calls] == ["배송 상태는 어떻게 확인하나요?"]
+
+
 def test_retrieval_evaluator_reports_deterministic_fixed_query_metrics_without_generation() -> None:
     source = RecordingSearchIndex(
         (

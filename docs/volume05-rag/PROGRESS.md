@@ -1,5 +1,42 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-11 — 선택적 FastAPI TestClient ASGI 통합 검증 슬라이스 완료
+
+### 완료
+
+- `test_fastapi_adapter_serves_local_mock_pipeline_through_real_test_client()`를 추가했습니다. FastAPI가 설치된 로컬 환경에서만 `pytest.importorskip("fastapi.testclient")`로 실제 `TestClient`를 생성하므로, 기본 의존성·모듈 import·예제 실행 경계는 그대로 선택적입니다.
+- 같은 로컬 `LocalRagIndex`와 `RecordingGenerator` Mock 파이프라인을 인프로세스 ASGI 앱에 연결해 필수 JSON 본문의 200 인용 응답, 근거 없음 200 No-answer, 지원하지 않는 필드의 공개 400, 누락 및 손상 JSON의 정규화된 `invalid_request` 400을 검증했습니다. No-answer·요청 오류는 생성기를 호출하지 않는 것도 확인합니다.
+- `README.md`의 이전 "별도 범위에서 추가" 안내를 조건부 실제 통합 검증 계약으로 갱신했습니다. `TestClient`는 서버·포트·네트워크·라이브 API를 만들지 않으며, 제공자·문서 데이터는 모두 local/sample data와 Mock 경계에 머뭅니다.
+- 프로젝트 기본 환경에는 FastAPI가 없으므로 일반 Volume 05 테스트에서는 이 한 테스트가 명시적으로 skip됩니다. FastAPI 0.133.1이 설치된 로컬 환경에서는 별도 직접 `TestClient` 실행으로 상태 코드 `[200, 200, 400, 400, 400]`과 각 JSON 계약을 실제 확인했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-11에 다음을 모두 통과했습니다.
+
+```text
+직접 로컬 TestClient 계약 실행 (FastAPI 0.133.1 / Starlette 1.0.1 / httpx 0.28.1)
+# TestClient contract verified: [200, 200, 400, 400, 400]
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 197 passed, 1 skipped in 1.51s
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 9 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 7 source files
+uv run python examples/volume05/local_rag.py
+# 고정 평가/승인 기준선 회귀 통과, Mock 벡터 인용 경계와 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+```
+
+### 다음 슬라이스
+
+- 외부 Qdrant·라이브 제공자·서버 없이 유지해야 하는 현재 제약에서는, 남은 PRD 범위를 먼저 local/Mock으로 재현 가능한 경계인지 점검한 뒤 별도 단일 계약으로 확장합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — RAG 보안·비용·성능 운영 점검 문서 슬라이스 완료
 
 ### 완료
