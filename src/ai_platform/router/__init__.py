@@ -45,6 +45,7 @@ from ai_platform.router.llm import (
     NoConfidentLLMRouteError,
     NoLLMClassifierResponseFixtureError,
 )
+from ai_platform.router.mini_project import RouterMiniProject, build_router_mini_project
 from ai_platform.router.policy import PolicyRouter
 from ai_platform.router.semantic import (
     NoConfidentSemanticRouteError,
@@ -86,6 +87,7 @@ __all__ = [
     "RouteDecision",
     "RouteTarget",
     "RouteTargetKind",
+    "RouterMiniProject",
     "RouterAPI",
     "RouterAPIResponse",
     "RoutingConfigurationError",
@@ -98,5 +100,6 @@ __all__ = [
     "SemanticRouteDecision",
     "SemanticRouter",
     "SemanticScoreFixture",
+    "build_router_mini_project",
     "evaluate_keyword_router",
 ]

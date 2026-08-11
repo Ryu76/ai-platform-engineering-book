@@ -349,3 +349,53 @@ PRD DoD 상태:
 다음 슬라이스:
 
 - 고정 policy·keyword·semantic·LLM·fallback·escalation fixture를 한 요청 집합에 조합하는 Volume 08 미니 프로젝트와 Volume 범위 학습자 체크리스트를 추가하고, 전체 로컬 회귀를 검증합니다.
+
+## 2026-08-11 — Tick 9: 고정 fixture Router 미니 프로젝트와 학습자 체크리스트
+
+완료한 범위:
+
+- `RouterMiniProject`와 `build_router_mini_project()`를 추가하여 Policy, Keyword, Semantic, LLM, fallback, Agent·Tool·Model escalation, strict Router API를 하나의 고정 request ID 집합으로 조합했습니다. 모든 path는 live Agent·Tool·Model·LLM·embedding·HTTP API·네트워크를 호출하지 않습니다.
+- Keyword·Semantic·LLM path는 분류 결과 capability를 policy에 재검증하고, fallback은 unhealthy primary 뒤 한 번의 fallback만 시도하며, escalation은 허용된 Model로 좁혀진 원래 정책 제약을 보존한 채 Agent → Tool → Model fixture 순서를 따릅니다.
+- `router_mini_project.py` 예제와 조합 계약 테스트를 추가했습니다. 테스트는 일곱 경로의 예상 target·intent·attempt 순서·API 응답, 두 실행 간 결정론성, JSON 직렬화, 사용자 원문 비노출을 검증합니다.
+- `09-router-mini-project.md`에 조합 구조, 실행 절차, 오류 해결, 응용 과제, Volume 09 workflow 인계 계약을 작성하고, `checklist.md`에 Volume 범위 학습자 체크리스트를 추가했습니다.
+- README의 전체 재실행 명령을 18개로 확장하고 미니 프로젝트·체크리스트 링크를 연결했습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router/mini_project.py src/ai_platform/router/__init__.py examples/volume08/router_mini_project.py tests/unit/test_volume08_router_mini_project.py
+4 files already formatted
+
+uv run ruff check .
+All checks passed!
+
+uv run mypy src
+Success: no issues found in 18 source files
+
+uv run pytest tests/unit/test_volume08_router_mini_project.py -q
+2 passed in 0.29s
+
+uv run python examples/volume08/router_mini_project.py
+일곱 경로(`policy`, `keyword`, `semantic`, `llm`, `fallback`, `escalation`, `api`)의 JSON report 출력; 예상 target과 attempt 순서는 아래 조합 테스트에서 검증
+
+uv run pytest -q
+129 passed in 1.22s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+
+uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- Volume별 미니 프로젝트, 학습자 체크리스트, 다음 Volume 인계 정리는 완료했습니다.
+- 공유 `docs/glossary.md`의 Volume 08 주요 용어 추가는 아직 남았습니다. 사용자 지시의 변경 허용 범위가 `docs/volume08-router/`, `examples/volume08/`, Volume 08 tests, `src/ai_platform/router/`로 한정되어 공유 Glossary는 수정하지 않았습니다.
+- 따라서 `VOLUME08_COMPLETE=true`는 추가하지 않았고 cron self-pause도 수행하지 않았습니다.
+
+다음 슬라이스:
+
+- 허용 범위가 공유 Glossary까지 확장되면 Volume 08 Router 주요 용어를 `docs/glossary.md`에 추가하고, 전체 Volume DoD를 다시 검증한 뒤에만 완료 marker와 self-pause를 처리합니다.
