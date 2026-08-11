@@ -3,7 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 같은 Python 프로세스에서 동일한 정규화 JSON 경로를 여는 8개의 독립 `JsonFileCheckpointer` 인스턴스로 동시에 `DEPLOY`를 시작해도 정확히 하나만 위험 작업의 `WAITING_FOR_APPROVAL` Checkpoint를 생성함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 기존 Action·승인 대기·감사 이벤트를 바꾸거나 `execute` 이벤트를 추가하지 않습니다. 경로 단위 Lock 보장은 하나의 프로세스와 같은 로컬 경로로 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+- 이번 슬라이스: 같은 Python 프로세스에서 동일한 정규화 JSON 경로를 여는 8개의 독립 `JsonFileCheckpointer` 인스턴스로 같은 `DEPLOY` 승인 요청을 동시에 재전송해도 정확히 하나만 `WAITING_FOR_APPROVAL` Checkpoint를 소비해 `COMPLETED`를 기록함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 기존 Action·완료 상태·감사 이벤트를 바꾸거나 두 번째 `execute` 이벤트를 추가하지 않습니다. 경로 단위 Lock 보장은 하나의 프로세스와 같은 로컬 경로로 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 요청 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+- 이번 검증: `json_shared_path_concurrent_approval_workflow.py`는 `completed=1`, `conflicts=7`, `plan | approval | approval | execute`를 출력했습니다. 새 동시 승인 계약 테스트는 10회 반복 모두 통과했고, Volume 09 단위 테스트는 `40 passed`, 전체 테스트는 `101 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
