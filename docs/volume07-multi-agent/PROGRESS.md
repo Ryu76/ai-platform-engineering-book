@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-11 — Slice 16: 결정론적 Offline Multi-Agent 미니 프로젝트
+
+- `examples/volume07/offline_multi_agent_mini_project.py`는 review, delegation, exact-consensus conflict, local release handoff를 각각 새 deterministic Mock workflow로 구성한다. 모든 script는 immutable tuple이고 review cycle 1, conflict round 1, task 2, Worker attempt 1로 호출 예산이 유한하다.
+- `--approve-review`, `--approve-delegation`, `--approve-conflict`, `--approve-release`는 서로 독립된 사람 승인 gate다. flag가 없으면 해당 workflow는 `awaiting_human_approval`에서 멈추며 QA·Worker·DevOps 같은 gated role은 실행하지 않는다. 네 flag 모두를 전달해도 결과는 local audit/handoff note뿐이며 live API, secret, network Agent, tool 실행, 배포는 없다.
+- `tests/volume07/test_offline_multi_agent_mini_project.py`는 subprocess로 실제 CLI의 pending 출력과 모든 별도 approval flag의 completed 출력을 고정한다.
+- `docs/volume07-multi-agent/13-offline-multi-agent-mini-project.md`는 실행 위치, 예상 출력, stage별 approval 범위, 오류 해결, 실무 경계, 과제를 포함한 미니 프로젝트 실습을 기록했다.
+
 ## 2026-08-11 — Slice 15: 접근 불가 Agent 경계의 구성 단계 차단
 
 - 공통 `validate_callable_boundary()`는 `act(context)` 또는 `propose(context)` attribute를 읽는 중 local adapter/property가 예외를 내면, 원래 예외를 원인으로 보존하는 `WorkflowConfigurationError`로 fail-closed한다. protocol method는 이 검사에서 호출하지 않는다.
