@@ -9,6 +9,7 @@ from ai_platform.evaluation import (
     RetrievalCase,
     RetrievalEvaluationError,
     evaluate_retrieval,
+    evaluate_retrieval_cases,
 )
 
 
@@ -44,6 +45,30 @@ def test_retrieval_metrics_penalize_empty_and_late_ranked_results() -> None:
     assert metrics.ndcg_at_k == pytest.approx((1 + 1 / 2) / 2)
 
 
+def test_case_metrics_expose_fixed_failure_and_rank_tradeoffs() -> None:
+    """사례별 결과는 평균만으로 숨겨지는 누락과 첫 정답 순위를 보여 준다."""
+    case_metrics = evaluate_retrieval_cases(
+        FIXED_RETRIEVAL_CASES, FIXED_RETRIEVAL_RESULTS_AT_3, k=3
+    )
+
+    assert tuple(metric.case_id for metric in case_metrics) == (
+        "access-reset",
+        "expense-receipt",
+        "incident-response",
+        "benefits-enrollment",
+    )
+    assert case_metrics[1].first_relevant_rank == 2
+    assert case_metrics[1].relevant_document_ids_retrieved == ("finance-expense",)
+    assert case_metrics[2].relevant_document_ids_retrieved == (
+        "operations-runbook",
+        "security-incident",
+    )
+    assert case_metrics[2].precision_at_k == pytest.approx(2 / 3)
+    assert case_metrics[3].hit_at_k is False
+    assert case_metrics[3].first_relevant_rank is None
+    assert case_metrics[3].recall_at_k == pytest.approx(0.0)
+
+
 @pytest.mark.parametrize("k", [0, -1, True, "3"])
 def test_retrieval_metrics_reject_invalid_cutoff(k: object) -> None:
     """모호한 절단 순위를 조용히 변환하지 않는다."""
@@ -65,4 +90,13 @@ def test_retrieval_metrics_reject_duplicate_ranked_documents() -> None:
     results["access-reset"] = ("identity-access", "identity-access")
 
     with pytest.raises(RetrievalEvaluationError, match="must be unique"):
+        evaluate_retrieval(FIXED_RETRIEVAL_CASES, results, k=3)
+
+
+def test_retrieval_metrics_reject_a_single_string_as_ranked_results() -> None:
+    """문자열을 문서 ID 목록으로 잘못 해석해 문자 단위 점수를 내지 않는다."""
+    results = dict(FIXED_RETRIEVAL_RESULTS_AT_3)
+    results["access-reset"] = "identity-access"
+
+    with pytest.raises(RetrievalEvaluationError, match="sequence of strings"):
         evaluate_retrieval(FIXED_RETRIEVAL_CASES, results, k=3)
