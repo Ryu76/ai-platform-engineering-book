@@ -72,6 +72,12 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             "        app.kubernetes.io/name: ai-platform-api" in deployment
             and "selector:\n    app.kubernetes.io/name: ai-platform-api" in service
         ),
+        "deployment_selector_matches_template_app_label": (
+            "selector:\n    matchLabels:\n"
+            "      app.kubernetes.io/name: ai-platform-api" in deployment
+            and "template:\n    metadata:\n      labels:\n"
+            "        app.kubernetes.io/name: ai-platform-api" in deployment
+        ),
         "deployment_declares_startup_probe_boundary": bool(startup_marker)
         and all(
             value in startup_probe

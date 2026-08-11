@@ -2,6 +2,43 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-11 — Slice 20: Deployment Selector와 Pod template label 불변식의 정적 계약
+
+### 완료한 범위
+
+- [Deployment Selector: Pod template label 불변식의 정적 계약](20-deployment-selector-template-static-contract.md) 장을 추가했습니다.
+  - Deployment `spec.selector.matchLabels`와 `spec.template.metadata.labels`의 `app.kubernetes.io/name: ai-platform-api` 역할을 분리했습니다.
+  - source text의 selector/template label 일치는 정적 계약일 뿐 API validation, immutable selector enforcement, controller reconciliation, ReplicaSet, Pod creation, readiness, rollout 증거가 아님을 명시했습니다.
+  - 실습·오류 해결·과제는 `example.invalid` placeholder와 local-only render/review만 사용하며 Secret, credential, cluster connection, image build, container execution, deployment를 사용하지 않습니다.
+- `src/ai_platform/api/operations_review.py`의 local artifact review에 `deployment_selector_matches_template_app_label` check를 추가했습니다.
+  - check는 Deployment의 local UTF-8 text에서 selector `matchLabels`와 Pod template label의 예제 key/value만 읽습니다.
+  - Docker daemon, socket, Kubernetes API, controller, network, kubelet, container를 호출하지 않습니다.
+- `tests/integration/test_volume11_deployment_selector.py`를 추가하고 mini-project expected artifact check 및 README를 갱신했습니다.
+  - test는 placeholder image, selector/template text contract, local review key와 controller/runtime-evidence boundary를 검증합니다.
+- 실제 image build/pull, container execution, Deployment·ReplicaSet·Pod 생성, controller reconciliation, Kubernetes API connection, resource creation, rollout, rollback 또는 deployment를 실행하지 않았습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/local_operations_review_demo.py` | 통과 — 15개 local artifact check가 모두 `true`; selector/template check는 source text-only이며 image build, container execution, dependency connectivity, telemetry backend, Kubernetes deployment는 `not_verified` |
+| `uv run pytest tests/integration/test_volume11_mini_project.py tests/integration/test_volume11_deployment_selector.py -q` | 통과 — 9 passed |
+| `uv run pytest -q` | 통과 — 전체 112 passed |
+| `uv run ruff check .`, `uv run mypy src` | 통과 — Ruff 전체 통과, mypy 14 source files 문제 없음 |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — Volume 11 문서, 링크·코드 블록·비밀값 검사 통과 |
+| `docker compose -f docker/volume11/compose.health.yaml config --no-interpolate` 및 `docker compose -f docker/volume11/compose.dependencies.yaml config --no-interpolate` | 통과 — local Compose config parsing만 수행, image·container·network·volume을 만들지 않음 |
+| `kubectl kustomize k8s/volume11`, `k8s/volume11/batch`, `k8s/volume11/storage`, `k8s/volume11/autoscaling` | 통과 — selector/template label이 포함된 local render만 수행, Kubernetes API·cluster·resource 생성 없음 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- PRD Volume DoD는 아직 충족하지 않았습니다. PRD 필수 실습의 API Docker image 생성·Docker Compose 통합 실행·Kubernetes 로컬 환경 구성·Rolling Update·Rollback·최종 AI Platform 배포는 현재 작업 제한의 live cluster·deployment 금지 또는 아직 실행하지 않은 image/container/controller/network evidence와 충돌해 완료 선언할 수 없습니다.
+- 따라서 `VOLUME11_COMPLETE=true`를 설정하거나 self-pause 하지 않습니다. static Deployment selector/template declaration과 local render가 API validation, controller enforcement, ReplicaSet, Pod lifecycle, rollout 또는 traffic evidence를 대체하지 않습니다.
+
+### 다음 Slice
+
+현재 작업 제한을 유지하는 동안에는 Volume 11 local-only artifact·test·placeholder boundary의 보수만 수행합니다. image build/Compose integration execution, Kubernetes local environment, controller/runtime enforcement, update/rollback, final deployment를 실제로 검증할 수 있도록 명시적 범위가 변경되기 전에는 completion flag를 추가하지 않습니다. 실제 image, container, cluster, Secret, credential, alert, backend 또는 deployment는 하지 않습니다.
+
 ## 2026-08-11 — Slice 19: Service Selector와 Pod template label 연결의 정적 계약
 
 ### 완료한 범위
