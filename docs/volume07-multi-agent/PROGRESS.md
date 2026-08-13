@@ -4,7 +4,7 @@
 
 - `validate_callable_boundary()`는 이제 `act`/`propose` attribute가 callable인지 확인한 뒤에도 `inspect.signature(...).bind(context)`로 orchestrator가 전달하는 한 positional immutable context를 실제로 받을 수 있는지 **호출 없이** 검증한다. `act()`나 `propose()`처럼 callable이지만 arity가 맞지 않는 boundary와 추가 required argument가 있는 boundary는 첫 Agent call 전에 cause-preserving `WorkflowConfigurationError`로 fail-closed한다.
 - `tests/volume07/test_callable_signature_configuration.py`를 추가해 review/release의 `act`, delegation Coordinator/Worker의 `propose`/`act`, conflict peer의 `propose`가 context를 받지 못하면 workflow 구성 자체가 실패하고 valid local peer·Coordinator·Worker의 call history가 비어 있는지 고정했다. deterministic Mock, finite bound, explicit human approval의 기존 경계는 변경하지 않았다.
-- `05-agent-boundary-configuration.md`에 callable existence와 one-context signature compatibility의 차이, non-invoking `inspect.signature`/`bind` 검사, 실행 명령과 오류 해결을 추가했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+- `05-agent-boundary-configuration.md`에 callable existence와 one-context signature compatibility의 차이, non-invoking `inspect.signature`/`bind` 검사, 실행 명령과 오류 해결을 추가했다. `uv run pytest tests/volume07/test_callable_signature_configuration.py -q`는 4 passed였고, 전체 `uv run pytest tests/volume07 -q`는 63 passed였다. `uv run ruff check src/ai_platform/agents tests/volume07`와 `uv run mypy src/ai_platform/agents`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
 
 ## 2026-08-13 — Slice 23: Chapter 05 구성 단계 Agent 경계 PRD 학습 문서 완성
 
