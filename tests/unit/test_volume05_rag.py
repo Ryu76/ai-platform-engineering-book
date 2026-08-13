@@ -31,6 +31,9 @@ from ai_platform.rag import (
     LocalRetrievalEvaluationSetLoader,
     LocalRetrievalRegressionBaselineLoader,
     PdfLoadingConfig,
+    QdrantPoint,
+    QdrantScoredPoint,
+    QdrantVectorStore,
     QueryTransformationConfig,
     QueryTransformingIndex,
     RagConfigurationError,
@@ -170,6 +173,24 @@ class RecordingVectorStore:
         self, *, query_vector: tuple[float, ...], top_k: int
     ) -> tuple[VectorSearchResult, ...]:
         self.calls.append((query_vector, top_k))
+        return self.results  # type: ignore[return-value]
+
+
+class RecordingQdrantCollection:
+    """네트워크 없이 Qdrant 호환 point 교체·검색을 기록하는 컬렉션 Mock이다."""
+
+    def __init__(self, results: tuple[QdrantScoredPoint, ...] | object = ()) -> None:
+        self.results = results
+        self.replaced_points: list[tuple[str, tuple[QdrantPoint, ...]]] = []
+        self.calls: list[tuple[str, tuple[float, ...], int]] = []
+
+    def replace_points(self, *, collection_name: str, points: tuple[QdrantPoint, ...]) -> None:
+        self.replaced_points.append((collection_name, points))
+
+    def search_points(
+        self, *, collection_name: str, query_vector: tuple[float, ...], limit: int
+    ) -> tuple[QdrantScoredPoint, ...]:
+        self.calls.append((collection_name, query_vector, limit))
         return self.results  # type: ignore[return-value]
 
 
@@ -506,6 +527,86 @@ def test_vector_index_uses_injected_mock_embeddings_and_store_without_raw_text()
     assert [record.chunk_id for record in store.replaced_records[0]] == ["shipping#1", "returns#1"]
     assert [record.values for record in store.replaced_records[0]] == [(1.0, 0.0), (0.0, 1.0)]
     assert store.calls == [((1.0, 0.0), 2)]
+
+
+def test_qdrant_vector_store_adapts_mock_cosine_points_without_document_payloads() -> None:
+    collection = RecordingQdrantCollection(
+        (
+            QdrantScoredPoint("shipping#1", 1.0),
+            QdrantScoredPoint("returns#1", 0.0),
+        )
+    )
+    store = QdrantVectorStore(collection=collection, collection_name="volume05_rag")
+    source_index = _index()
+    index = VectorRagIndex(
+        source_index=source_index,
+        embedder=_vector_embedder(source_index, query_vector=(1.0, 0.0)),
+        vector_store=store,
+    )
+
+    hits = index.search("언제 도착하나요?", top_k=2)
+
+    assert [(hit.chunk.chunk_id, hit.score) for hit in hits] == [
+        ("shipping#1", 1.0),
+        ("returns#1", 0.5),
+    ]
+    assert hits[0].citation(label=1).source_uri == "local://handbook/shipping"
+    assert collection.replaced_points == [
+        (
+            "volume05_rag",
+            (
+                QdrantPoint("shipping#1", (1.0, 0.0)),
+                QdrantPoint("returns#1", (0.0, 1.0)),
+            ),
+        )
+    ]
+    assert collection.calls == [("volume05_rag", (1.0, 0.0), 2)]
+
+
+@pytest.mark.parametrize(
+    "results, message",
+    [
+        ([QdrantScoredPoint("shipping#1", 1.0)], "tuple of QdrantScoredPoint"),
+        (
+            (QdrantScoredPoint("shipping#1", 0.5), QdrantScoredPoint("shipping#1", 0.4)),
+            "duplicate point IDs",
+        ),
+        (
+            (QdrantScoredPoint("shipping#1", 0.4), QdrantScoredPoint("returns#1", 0.8)),
+            "sorted by descending cosine score",
+        ),
+    ],
+)
+def test_qdrant_vector_store_rejects_untrusted_mock_collection_results(
+    results: object, message: str
+) -> None:
+    store = QdrantVectorStore(
+        collection=RecordingQdrantCollection(results), collection_name="volume05_rag"
+    )
+    store.replace(records=(VectorRecord("shipping#1", (1.0, 0.0)),))
+
+    with pytest.raises(RagConfigurationError, match=message):
+        store.search(query_vector=(1.0, 0.0), top_k=2)
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: QdrantPoint("point", ()),
+        lambda: QdrantScoredPoint("point", 1.01),
+        lambda: QdrantVectorStore(
+            collection=RecordingQdrantCollection(), collection_name="invalid collection"
+        ),
+        lambda: QdrantVectorStore(
+            collection=RecordingQdrantCollection(), collection_name="volume05_rag"
+        ).search(query_vector=(1.0,), top_k=1),
+    ],
+)
+def test_qdrant_vector_contract_rejects_invalid_points_configuration_and_state(
+    factory: Callable[[], object],
+) -> None:
+    with pytest.raises(RagConfigurationError):
+        factory()
 
 
 def test_in_memory_vector_store_ranks_normalized_cosine_similarity_deterministically() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -16,7 +17,6 @@ from ai_platform.rag import (
     DocumentDiversityConfig,
     DocumentDiversityIndex,
     HybridRagIndex,
-    InMemoryVectorStore,
     LocalMarkdownLoader,
     LocalPdfLoader,
     LocalRagApi,
@@ -24,6 +24,9 @@ from ai_platform.rag import (
     LocalRetrievalEvaluationReportStore,
     LocalRetrievalEvaluationSetLoader,
     LocalRetrievalRegressionBaselineLoader,
+    QdrantPoint,
+    QdrantScoredPoint,
+    QdrantVectorStore,
     QueryTransformingIndex,
     RagPipeline,
     RerankingIndex,
@@ -82,6 +85,38 @@ class SampleTextEmbedder:
         return (0.0, 0.0, 0.0, 1.0)
 
 
+class SampleQdrantCollection:
+    """실제 Qdrant 서버 대신 동일한 좁은 컬렉션 계약을 구현한 로컬 Mock이다."""
+
+    def __init__(self) -> None:
+        self._points: tuple[QdrantPoint, ...] = ()
+
+    def replace_points(self, *, collection_name: str, points: tuple[QdrantPoint, ...]) -> None:
+        if collection_name != "volume05_sample_rag":
+            raise ValueError("unexpected sample collection")
+        self._points = points
+
+    def search_points(
+        self, *, collection_name: str, query_vector: tuple[float, ...], limit: int
+    ) -> tuple[QdrantScoredPoint, ...]:
+        if collection_name != "volume05_sample_rag":
+            raise ValueError("unexpected sample collection")
+        query_norm = math.sqrt(sum(value * value for value in query_vector))
+        scored_points = tuple(
+            QdrantScoredPoint(
+                point_id=point.point_id,
+                score=sum(
+                    query * value for query, value in zip(query_vector, point.vector, strict=True)
+                )
+                / (query_norm * math.sqrt(sum(value * value for value in point.vector))),
+            )
+            for point in self._points
+        )
+        return tuple(
+            sorted(scored_points, key=lambda point: (-point.score, point.point_id))[:limit]
+        )
+
+
 class SampleQueryTransformer:
     """외부 모델 없이 원 질문을 보존한 로컬 검색 확장 Mock이다."""
 
@@ -128,7 +163,9 @@ def main() -> None:
     semantic_index = VectorRagIndex(
         source_index=sparse_index,
         embedder=SampleTextEmbedder(),
-        vector_store=InMemoryVectorStore(),
+        vector_store=QdrantVectorStore(
+            collection=SampleQdrantCollection(), collection_name="volume05_sample_rag"
+        ),
     )
     hybrid_index = HybridRagIndex(sparse_index=sparse_index, dense_ranker=SampleDenseRanker())
     transformed_index = QueryTransformingIndex(
@@ -198,7 +235,7 @@ def main() -> None:
     semantic_hits = semantic_index.search("배송은 언제 도착하나요?", top_k=1)
     if len(semantic_hits) != 1 or semantic_hits[0].chunk.document_id != "local:handbook.md":
         raise RuntimeError("sample Mock vector search did not return the local delivery evidence")
-    print("Mock 임베딩·메모리 벡터 검색: 배송 근거 및 인용 경계 확인")
+    print("Mock 임베딩·Qdrant 호환 컬렉션 검색: 배송 근거 및 인용 경계 확인")
     print()
 
     for query in (

@@ -1,5 +1,47 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-13 — Qdrant 호환 로컬/Mock 벡터 저장소 슬라이스 완료
+
+### 완료
+
+- `QdrantPoint`, `QdrantScoredPoint`, `QdrantCollection` Protocol 및 `QdrantVectorStore`를 `src/ai_platform/rag/vector.py`에 추가했습니다. 이 경계는 `qdrant-client`를 설치·import하거나 컬렉션·서버·네트워크·인증을 만들지 않고, 호출자가 주입한 local/Mock 컬렉션의 `replace_points()`·`search_points()`만 사용합니다.
+- 저장 point는 로컬 `chunk_id`와 유한한 비영 벡터만 포함합니다. 원문, 제목, URI, 문자 오프셋은 Qdrant payload로 전달되지 않으며, 검색 결과도 기존 `VectorRagIndex`를 통해 같은 로컬 청크와 다시 연결하므로 인용 범위가 보존됩니다.
+- Qdrant cosine 점수의 유한한 `[-1, 1]` 계약을 검증하고 `(score + 1) / 2`로 기존 0~1 `VectorSearchResult` 유사도 계약에 정규화했습니다. 컬렉션 이름, 초기화 전 검색, 질의 차원, 결과 tuple 타입·요청 수·중복 point ID·내림차순 cosine 정렬을 엄격히 거부합니다.
+- 예제를 `SampleQdrantCollection` in-memory Mock 경유 의미 검색으로 전환했습니다. 외부 Qdrant·라이브 API·비밀값·서버·포트·배포는 사용하지 않았습니다.
+- Volume 05 단위 테스트에 성공적인 point 교체/검색, 1.0·0.0 cosine 정규화, 원문 미전달, 기존 인용 보존 및 비신뢰 Mock 결과·설정·상태 거부 계약을 추가했습니다.
+- `README.md`에 Protocol 경계, 최소 point 데이터, cosine 정규화, 실제 SDK 어댑터를 별도 허가 환경으로 분리하는 운영 계약을 기록했습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-13에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 205 passed, 1 skipped in 1.24s
+# FastAPI는 기본 의존성이 아니어서 선택적 실제 TestClient 테스트 1개가 skip됨
+
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 9 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 7 source files
+uv run python examples/volume05/local_rag.py
+# 고정 평가 Recall@1/Hit rate/MRR 1.00, 승인 기준선 회귀 통과,
+# Mock 임베딩·Qdrant 호환 컬렉션 검색의 배송 근거·인용 경계 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- 현재 PRD의 실제 Qdrant 서버 실행은 이번 cron 범위의 local/sample data·Mock 제공자 제약과 충돌하므로 구현하지 않았습니다. 남은 Volume 05 PRD DoD를 코드·문서·테스트 산출물 기준으로 재점검하고, 재현 가능한 범위의 단일 계약만 추가합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-11 — 선택적 FastAPI TestClient ASGI 통합 검증 슬라이스 완료
 
 ### 완료

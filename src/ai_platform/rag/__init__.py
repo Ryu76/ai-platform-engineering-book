@@ -76,6 +76,10 @@ from ai_platform.rag.retrieval import (
 )
 from ai_platform.rag.vector import (
     InMemoryVectorStore,
+    QdrantCollection,
+    QdrantPoint,
+    QdrantScoredPoint,
+    QdrantVectorStore,
     TextEmbedder,
     VectorRagIndex,
     VectorRagIndexConfig,
@@ -120,6 +124,10 @@ __all__ = [
     "retrieval_regression_baseline_content_id",
     "Citation",
     "InMemoryVectorStore",
+    "QdrantCollection",
+    "QdrantPoint",
+    "QdrantScoredPoint",
+    "QdrantVectorStore",
     "TextEmbedder",
     "VectorRagIndex",
     "VectorRagIndexConfig",

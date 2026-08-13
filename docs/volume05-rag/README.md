@@ -29,7 +29,7 @@
 18. `RetrievalEvaluationAuditRequirement`은 회귀 비교 시 대상 기준선 ID·그 기준선의 승인 참조·콘텐츠 ID·명시 기준일을 요구합니다. `RetrievalRegressionChecker.evaluate_record()`는 감사된 승인 기준선의 실제 기준선/정책 콘텐츠 ID와 `approved` 기록의 세 참조가 모두 일치하고, 양쪽 보존 종료일이 지나지 않은 경우에만 비교합니다. 대상/승인 참조/콘텐츠 변경, 승인 전 기준일, 만료 및 미승인 기록은 회귀 비교 전에 거부합니다.
 19. `RagPipeline`은 검색된 `SearchHit`만 `ContextualGenerator`에 전달합니다. 근거가 없으면 생성기를 호출하지 않고 안전한 No-answer를 반환합니다.
 20. 생성된 답변에는 사용자가 원문을 추적할 수 있도록 청크별 `Citation`(출처 URI와 문자 범위 포함)을 붙입니다.
-21. `VectorRagIndex`는 이미 검증한 `LocalRagIndex` 청크만 주입된 `TextEmbedder`에 전달하고, 주입된 `VectorStore`에는 청크 ID와 유한한 비영 벡터만 기록합니다. 기본 `InMemoryVectorStore`는 외부 벡터 DB·파일·네트워크 없이 정규화 cosine 유사도(0~1)로 결정론적으로 검색합니다. 저장소가 모르는/중복 청크 ID, 요청보다 많은 결과, 순서가 잘못된 결과를 반환하면 원래 로컬 청크와 인용을 연결하기 전에 거부합니다.
+21. `VectorRagIndex`는 이미 검증한 `LocalRagIndex` 청크만 주입된 `TextEmbedder`에 전달하고, 주입된 `VectorStore`에는 청크 ID와 유한한 비영 벡터만 기록합니다. 기본 `InMemoryVectorStore`는 외부 벡터 DB·파일·네트워크 없이 정규화 cosine 유사도(0~1)로 결정론적으로 검색합니다. `QdrantVectorStore`는 주입된 `QdrantCollection` Protocol을 같은 저장소 계약으로 제한해 Qdrant cosine 점수(-1~1)를 0~1 유사도로 정규화합니다. 둘 다 원문 payload·SDK import·컬렉션 생성·네트워크를 수행하지 않습니다. 저장소가 모르는/중복 청크 ID, 요청보다 많은 결과, 순서가 잘못된 결과를 반환하면 원래 로컬 청크와 인용을 연결하기 전에 거부합니다.
 
 생성기와 임베딩·벡터 저장소 경계는 모두 `Protocol`이므로 실습과 테스트는 항상 Mock 구현만 사용합니다. 이 슬라이스는 외부 제공자, 라이브 API, 비밀값, 배포를 사용하지 않습니다.
 
@@ -63,7 +63,29 @@ assert hits[0].matched_terms == ()  # 어휘 일치가 아닌 Mock 의미 벡터
 
 `TextEmbedder`와 `VectorStore`는 모두 `Protocol`입니다. 따라서 실제 SDK나 벡터 DB를 생성하지 않고 Mock 구현을 주입해 테스트할 수 있습니다. `InMemoryVectorStore`는 같은 차원의 유한한 비영 tuple 벡터만 받아 cosine 값을 0~1로 정규화하고, 같은 점수는 청크 ID로 정렬합니다. `VectorRagIndex`는 embedder의 반환 수·tuple 타입·차원·유한성, 저장소의 결과 타입·수·알려진 ID·중복·내림차순 순서를 검증합니다. 이 계약은 저장소가 새 출처나 원문을 주입하지 못하게 하며, 잘못된 결과는 생성기 호출 전에 `RagConfigurationError`로 거부합니다.
 
-예제의 `SampleTextEmbedder`는 배송·반품·교환 주제에 대한 고정 4차원 벡터만 반환하고 `InMemoryVectorStore`만 사용해 배송 의미 검색과 인용 경계를 별도로 확인합니다. 기존 Hybrid/RRF 평가·회귀 기준선은 변하지 않으므로 각 경계를 독립적으로 재현할 수 있습니다. 라이브 임베딩 API, 비밀값, 배포는 사용하지 않습니다.
+## Qdrant 호환 저장소 어댑터 (로컬/Mock)
+
+PRD의 Qdrant 저장 실습은 `QdrantVectorStore`와 `QdrantCollection` Protocol로 재현합니다. 이 모듈은 `qdrant-client`를 설치하거나 import하지 않고, Qdrant 서버·컬렉션·네트워크 연결·인증을 만들지 않습니다. 대신 호출자가 명시적으로 주입한 어댑터에 `replace_points()`와 `search_points()`만 호출합니다. 예제의 `SampleQdrantCollection`은 이 Protocol을 구현한 in-memory Mock입니다.
+
+```python
+from ai_platform.rag import QdrantVectorStore, VectorRagIndex
+
+qdrant_store = QdrantVectorStore(
+    collection=sample_qdrant_collection,  # QdrantCollection Protocol을 구현한 local/Mock
+    collection_name="volume05_sample_rag",
+)
+semantic_index = VectorRagIndex(
+    source_index=local_index,
+    embedder=sample_mock_embedder,
+    vector_store=qdrant_store,
+)
+```
+
+`QdrantPoint`에는 `point_id`(로컬 `chunk_id`)와 `vector`만 있습니다. 문서 원문, 제목, URI, 문자 오프셋은 Qdrant payload에 넣지 않습니다. `QdrantScoredPoint`는 Qdrant cosine 점수만 -1~1의 유한한 범위로 받으며, 어댑터가 `(score + 1) / 2`로 기존 0~1 `VectorSearchResult.similarity` 계약에 정규화합니다. 결과는 요청 수, tuple 타입, 중복 point ID, 내림차순 cosine 순서를 확인한 뒤에만 반환됩니다. 이후 `VectorRagIndex`가 점을 기존 로컬 청크에 다시 연결해 인용 범위를 보존하고, 모르는 chunk ID는 거부합니다.
+
+실제 Qdrant SDK 어댑터는 허가된 별도 환경에서 이 Protocol 뒤에 구현합니다. 해당 환경에서도 컬렉션 이름을 명시하고, payload를 최소화하며, SDK 응답을 `QdrantScoredPoint` tuple로 변환한 뒤 테스트합니다. 이 Volume의 예제와 테스트는 local/sample data와 in-memory Mock만 사용하며 라이브 Qdrant·API 키·배포를 사용하지 않습니다.
+
+
 
 ## 프레임워크 독립 API 계약
 
