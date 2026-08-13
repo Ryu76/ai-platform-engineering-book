@@ -73,6 +73,7 @@ from ai_platform.rag.retrieval import (
     SearchableIndex,
     SearchHit,
     SourceDocument,
+    format_retrieved_context,
 )
 from ai_platform.rag.vector import (
     InMemoryVectorStore,
@@ -145,6 +146,7 @@ __all__ = [
     "DocumentDiversityIndex",
     "DocumentChunk",
     "EvidenceReranker",
+    "format_retrieved_context",
     "HybridRagIndex",
     "HybridSearchConfig",
     "LocalMarkdownLoader",

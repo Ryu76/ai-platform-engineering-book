@@ -1,5 +1,46 @@
 # Volume 05 RAG 진행 기록
 
+## 2026-08-13 — 검색 문서 Prompt 데이터 경계 슬라이스 완료
+
+### 완료
+
+- `format_retrieved_context()`를 추가해 검색된 `SearchHit`만 결정론적 JSON `evidence` 배열로 직렬화했습니다. 각 레코드는 인용 label, 청크 ID, 제목, URI, 문자 범위, 텍스트를 함께 가지므로 생성기가 문서 원문과 인용 근거를 같은 순서로 받습니다.
+- `RagPipeline`은 근거가 있을 때에만 이 `context_prompt`를 `ContextualGenerator`에 전달합니다. 고정 경계 문구는 검색 문서를 신뢰하지 않는 참고 데이터로 선언하고, 사용자 질문과 증거만으로 답하며 인용 label을 보존하도록 요구합니다. 근거 없음 경로는 기존처럼 프롬프트 생성 및 생성기 호출 없이 No-answer를 반환합니다.
+- Mock 생성기·로컬 예제를 새 Protocol로 갱신했고, 문서 지시처럼 보이는 텍스트가 JSON 데이터 필드에 보존되는지, 인용 메타데이터·순서·결정론, 빈/중복 근거 거부, 기존 No-answer 동작을 Volume 05 테스트로 검증했습니다.
+- `README.md`에 프롬프트 삽입 형식, 고정 데이터 경계, 실제 제공자 연동 시에도 필요한 시스템 지시·도구 allowlist·ACL·출력 검증의 제한을 기록했습니다. 라이브 API·비밀값·서버·포트·배포는 사용하지 않았습니다.
+
+### 검증
+
+저장소 루트에서 2026-08-13에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 208 passed, 1 skipped in 1.59s
+# FastAPI는 기본 의존성이 아니어서 선택적 실제 TestClient 테스트 1개가 skip됨
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 9 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 7 source files
+uv run python examples/volume05/local_rag.py
+# 고정 평가 Recall@1/Hit rate/MRR 1.00, 승인 기준선 회귀 통과,
+# Mock Qdrant 호환 검색·인용 및 No-answer 확인
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+uv run python scripts/validate_docs.py
+# 문서 검증 통과: Volume 11개
+uv run python scripts/check_secrets.py docs/volume05-rag examples/volume05 src/ai_platform/rag tests/unit/test_volume05_rag.py
+# 비밀값 검사 통과
+git diff --check
+# 통과
+```
+
+### 다음 슬라이스
+
+- PRD의 필수 RAG 실습은 local/sample data와 Mock 경계에서 모두 재현했습니다. 남은 전체 DoD를 최종 재점검하고, 허용 범위를 벗어나지 않는 누락 계약이 발견될 때만 단일 테스트 슬라이스로 보완합니다.
+
+> 현재는 Volume 05 전체 PRD DoD 완료 상태가 아니므로 `VOLUME05_COMPLETE=true`는 설정하지 않았습니다.
+
 ## 2026-08-13 — Qdrant 호환 로컬/Mock 벡터 저장소 슬라이스 완료
 
 ### 완료

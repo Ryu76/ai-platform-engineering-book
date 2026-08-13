@@ -145,8 +145,8 @@ class SampleEvidenceReranker:
 class SampleOnlyGenerator:
     """실습용 Mock 생성기: 실제 제공자 호출 대신 첫 번째 근거를 그대로 요약한다."""
 
-    def generate(self, *, query: str, contexts: tuple[SearchHit, ...]) -> str:
-        del query
+    def generate(self, *, query: str, contexts: tuple[SearchHit, ...], context_prompt: str) -> str:
+        del query, context_prompt
         return f"문서 근거: {contexts[0].chunk.text}"
 
 
