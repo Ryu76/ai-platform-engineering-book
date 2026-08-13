@@ -667,7 +667,7 @@ git diff --check
 
 `uv`는 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고가 있었지만, uv가 프로젝트 환경으로 위 검증을 완료했습니다.
 
-## 2026-08-11 — Slice 24 완료: retrieval metric batch 입력 계약 강화 [LATEST]
+## 2026-08-11 — Slice 24 완료: retrieval metric batch 입력 계약 강화
 
 ### 추가한 결과물
 
@@ -703,3 +703,24 @@ git diff --check
 
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+
+## 2026-08-13 — Slice 26 완료: cosine roundoff score 범위 보장 [LATEST]
+
+### 추가한 결과물
+
+- `embedding_service.py`의 `cosine_similarity`가 수학적 cosine의 닫힌 범위 `[-1.0, 1.0]`를 반환하도록 보장했습니다. 동일한 L2 정규화 vector의 IEEE-754 반올림 오차 `1.0000000000000002`는 `1.0`으로 제한합니다.
+- 따라서 `InMemoryVectorStore.search`의 `SearchResult.score`가 no-answer gate의 cosine score 입력 계약을 위반하지 않습니다.
+- `test_volume04_embedding_service.py`에 결정적 256차원 embedding을 자기 자신과 비교해 score가 정확히 `1.0`인지 확인하는 회귀 테스트를 추가했고, 01장과 02장에 score 범위 보장 및 retrieval gate 경계를 기록했습니다.
+
+### 검증 결과
+
+- Volume 04 테스트 5개: **70 passed in 0.60s**.
+- `ruff check`: **All checks passed!**; `mypy src/ai_platform/embeddings`: **5 source files, no issues**.
+- 네 개의 결정적 local mock 예제를 실행했습니다: embedding/search top score `0.548`; retrieval `precision_at_1=1.0`, `answerable=True`; lifecycle `deleted_count=1`, `reindexed_version=2`, `top_1_recovered=True`.
+- `git diff --check`를 통과했습니다.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+- Commit: `fix(volume04): clamp cosine roundoff scores`.
