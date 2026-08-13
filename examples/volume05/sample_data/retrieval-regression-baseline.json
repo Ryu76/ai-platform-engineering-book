@@ -1,0 +1,37 @@
+{
+  "baseline": {
+    "top_k": 1,
+    "cases": [
+      {
+        "case_id": "delivery-arrival",
+        "query": "언제 도착하나요?",
+        "expected_chunk_ids": ["local:handbook.md#1"]
+      },
+      {
+        "case_id": "return-request",
+        "query": "반품 요청은 어떻게 접수하나요?",
+        "expected_chunk_ids": ["local:returns.md#1"]
+      },
+      {
+        "case_id": "exchange-window",
+        "query": "교환은 언제 신청하나요?",
+        "expected_chunk_ids": ["local:exchange-notice.pdf#page=1#1"]
+      }
+    ],
+    "recall_at_k": 1.0,
+    "hit_rate": 1.0,
+    "mean_reciprocal_rank": 1.0
+  },
+  "policy": {
+    "maximum_recall_at_k_drop": 0.0,
+    "maximum_hit_rate_drop": 0.0,
+    "maximum_mean_reciprocal_rank_drop": 0.0
+  },
+  "audit": {
+    "baseline_id": "volume05-sample-retrieval-baseline-001",
+    "approval_reference": "volume05-local-sample-baseline-approval-001",
+    "content_id": "sha256:28464c84f9135f535fbcc12718c4a08fe527bb3af16a49f6fc6b07407e6fc561",
+    "approved_on": "2026-08-11",
+    "retained_until": "2030-01-01"
+  }
+}

@@ -1,0 +1,1533 @@
+"""고정 로컬 질의로 RAG 검색 품질을 재현 가능하게 평가한다.
+
+이 모듈은 네트워크, 제공자 SDK, 생성 모델 또는 실시간 데이터를 사용하지 않는다.
+호출자가 제공한 작은 고정 평가 세트와 ``SearchableIndex``만 사용해 검색 결과의
+Recall@k, Hit rate, MRR을 계산한다. 문서 원문이나 생성 답변을 결과에 복사하지 않아
+평가 산출물은 테스트 가능한 청크 식별자와 집계 지표만 포함한다.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import date
+from hashlib import sha256
+from pathlib import Path
+from typing import NoReturn
+
+from ai_platform.rag.retrieval import RagConfigurationError, SearchableIndex, SearchHit
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationCase:
+    """하나 이상의 기대 근거 청크를 갖는 고정 로컬 검색 평가 질의다."""
+
+    case_id: str
+    query: str
+    expected_chunk_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.case_id, str) or not self.case_id.strip():
+            raise RagConfigurationError("evaluation case_id must be a non-empty string")
+        if not isinstance(self.query, str) or not self.query.strip():
+            raise RagConfigurationError("evaluation query must be a non-empty string")
+        if not isinstance(self.expected_chunk_ids, tuple) or not self.expected_chunk_ids:
+            raise RagConfigurationError("evaluation expected_chunk_ids must be a non-empty tuple")
+        if any(
+            not isinstance(chunk_id, str) or not chunk_id.strip()
+            for chunk_id in self.expected_chunk_ids
+        ):
+            raise RagConfigurationError(
+                "evaluation expected_chunk_ids must contain non-empty strings"
+            )
+        if len(set(self.expected_chunk_ids)) != len(self.expected_chunk_ids):
+            raise RagConfigurationError("evaluation expected_chunk_ids must not contain duplicates")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationConfig:
+    """재현 가능한 고정 질의 평가의 반환 근거 수와 최대 사례 수다."""
+
+    top_k: int = 3
+    max_cases: int = 100
+
+    def __post_init__(self) -> None:
+        for field_name, value, maximum in (
+            ("top_k", self.top_k, 20),
+            ("max_cases", self.max_cases, 1_000),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise RagConfigurationError(
+                    f"evaluation {field_name} must be an integer between 1 and {maximum}"
+                )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationSetLoadingConfig:
+    """명시한 로컬 JSON 평가 세트 파일의 크기와 사례 수 제한이다."""
+
+    max_file_bytes: int = 100_000
+    max_cases: int = 100
+
+    def __post_init__(self) -> None:
+        for field_name, value, maximum in (
+            ("max_file_bytes", self.max_file_bytes, 1_000_000),
+            ("max_cases", self.max_cases, 1_000),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise RagConfigurationError(
+                    f"evaluation set {field_name} must be an integer between 1 and {maximum}"
+                )
+
+
+class LocalRetrievalEvaluationSetLoader:
+    """허용된 로컬 루트 아래의 고정 JSON 평가 사례만 읽는다.
+
+    이 경계는 디렉터리를 탐색하거나 네트워크·제공자 SDK를 사용하지 않는다. 호출자가
+    지정한 UTF-8 ``.json`` 파일 하나만 읽고, 파일 크기·경로·JSON 구조·중복 키·사례
+    식별자를 검증한 뒤 ``RetrievalEvaluationCase`` tuple로 변환한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        root: Path,
+        config: RetrievalEvaluationSetLoadingConfig | None = None,
+    ) -> None:
+        if not isinstance(root, Path):
+            raise RagConfigurationError("evaluation set root must be a pathlib.Path")
+        if not root.is_dir():
+            raise RagConfigurationError("evaluation set root must be an existing directory")
+        self._root = root.resolve()
+        self._config = config or RetrievalEvaluationSetLoadingConfig()
+
+    def load(self, relative_path: Path) -> tuple[RetrievalEvaluationCase, ...]:
+        """고정 JSON 사례 파일을 검증된 평가 사례 tuple로 반환한다."""
+        candidate = self._resolve_path(relative_path)
+        try:
+            raw_bytes = candidate.read_bytes()
+        except OSError as error:
+            raise RagConfigurationError("evaluation set file could not be read") from error
+        if not raw_bytes:
+            raise RagConfigurationError("evaluation set file must not be empty")
+        if len(raw_bytes) > self._config.max_file_bytes:
+            raise RagConfigurationError("evaluation set file exceeds the configured size limit")
+        try:
+            payload = json.loads(
+                raw_bytes.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_json_keys,
+                parse_constant=_reject_nonstandard_json_constant,
+            )
+        except UnicodeDecodeError as error:
+            raise RagConfigurationError("evaluation set file must be UTF-8 encoded") from error
+        except (json.JSONDecodeError, ValueError) as error:
+            raise RagConfigurationError("evaluation set file must contain valid JSON") from error
+        return self._validated_cases(payload)
+
+    def _resolve_path(self, relative_path: Path) -> Path:
+        if not isinstance(relative_path, Path):
+            raise RagConfigurationError("evaluation set relative_path must be a pathlib.Path")
+        if relative_path.is_absolute() or not relative_path.parts:
+            raise RagConfigurationError(
+                "evaluation set relative_path must be a non-empty relative path"
+            )
+        if relative_path.suffix.casefold() != ".json":
+            raise RagConfigurationError("only JSON evaluation set files (.json) are supported")
+        candidate = (self._root / relative_path).resolve()
+        if not candidate.is_relative_to(self._root):
+            raise RagConfigurationError("evaluation set relative_path must stay within root")
+        if not candidate.is_file():
+            raise RagConfigurationError("evaluation set file does not exist")
+        return candidate
+
+    def _validated_cases(self, payload: object) -> tuple[RetrievalEvaluationCase, ...]:
+        if not isinstance(payload, dict):
+            raise RagConfigurationError("evaluation set JSON root must be an object")
+        if set(payload) != {"cases"}:
+            raise RagConfigurationError("evaluation set JSON root must contain only cases")
+        raw_cases = payload["cases"]
+        if not isinstance(raw_cases, list):
+            raise RagConfigurationError("evaluation set cases must be an array")
+        if not raw_cases:
+            raise RagConfigurationError("evaluation set must contain at least one case")
+        if len(raw_cases) > self._config.max_cases:
+            raise RagConfigurationError("evaluation set contains more cases than configured")
+
+        cases = tuple(self._case_from_json(raw_case) for raw_case in raw_cases)
+        case_ids = [case.case_id for case in cases]
+        if len(set(case_ids)) != len(case_ids):
+            raise RagConfigurationError("evaluation set case_id values must be unique")
+        return cases
+
+    @staticmethod
+    def _case_from_json(raw_case: object) -> RetrievalEvaluationCase:
+        if not isinstance(raw_case, dict):
+            raise RagConfigurationError("evaluation set cases must be objects")
+        if set(raw_case) != {"case_id", "query", "expected_chunk_ids"}:
+            raise RagConfigurationError(
+                "evaluation set cases must contain only case_id, query, and expected_chunk_ids"
+            )
+        case_id = raw_case["case_id"]
+        query = raw_case["query"]
+        expected_chunk_ids = raw_case["expected_chunk_ids"]
+        if not isinstance(case_id, str) or not isinstance(query, str):
+            raise RagConfigurationError("evaluation set case_id and query must be strings")
+        if not isinstance(expected_chunk_ids, list):
+            raise RagConfigurationError("evaluation set expected_chunk_ids must be an array")
+        if not all(isinstance(chunk_id, str) for chunk_id in expected_chunk_ids):
+            raise RagConfigurationError("evaluation set expected_chunk_ids must contain strings")
+        return RetrievalEvaluationCase(
+            case_id=case_id,
+            query=query,
+            expected_chunk_ids=tuple(expected_chunk_ids),
+        )
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """중복 키를 덮어쓰지 않아 파일 기반 평가 정의가 모호해지지 않게 한다."""
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _reject_nonstandard_json_constant(value: str) -> NoReturn:
+    """표준 JSON에 없는 NaN/Infinity 상수를 거부한다."""
+    raise ValueError(f"non-standard JSON constant: {value}")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationResult:
+    """한 고정 질의의 검색 순위와 근거 회수 지표다."""
+
+    case_id: str
+    query: str
+    expected_chunk_ids: tuple[str, ...]
+    retrieved_chunk_ids: tuple[str, ...]
+    first_relevant_rank: int | None
+    recall_at_k: float
+    reciprocal_rank: float
+
+    @property
+    def passed(self) -> bool:
+        """상위 k 안에 기대 근거가 하나 이상 있으면 참이다."""
+        return self.first_relevant_rank is not None
+
+    def to_payload(self) -> dict[str, object]:
+        """원문·생성 답변 없이 JSON 호환 평가 결과를 반환한다."""
+        return {
+            "case_id": self.case_id,
+            "expected_chunk_ids": list(self.expected_chunk_ids),
+            "retrieved_chunk_ids": list(self.retrieved_chunk_ids),
+            "first_relevant_rank": self.first_relevant_rank,
+            "passed": self.passed,
+            "recall_at_k": self.recall_at_k,
+            "reciprocal_rank": self.reciprocal_rank,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationReport:
+    """고정 평가 세트 전체의 Recall@k·Hit rate·MRR 집계다."""
+
+    top_k: int
+    results: tuple[RetrievalEvaluationResult, ...]
+    recall_at_k: float
+    hit_rate: float
+    mean_reciprocal_rank: float
+
+    @property
+    def evaluated_cases(self) -> int:
+        """평가된 고정 질의 수를 반환한다."""
+        return len(self.results)
+
+    def to_payload(self) -> dict[str, object]:
+        """프레임워크 없이 기록·비교할 수 있는 JSON 호환 평가 보고서를 반환한다."""
+        return {
+            "top_k": self.top_k,
+            "evaluated_cases": self.evaluated_cases,
+            "recall_at_k": self.recall_at_k,
+            "hit_rate": self.hit_rate,
+            "mean_reciprocal_rank": self.mean_reciprocal_rank,
+            "results": [result.to_payload() for result in self.results],
+        }
+
+    def to_record_payload(self) -> dict[str, object]:
+        """로컬 재검증 파일용으로 질의를 포함한 완전한 평가 기록을 반환한다.
+
+        ``to_payload()``와 달리 이 값은 허용된 로컬 평가 기록 파일에만 저장한다.
+        회귀 비교 시 사례 호환성을 다시 확인할 수 있도록 각 사례의 질의를 포함한다.
+        """
+        return {
+            "top_k": self.top_k,
+            "evaluated_cases": self.evaluated_cases,
+            "recall_at_k": self.recall_at_k,
+            "hit_rate": self.hit_rate,
+            "mean_reciprocal_rank": self.mean_reciprocal_rank,
+            "results": [
+                {
+                    "case_id": result.case_id,
+                    "query": result.query,
+                    "expected_chunk_ids": list(result.expected_chunk_ids),
+                    "retrieved_chunk_ids": list(result.retrieved_chunk_ids),
+                    "first_relevant_rank": result.first_relevant_rank,
+                    "passed": result.passed,
+                    "recall_at_k": result.recall_at_k,
+                    "reciprocal_rank": result.reciprocal_rank,
+                }
+                for result in self.results
+            ],
+        }
+
+
+class RetrievalEvaluator:
+    """주입된 로컬 검색기를 고정 기대 청크 ID로 평가한다.
+
+    생성기를 호출하지 않고 ``search``만 실행한다. 검색기가 반환하는 값도 다시 검증해
+    tuple 이외 값, 요청보다 많은 결과, ``SearchHit`` 이외 값, 중복 청크 ID를 평가
+    지표에 반영하지 않는다. 검색기 내부 오류는 숨기지 않고 호출자에게 전파한다.
+    """
+
+    def __init__(
+        self, *, index: SearchableIndex, config: RetrievalEvaluationConfig | None = None
+    ) -> None:
+        if not hasattr(index, "search"):
+            raise RagConfigurationError("index must provide a search method")
+        self._index = index
+        self._config = config or RetrievalEvaluationConfig()
+
+    def evaluate(self, cases: Iterable[RetrievalEvaluationCase]) -> RetrievalEvaluationReport:
+        """명시한 고정 사례만 평가하고 마이크로 Recall@k·Hit rate·MRR을 반환한다."""
+        evaluation_cases = self._validated_cases(cases)
+        results = tuple(self._evaluate_case(case) for case in evaluation_cases)
+        expected_count = sum(len(result.expected_chunk_ids) for result in results)
+        recovered_count = sum(
+            len(set(result.expected_chunk_ids).intersection(result.retrieved_chunk_ids))
+            for result in results
+        )
+        hit_count = sum(result.passed for result in results)
+        return RetrievalEvaluationReport(
+            top_k=self._config.top_k,
+            results=results,
+            recall_at_k=recovered_count / expected_count,
+            hit_rate=hit_count / len(results),
+            mean_reciprocal_rank=sum(result.reciprocal_rank for result in results) / len(results),
+        )
+
+    def _validated_cases(
+        self, cases: Iterable[RetrievalEvaluationCase]
+    ) -> tuple[RetrievalEvaluationCase, ...]:
+        try:
+            evaluation_cases = tuple(cases)
+        except TypeError as error:
+            raise RagConfigurationError(
+                "evaluation cases must be an iterable of RetrievalEvaluationCase values"
+            ) from error
+        if not evaluation_cases:
+            raise RagConfigurationError("at least one evaluation case is required")
+        if len(evaluation_cases) > self._config.max_cases:
+            raise RagConfigurationError("evaluation received more cases than configured")
+        if any(not isinstance(case, RetrievalEvaluationCase) for case in evaluation_cases):
+            raise RagConfigurationError("evaluation cases must be RetrievalEvaluationCase values")
+        case_ids = [case.case_id for case in evaluation_cases]
+        if len(set(case_ids)) != len(case_ids):
+            raise RagConfigurationError("evaluation case_id values must be unique")
+        return evaluation_cases
+
+    def _evaluate_case(self, case: RetrievalEvaluationCase) -> RetrievalEvaluationResult:
+        hits = self._validated_hits(self._index.search(case.query, top_k=self._config.top_k))
+        retrieved_chunk_ids = tuple(hit.chunk.chunk_id for hit in hits)
+        expected_chunk_ids = set(case.expected_chunk_ids)
+        first_relevant_rank = next(
+            (
+                rank
+                for rank, chunk_id in enumerate(retrieved_chunk_ids, start=1)
+                if chunk_id in expected_chunk_ids
+            ),
+            None,
+        )
+        recovered_count = len(expected_chunk_ids.intersection(retrieved_chunk_ids))
+        return RetrievalEvaluationResult(
+            case_id=case.case_id,
+            query=case.query,
+            expected_chunk_ids=case.expected_chunk_ids,
+            retrieved_chunk_ids=retrieved_chunk_ids,
+            first_relevant_rank=first_relevant_rank,
+            recall_at_k=recovered_count / len(expected_chunk_ids),
+            reciprocal_rank=0.0 if first_relevant_rank is None else 1.0 / first_relevant_rank,
+        )
+
+    def _validated_hits(self, hits: tuple[SearchHit, ...]) -> tuple[SearchHit, ...]:
+        if not isinstance(hits, tuple):
+            raise RagConfigurationError("index must return a tuple of SearchHit values")
+        if len(hits) > self._config.top_k:
+            raise RagConfigurationError("index returned more hits than requested")
+        chunk_ids: set[str] = set()
+        for hit in hits:
+            if not isinstance(hit, SearchHit):
+                raise RagConfigurationError("index must return SearchHit values")
+            if hit.chunk.chunk_id in chunk_ids:
+                raise RagConfigurationError("index must not return duplicate hit chunk IDs")
+            chunk_ids.add(hit.chunk.chunk_id)
+        return hits
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationBaselineCase:
+    """회귀 비교에서 동일한 기대 근거를 확인하기 위한 고정 사례 참조다."""
+
+    case_id: str
+    query: str
+    expected_chunk_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.case_id, str) or not self.case_id.strip():
+            raise RagConfigurationError("baseline case_id must be a non-empty string")
+        if not isinstance(self.query, str) or not self.query.strip():
+            raise RagConfigurationError("baseline query must be a non-empty string")
+        if not isinstance(self.expected_chunk_ids, tuple) or not self.expected_chunk_ids:
+            raise RagConfigurationError("baseline expected_chunk_ids must be a non-empty tuple")
+        if any(
+            not isinstance(chunk_id, str) or not chunk_id.strip()
+            for chunk_id in self.expected_chunk_ids
+        ):
+            raise RagConfigurationError(
+                "baseline expected_chunk_ids must contain non-empty strings"
+            )
+        if len(set(self.expected_chunk_ids)) != len(self.expected_chunk_ids):
+            raise RagConfigurationError("baseline expected_chunk_ids must not contain duplicates")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationBaseline:
+    """같은 고정 평가 세트에서 허용 가능한 검색 품질 기준선이다."""
+
+    top_k: int
+    cases: tuple[RetrievalEvaluationBaselineCase, ...]
+    recall_at_k: float
+    hit_rate: float
+    mean_reciprocal_rank: float
+
+    def __post_init__(self) -> None:
+        if (
+            isinstance(self.top_k, bool)
+            or not isinstance(self.top_k, int)
+            or not 1 <= self.top_k <= 20
+        ):
+            raise RagConfigurationError("baseline top_k must be an integer between 1 and 20")
+        if not isinstance(self.cases, tuple) or not self.cases:
+            raise RagConfigurationError("baseline cases must be a non-empty tuple")
+        if any(not isinstance(case, RetrievalEvaluationBaselineCase) for case in self.cases):
+            raise RagConfigurationError(
+                "baseline cases must contain RetrievalEvaluationBaselineCase values"
+            )
+        case_ids = [case.case_id for case in self.cases]
+        if len(set(case_ids)) != len(case_ids):
+            raise RagConfigurationError("baseline case_id values must be unique")
+        for field_name, value in (
+            ("recall_at_k", self.recall_at_k),
+            ("hit_rate", self.hit_rate),
+            ("mean_reciprocal_rank", self.mean_reciprocal_rank),
+        ):
+            _validate_unit_interval_score(field_name=field_name, value=value)
+
+    @classmethod
+    def from_report(cls, report: RetrievalEvaluationReport) -> RetrievalEvaluationBaseline:
+        """검증된 현재 보고서를 이후의 결정론적 회귀 기준선으로 고정한다."""
+        _validate_evaluation_report(report)
+        return cls(
+            top_k=report.top_k,
+            cases=tuple(
+                RetrievalEvaluationBaselineCase(
+                    case_id=result.case_id,
+                    query=result.query,
+                    expected_chunk_ids=result.expected_chunk_ids,
+                )
+                for result in report.results
+            ),
+            recall_at_k=report.recall_at_k,
+            hit_rate=report.hit_rate,
+            mean_reciprocal_rank=report.mean_reciprocal_rank,
+        )
+
+    def to_payload(self) -> dict[str, object]:
+        """질의·원문 없이 고정 기준선의 호환성 정보와 집계 점수를 반환한다."""
+        return {
+            "top_k": self.top_k,
+            "cases": [
+                {
+                    "case_id": case.case_id,
+                    "expected_chunk_ids": list(case.expected_chunk_ids),
+                }
+                for case in self.cases
+            ],
+            "recall_at_k": self.recall_at_k,
+            "hit_rate": self.hit_rate,
+            "mean_reciprocal_rank": self.mean_reciprocal_rank,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionPolicy:
+    """기준선보다 낮아질 수 있는 각 검색 지표의 최대 폭이다."""
+
+    maximum_recall_at_k_drop: float = 0.0
+    maximum_hit_rate_drop: float = 0.0
+    maximum_mean_reciprocal_rank_drop: float = 0.0
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("maximum_recall_at_k_drop", self.maximum_recall_at_k_drop),
+            ("maximum_hit_rate_drop", self.maximum_hit_rate_drop),
+            (
+                "maximum_mean_reciprocal_rank_drop",
+                self.maximum_mean_reciprocal_rank_drop,
+            ),
+        ):
+            _validate_unit_interval_score(field_name=field_name, value=value)
+
+
+def retrieval_regression_baseline_content_id(
+    baseline: RetrievalEvaluationBaseline, policy: RetrievalRegressionPolicy
+) -> str:
+    """기준선·정책의 의미론적 JSON 콘텐츠 식별자를 결정론적으로 반환한다.
+
+    식별자는 감사 필드 자신, 파일 공백 또는 JSON 키 순서에는 영향받지 않는다. 반면 사례,
+    집계 지표 또는 허용 하락 정책의 모든 변경은 새 SHA-256 식별자를 만든다.
+    """
+    if not isinstance(baseline, RetrievalEvaluationBaseline):
+        raise RagConfigurationError(
+            "content identifier baseline must be a RetrievalEvaluationBaseline"
+        )
+    if not isinstance(policy, RetrievalRegressionPolicy):
+        raise RagConfigurationError("content identifier policy must be a RetrievalRegressionPolicy")
+    payload = {
+        "baseline": {
+            "top_k": baseline.top_k,
+            "cases": [
+                {
+                    "case_id": case.case_id,
+                    "query": case.query,
+                    "expected_chunk_ids": list(case.expected_chunk_ids),
+                }
+                for case in baseline.cases
+            ],
+            "recall_at_k": baseline.recall_at_k,
+            "hit_rate": baseline.hit_rate,
+            "mean_reciprocal_rank": baseline.mean_reciprocal_rank,
+        },
+        "policy": {
+            "maximum_recall_at_k_drop": policy.maximum_recall_at_k_drop,
+            "maximum_hit_rate_drop": policy.maximum_hit_rate_drop,
+            "maximum_mean_reciprocal_rank_drop": policy.maximum_mean_reciprocal_rank_drop,
+        },
+    }
+    canonical_bytes = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return f"sha256:{sha256(canonical_bytes).hexdigest()}"
+
+
+def _is_sha256_content_id(value: object) -> bool:
+    """고정 소문자 SHA-256 콘텐츠 식별자의 공개 문자열 형식을 확인한다."""
+    return (
+        isinstance(value, str)
+        and len(value) == 71
+        and value.startswith("sha256:")
+        and all(character in "0123456789abcdef" for character in value[7:])
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionBaselineLoadingConfig:
+    """명시한 로컬 기준선·정책 JSON 파일의 크기와 사례 수 제한이다."""
+
+    max_file_bytes: int = 100_000
+    max_cases: int = 100
+
+    def __post_init__(self) -> None:
+        for field_name, value, maximum in (
+            ("max_file_bytes", self.max_file_bytes, 1_000_000),
+            ("max_cases", self.max_cases, 1_000),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise RagConfigurationError(
+                    f"regression baseline {field_name} must be an integer between 1 and {maximum}"
+                )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionBaselineAuditMetadata:
+    """승인된 고정 기준선의 식별자·콘텐츠 참조·승인 참조·보존 수명이다."""
+
+    baseline_id: str
+    approval_reference: str
+    content_id: str
+    approved_on: date
+    retained_until: date
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("baseline_id", self.baseline_id),
+            ("approval_reference", self.approval_reference),
+            ("content_id", self.content_id),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise RagConfigurationError(
+                    f"regression baseline audit {field_name} must be a non-empty string"
+                )
+        if not _is_sha256_content_id(self.content_id):
+            raise RagConfigurationError(
+                "regression baseline audit content_id must be a lowercase sha256 content identifier"
+            )
+        if not isinstance(self.approved_on, date) or not isinstance(self.retained_until, date):
+            raise RagConfigurationError(
+                "regression baseline audit approved_on and retained_until "
+                "must be datetime.date values"
+            )
+        if self.approved_on > self.retained_until:
+            raise RagConfigurationError(
+                "regression baseline audit approved_on must not be after retained_until"
+            )
+
+    def assert_matches_requirement(self, requirement: RetrievalEvaluationAuditRequirement) -> None:
+        """요청한 대상·승인 참조·기준일이 이 승인 기준선과 일치하는지 확인한다."""
+        if self.baseline_id != requirement.comparison_target_id:
+            raise RagConfigurationError(
+                "regression baseline audit baseline_id must match the requested target"
+            )
+        if self.approval_reference != requirement.comparison_approval_reference:
+            raise RagConfigurationError(
+                "regression baseline audit approval_reference must match the requested target"
+            )
+        if self.content_id != requirement.comparison_content_id:
+            raise RagConfigurationError(
+                "regression baseline audit content_id must match the requested target"
+            )
+        if requirement.as_of_date < self.approved_on:
+            raise RagConfigurationError(
+                "regression baseline audit was not approved for the requested date"
+            )
+        if requirement.as_of_date > self.retained_until:
+            raise RagConfigurationError(
+                "regression baseline audit retention has expired for the requested date"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionBaselineFile:
+    """로컬 파일에서 함께 검증한 승인 기준선·정책·감사 참조다."""
+
+    baseline: RetrievalEvaluationBaseline
+    policy: RetrievalRegressionPolicy
+    audit: RetrievalRegressionBaselineAuditMetadata
+
+
+class LocalRetrievalRegressionBaselineLoader:
+    """허용된 로컬 루트 아래의 고정 기준선·정책 JSON 하나만 읽는다.
+
+    이 경계는 자동 탐색·검색·생성·네트워크·제공자 SDK를 사용하지 않는다. 호출자가
+    명시한 파일을 UTF-8 및 엄격한 JSON 스키마로 검증하여, 서로 다른 사례나 모호한
+    정책을 이전 검색 품질 기준선으로 기록하지 못하게 한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        root: Path,
+        config: RetrievalRegressionBaselineLoadingConfig | None = None,
+    ) -> None:
+        if not isinstance(root, Path):
+            raise RagConfigurationError("regression baseline root must be a pathlib.Path")
+        if not root.is_dir():
+            raise RagConfigurationError("regression baseline root must be an existing directory")
+        self._root = root.resolve()
+        self._config = config or RetrievalRegressionBaselineLoadingConfig()
+
+    def load(self, relative_path: Path) -> RetrievalRegressionBaselineFile:
+        """엄격히 검증한 고정 기준선과 회귀 정책을 반환한다."""
+        candidate = self._resolve_path(relative_path)
+        try:
+            raw_bytes = candidate.read_bytes()
+        except OSError as error:
+            raise RagConfigurationError("regression baseline file could not be read") from error
+        if not raw_bytes:
+            raise RagConfigurationError("regression baseline file must not be empty")
+        if len(raw_bytes) > self._config.max_file_bytes:
+            raise RagConfigurationError(
+                "regression baseline file exceeds the configured size limit"
+            )
+        try:
+            payload = json.loads(
+                raw_bytes.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_json_keys,
+                parse_constant=_reject_nonstandard_json_constant,
+            )
+        except UnicodeDecodeError as error:
+            raise RagConfigurationError("regression baseline file must be UTF-8 encoded") from error
+        except (json.JSONDecodeError, ValueError) as error:
+            raise RagConfigurationError(
+                "regression baseline file must contain valid JSON"
+            ) from error
+        return self._validated_file(payload)
+
+    def _resolve_path(self, relative_path: Path) -> Path:
+        if not isinstance(relative_path, Path):
+            raise RagConfigurationError("regression baseline relative_path must be a pathlib.Path")
+        if relative_path.is_absolute() or not relative_path.parts:
+            raise RagConfigurationError(
+                "regression baseline relative_path must be a non-empty relative path"
+            )
+        if relative_path.suffix.casefold() != ".json":
+            raise RagConfigurationError("only JSON regression baseline files (.json) are supported")
+        candidate = (self._root / relative_path).resolve()
+        if not candidate.is_relative_to(self._root):
+            raise RagConfigurationError("regression baseline relative_path must stay within root")
+        if not candidate.is_file():
+            raise RagConfigurationError("regression baseline file does not exist")
+        return candidate
+
+    def _validated_file(self, payload: object) -> RetrievalRegressionBaselineFile:
+        if not isinstance(payload, dict):
+            raise RagConfigurationError("regression baseline JSON root must be an object")
+        required_fields = {"baseline", "policy", "audit"}
+        if not {"baseline", "policy"}.issubset(payload) or not set(payload).issubset(
+            required_fields
+        ):
+            raise RagConfigurationError(
+                "regression baseline JSON root must contain only baseline, policy, and audit"
+            )
+        baseline = self._baseline_from_json(payload["baseline"])
+        policy = self._policy_from_json(payload["policy"])
+        if "audit" not in payload:
+            raise RagConfigurationError(
+                "regression baseline JSON root must contain only baseline, policy, and audit"
+            )
+        audit = self._audit_from_json(payload["audit"])
+        expected_content_id = retrieval_regression_baseline_content_id(baseline, policy)
+        if audit.content_id != expected_content_id:
+            raise RagConfigurationError(
+                "regression baseline audit content_id must match baseline and policy content"
+            )
+        return RetrievalRegressionBaselineFile(baseline=baseline, policy=policy, audit=audit)
+
+    def _baseline_from_json(self, raw_baseline: object) -> RetrievalEvaluationBaseline:
+        if not isinstance(raw_baseline, dict):
+            raise RagConfigurationError("regression baseline must be an object")
+        required_fields = {
+            "top_k",
+            "cases",
+            "recall_at_k",
+            "hit_rate",
+            "mean_reciprocal_rank",
+        }
+        if set(raw_baseline) != required_fields:
+            raise RagConfigurationError(
+                "regression baseline contains unsupported or missing fields"
+            )
+        raw_cases = raw_baseline["cases"]
+        if not isinstance(raw_cases, list) or not raw_cases:
+            raise RagConfigurationError("regression baseline cases must be a non-empty array")
+        if len(raw_cases) > self._config.max_cases:
+            raise RagConfigurationError("regression baseline contains more cases than configured")
+        cases = tuple(self._baseline_case_from_json(raw_case) for raw_case in raw_cases)
+        return RetrievalEvaluationBaseline(
+            top_k=raw_baseline["top_k"],
+            cases=cases,
+            recall_at_k=raw_baseline["recall_at_k"],
+            hit_rate=raw_baseline["hit_rate"],
+            mean_reciprocal_rank=raw_baseline["mean_reciprocal_rank"],
+        )
+
+    @staticmethod
+    def _baseline_case_from_json(raw_case: object) -> RetrievalEvaluationBaselineCase:
+        if not isinstance(raw_case, dict):
+            raise RagConfigurationError("regression baseline cases must be objects")
+        if set(raw_case) != {"case_id", "query", "expected_chunk_ids"}:
+            raise RagConfigurationError(
+                "regression baseline cases must contain only case_id, query, and expected_chunk_ids"
+            )
+        expected_chunk_ids = raw_case["expected_chunk_ids"]
+        if not isinstance(expected_chunk_ids, list):
+            raise RagConfigurationError("regression baseline expected_chunk_ids must be an array")
+        if not all(isinstance(chunk_id, str) for chunk_id in expected_chunk_ids):
+            raise RagConfigurationError(
+                "regression baseline expected_chunk_ids must contain strings"
+            )
+        return RetrievalEvaluationBaselineCase(
+            case_id=raw_case["case_id"],
+            query=raw_case["query"],
+            expected_chunk_ids=tuple(expected_chunk_ids),
+        )
+
+    @staticmethod
+    def _policy_from_json(raw_policy: object) -> RetrievalRegressionPolicy:
+        if not isinstance(raw_policy, dict):
+            raise RagConfigurationError("regression policy must be an object")
+        required_fields = {
+            "maximum_recall_at_k_drop",
+            "maximum_hit_rate_drop",
+            "maximum_mean_reciprocal_rank_drop",
+        }
+        if set(raw_policy) != required_fields:
+            raise RagConfigurationError("regression policy contains unsupported or missing fields")
+        return RetrievalRegressionPolicy(
+            maximum_recall_at_k_drop=raw_policy["maximum_recall_at_k_drop"],
+            maximum_hit_rate_drop=raw_policy["maximum_hit_rate_drop"],
+            maximum_mean_reciprocal_rank_drop=raw_policy["maximum_mean_reciprocal_rank_drop"],
+        )
+
+    @staticmethod
+    def _audit_from_json(raw_audit: object) -> RetrievalRegressionBaselineAuditMetadata:
+        if not isinstance(raw_audit, dict):
+            raise RagConfigurationError("regression baseline audit must be an object")
+        required_fields = {
+            "baseline_id",
+            "approval_reference",
+            "content_id",
+            "approved_on",
+            "retained_until",
+        }
+        if set(raw_audit) != required_fields:
+            raise RagConfigurationError(
+                "regression baseline audit contains unsupported or missing fields"
+            )
+        return RetrievalRegressionBaselineAuditMetadata(
+            baseline_id=raw_audit["baseline_id"],
+            approval_reference=raw_audit["approval_reference"],
+            content_id=raw_audit["content_id"],
+            approved_on=_date_from_baseline_audit_json(raw_audit["approved_on"], "approved_on"),
+            retained_until=_date_from_baseline_audit_json(
+                raw_audit["retained_until"], "retained_until"
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationReportFileConfig:
+    """명시한 로컬 평가 기록 파일의 크기와 사례 수 제한이다."""
+
+    max_file_bytes: int = 100_000
+    max_cases: int = 100
+
+    def __post_init__(self) -> None:
+        for field_name, value, maximum in (
+            ("max_file_bytes", self.max_file_bytes, 1_000_000),
+            ("max_cases", self.max_cases, 1_000),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise RagConfigurationError(
+                    "evaluation report file "
+                    f"{field_name} must be an integer between 1 and {maximum}"
+                )
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationAuditRequirement:
+    """보고서를 회귀 비교할 때 명시하는 대상과 기준 일자다.
+
+    현재 시각을 읽지 않아 같은 입력은 언제나 같은 비교 가능 여부를 낸다. 호출자는
+    비교하려는 승인 기준선의 안정적인 식별자와 보존 수명을 판단할 날짜를 명시한다.
+    """
+
+    comparison_target_id: str
+    comparison_approval_reference: str
+    comparison_content_id: str
+    as_of_date: date
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.comparison_target_id, str) or not self.comparison_target_id.strip():
+            raise RagConfigurationError("audit comparison_target_id must be a non-empty string")
+        if (
+            not isinstance(self.comparison_approval_reference, str)
+            or not self.comparison_approval_reference.strip()
+        ):
+            raise RagConfigurationError(
+                "audit comparison_approval_reference must be a non-empty string"
+            )
+        if not _is_sha256_content_id(self.comparison_content_id):
+            raise RagConfigurationError(
+                "audit comparison_content_id must be a lowercase sha256 content identifier"
+            )
+        if not isinstance(self.as_of_date, date):
+            raise RagConfigurationError("audit as_of_date must be a datetime.date")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationAuditMetadata:
+    """불변 평가 기록의 승인·보존·비교 대상 감사 메타데이터다.
+
+    ``pending`` 기록은 아직 회귀 비교에 사용할 수 없다. ``approved`` 기록만 지정한
+    비교 대상 및 보존 기한 안에서 비교할 수 있다. ``superseded``와 ``revoked``는
+    과거 기록을 보존하되 새 회귀 판정에 재사용하지 않는 명시적 종료 상태다.
+    """
+
+    record_id: str
+    comparison_target_id: str
+    comparison_approval_reference: str
+    comparison_content_id: str
+    approval_state: str
+    retained_until: date
+    approval_reference: str | None = None
+    approved_on: date | None = None
+    superseded_by: str | None = None
+
+    _APPROVAL_STATES = frozenset({"pending", "approved", "superseded", "revoked"})
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("record_id", self.record_id),
+            ("comparison_target_id", self.comparison_target_id),
+            ("comparison_approval_reference", self.comparison_approval_reference),
+            ("comparison_content_id", self.comparison_content_id),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise RagConfigurationError(f"audit {field_name} must be a non-empty string")
+        if not _is_sha256_content_id(self.comparison_content_id):
+            raise RagConfigurationError(
+                "audit comparison_content_id must be a lowercase sha256 content identifier"
+            )
+        if self.approval_state not in self._APPROVAL_STATES:
+            raise RagConfigurationError("audit approval_state is not supported")
+        if not isinstance(self.retained_until, date):
+            raise RagConfigurationError("audit retained_until must be a datetime.date")
+        if self.approval_reference is not None and (
+            not isinstance(self.approval_reference, str) or not self.approval_reference.strip()
+        ):
+            raise RagConfigurationError(
+                "audit approval_reference must be a non-empty string or null"
+            )
+        if self.approved_on is not None and not isinstance(self.approved_on, date):
+            raise RagConfigurationError("audit approved_on must be a datetime.date or null")
+        if self.approved_on is not None and self.approved_on > self.retained_until:
+            raise RagConfigurationError("audit approved_on must not be after retained_until")
+        if self.superseded_by is not None and (
+            not isinstance(self.superseded_by, str) or not self.superseded_by.strip()
+        ):
+            raise RagConfigurationError("audit superseded_by must be a non-empty string or null")
+        if self.approval_state == "pending":
+            if any((self.approval_reference, self.approved_on, self.superseded_by)):
+                raise RagConfigurationError(
+                    "pending audit metadata must not contain approval details"
+                )
+        elif self.approval_state == "approved":
+            if (
+                self.approval_reference is None
+                or self.approved_on is None
+                or self.superseded_by is not None
+            ):
+                raise RagConfigurationError(
+                    "approved audit metadata requires approval details and no replacement record"
+                )
+        elif self.approval_state == "superseded":
+            if (
+                self.approval_reference is None
+                or self.approved_on is None
+                or self.superseded_by is None
+            ):
+                raise RagConfigurationError(
+                    "superseded audit metadata requires approval details and a replacement record"
+                )
+        elif (
+            self.approval_reference is None
+            or self.approved_on is None
+            or self.superseded_by is not None
+        ):
+            raise RagConfigurationError(
+                "revoked audit metadata requires approval details and no replacement record"
+            )
+
+    def to_payload(self) -> dict[str, str | None]:
+        """엄격한 로컬 JSON 기록에 쓸 수 있는 감사 메타데이터를 반환한다."""
+        return {
+            "record_id": self.record_id,
+            "comparison_target_id": self.comparison_target_id,
+            "comparison_approval_reference": self.comparison_approval_reference,
+            "comparison_content_id": self.comparison_content_id,
+            "approval_state": self.approval_state,
+            "retained_until": self.retained_until.isoformat(),
+            "approval_reference": self.approval_reference,
+            "approved_on": None if self.approved_on is None else self.approved_on.isoformat(),
+            "superseded_by": self.superseded_by,
+        }
+
+    def assert_comparable(self, requirement: RetrievalEvaluationAuditRequirement) -> None:
+        """승인·대상·보존 수명 조건을 충족하지 않는 비교를 명시적으로 거부한다."""
+        if not isinstance(requirement, RetrievalEvaluationAuditRequirement):
+            raise RagConfigurationError(
+                "audit requirement must be a RetrievalEvaluationAuditRequirement"
+            )
+        if self.comparison_target_id != requirement.comparison_target_id:
+            raise RagConfigurationError(
+                "audit comparison_target_id must match the requested target"
+            )
+        if self.comparison_approval_reference != requirement.comparison_approval_reference:
+            raise RagConfigurationError(
+                "audit comparison_approval_reference must match the requested target"
+            )
+        if self.comparison_content_id != requirement.comparison_content_id:
+            raise RagConfigurationError(
+                "audit comparison_content_id must match the requested target"
+            )
+        if self.approval_state != "approved":
+            raise RagConfigurationError("audit record must be approved for regression comparison")
+        if requirement.as_of_date > self.retained_until:
+            raise RagConfigurationError("audit record retention has expired for the requested date")
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalEvaluationRecord:
+    """재검증된 평가 보고서와 이를 비교할 수 있는 감사 메타데이터다."""
+
+    report: RetrievalEvaluationReport
+    audit: RetrievalEvaluationAuditMetadata
+
+
+class LocalRetrievalEvaluationReportStore:
+    """허용 루트의 명시 JSON 파일에 고정 평가 보고서를 기록하고 재검증한다.
+
+    이 경계는 자동 탐색, 검색, 생성, 네트워크, 제공자 SDK를 사용하지 않는다. ``record``는
+    기존 파일을 덮어쓰지 않으며, ``load``는 정확한 스키마와 사례별·집계 지표의 파생값을
+    다시 검증한다. 따라서 변경되었거나 다른 평가 세트에서 온 기록을 기준선 비교에
+    조용히 사용하지 않는다.
+    """
+
+    def __init__(
+        self, *, root: Path, config: RetrievalEvaluationReportFileConfig | None = None
+    ) -> None:
+        if not isinstance(root, Path):
+            raise RagConfigurationError("evaluation report root must be a pathlib.Path")
+        if not root.is_dir():
+            raise RagConfigurationError("evaluation report root must be an existing directory")
+        self._root = root.resolve()
+        self._config = config or RetrievalEvaluationReportFileConfig()
+
+    def record(
+        self,
+        relative_path: Path,
+        report: RetrievalEvaluationReport,
+        *,
+        audit: RetrievalEvaluationAuditMetadata,
+    ) -> Path:
+        """검증된 보고서를 새 UTF-8 JSON 파일 하나로 결정론적으로 기록한다."""
+        _validate_evaluation_report(report)
+        if not isinstance(audit, RetrievalEvaluationAuditMetadata):
+            raise RagConfigurationError(
+                "evaluation report audit must be a RetrievalEvaluationAuditMetadata"
+            )
+        candidate = self._resolve_path(relative_path, operation="record")
+        if candidate.exists():
+            raise RagConfigurationError(
+                "evaluation report file must not overwrite an existing file"
+            )
+        encoded = (
+            json.dumps(
+                {**report.to_record_payload(), "audit": audit.to_payload()},
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+                allow_nan=False,
+            )
+            + "\n"
+        ).encode("utf-8")
+        if len(encoded) > self._config.max_file_bytes:
+            raise RagConfigurationError("evaluation report file exceeds the configured size limit")
+        try:
+            with candidate.open("xb") as report_file:
+                report_file.write(encoded)
+        except FileExistsError as error:
+            raise RagConfigurationError(
+                "evaluation report file must not overwrite an existing file"
+            ) from error
+        except OSError as error:
+            raise RagConfigurationError("evaluation report file could not be recorded") from error
+        return candidate
+
+    def load(self, relative_path: Path) -> RetrievalEvaluationReport:
+        """명시한 UTF-8 JSON 평가 기록 하나를 완전히 재검증해 반환한다."""
+        return self.load_record(relative_path).report
+
+    def load_record(self, relative_path: Path) -> RetrievalEvaluationRecord:
+        """보고서와 승인·보존·비교 대상 메타데이터를 함께 재검증해 반환한다."""
+        candidate = self._resolve_path(relative_path, operation="load")
+        if not candidate.is_file():
+            raise RagConfigurationError("evaluation report file does not exist")
+        try:
+            raw_bytes = candidate.read_bytes()
+        except OSError as error:
+            raise RagConfigurationError("evaluation report file could not be read") from error
+        if not raw_bytes:
+            raise RagConfigurationError("evaluation report file must not be empty")
+        if len(raw_bytes) > self._config.max_file_bytes:
+            raise RagConfigurationError("evaluation report file exceeds the configured size limit")
+        try:
+            payload = json.loads(
+                raw_bytes.decode("utf-8"),
+                object_pairs_hook=_reject_duplicate_json_keys,
+                parse_constant=_reject_nonstandard_json_constant,
+            )
+        except UnicodeDecodeError as error:
+            raise RagConfigurationError("evaluation report file must be UTF-8 encoded") from error
+        except (json.JSONDecodeError, ValueError) as error:
+            raise RagConfigurationError("evaluation report file must contain valid JSON") from error
+        return self._record_from_json(payload)
+
+    def _resolve_path(self, relative_path: Path, *, operation: str) -> Path:
+        if not isinstance(relative_path, Path):
+            raise RagConfigurationError("evaluation report relative_path must be a pathlib.Path")
+        if relative_path.is_absolute() or not relative_path.parts:
+            raise RagConfigurationError(
+                "evaluation report relative_path must be a non-empty relative path"
+            )
+        if relative_path.suffix.casefold() != ".json":
+            raise RagConfigurationError("only JSON evaluation report files (.json) are supported")
+        candidate = (self._root / relative_path).resolve()
+        if not candidate.is_relative_to(self._root):
+            raise RagConfigurationError("evaluation report relative_path must stay within root")
+        if operation == "record" and not candidate.parent.is_dir():
+            raise RagConfigurationError("evaluation report parent directory does not exist")
+        return candidate
+
+    def _record_from_json(self, payload: object) -> RetrievalEvaluationRecord:
+        if not isinstance(payload, dict):
+            raise RagConfigurationError("evaluation report JSON root must be an object")
+        required_fields = {
+            "top_k",
+            "evaluated_cases",
+            "recall_at_k",
+            "hit_rate",
+            "mean_reciprocal_rank",
+            "results",
+            "audit",
+        }
+        if set(payload) != required_fields:
+            raise RagConfigurationError(
+                "evaluation report JSON root contains unsupported or missing fields"
+            )
+        raw_results = payload["results"]
+        if not isinstance(raw_results, list) or not raw_results:
+            raise RagConfigurationError("evaluation report results must be a non-empty array")
+        if len(raw_results) > self._config.max_cases:
+            raise RagConfigurationError("evaluation report contains more cases than configured")
+        results = tuple(self._result_from_json(raw_result) for raw_result in raw_results)
+        report = RetrievalEvaluationReport(
+            top_k=payload["top_k"],
+            results=results,
+            recall_at_k=payload["recall_at_k"],
+            hit_rate=payload["hit_rate"],
+            mean_reciprocal_rank=payload["mean_reciprocal_rank"],
+        )
+        evaluated_cases = payload["evaluated_cases"]
+        if isinstance(evaluated_cases, bool) or not isinstance(evaluated_cases, int):
+            raise RagConfigurationError("evaluation report evaluated_cases must be an integer")
+        if evaluated_cases != report.evaluated_cases:
+            raise RagConfigurationError("evaluation report evaluated_cases must match results")
+        _validate_evaluation_report(report)
+        return RetrievalEvaluationRecord(
+            report=report, audit=self._audit_from_json(payload["audit"])
+        )
+
+    @staticmethod
+    def _audit_from_json(raw_audit: object) -> RetrievalEvaluationAuditMetadata:
+        if not isinstance(raw_audit, dict):
+            raise RagConfigurationError("evaluation report audit must be an object")
+        required_fields = {
+            "record_id",
+            "comparison_target_id",
+            "comparison_approval_reference",
+            "comparison_content_id",
+            "approval_state",
+            "retained_until",
+            "approval_reference",
+            "approved_on",
+            "superseded_by",
+        }
+        if set(raw_audit) != required_fields:
+            raise RagConfigurationError(
+                "evaluation report audit contains unsupported or missing fields"
+            )
+        retained_until = _date_from_audit_json(raw_audit["retained_until"], "retained_until")
+        approved_on_raw = raw_audit["approved_on"]
+        approved_on = (
+            None
+            if approved_on_raw is None
+            else _date_from_audit_json(approved_on_raw, "approved_on")
+        )
+        return RetrievalEvaluationAuditMetadata(
+            record_id=raw_audit["record_id"],
+            comparison_target_id=raw_audit["comparison_target_id"],
+            comparison_approval_reference=raw_audit["comparison_approval_reference"],
+            comparison_content_id=raw_audit["comparison_content_id"],
+            approval_state=raw_audit["approval_state"],
+            retained_until=retained_until,
+            approval_reference=raw_audit["approval_reference"],
+            approved_on=approved_on,
+            superseded_by=raw_audit["superseded_by"],
+        )
+
+    @staticmethod
+    def _result_from_json(raw_result: object) -> RetrievalEvaluationResult:
+        if not isinstance(raw_result, dict):
+            raise RagConfigurationError("evaluation report results must be objects")
+        required_fields = {
+            "case_id",
+            "query",
+            "expected_chunk_ids",
+            "retrieved_chunk_ids",
+            "first_relevant_rank",
+            "passed",
+            "recall_at_k",
+            "reciprocal_rank",
+        }
+        if set(raw_result) != required_fields:
+            raise RagConfigurationError(
+                "evaluation report results contain unsupported or missing fields"
+            )
+        expected_chunk_ids = raw_result["expected_chunk_ids"]
+        retrieved_chunk_ids = raw_result["retrieved_chunk_ids"]
+        if not isinstance(expected_chunk_ids, list) or not isinstance(retrieved_chunk_ids, list):
+            raise RagConfigurationError("evaluation report chunk IDs must be arrays")
+        if not all(
+            isinstance(chunk_id, str) for chunk_id in expected_chunk_ids + retrieved_chunk_ids
+        ):
+            raise RagConfigurationError("evaluation report chunk IDs must contain strings")
+        first_relevant_rank = raw_result["first_relevant_rank"]
+        if first_relevant_rank is not None and (
+            isinstance(first_relevant_rank, bool) or not isinstance(first_relevant_rank, int)
+        ):
+            raise RagConfigurationError(
+                "evaluation report first_relevant_rank must be an integer or null"
+            )
+        if not isinstance(raw_result["passed"], bool):
+            raise RagConfigurationError("evaluation report passed must be a boolean")
+        result = RetrievalEvaluationResult(
+            case_id=raw_result["case_id"],
+            query=raw_result["query"],
+            expected_chunk_ids=tuple(expected_chunk_ids),
+            retrieved_chunk_ids=tuple(retrieved_chunk_ids),
+            first_relevant_rank=first_relevant_rank,
+            recall_at_k=raw_result["recall_at_k"],
+            reciprocal_rank=raw_result["reciprocal_rank"],
+        )
+        if raw_result["passed"] != result.passed:
+            raise RagConfigurationError("evaluation report passed must match first_relevant_rank")
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionMetricResult:
+    """한 집계 지표의 기준선·현재 값·허용 하락 폭을 기록한다."""
+
+    name: str
+    baseline_score: float
+    current_score: float
+    drop: float
+    maximum_drop: float
+
+    @property
+    def passed(self) -> bool:
+        """현재 값이 정책이 허용하는 기준선 하락 범위 안에 있으면 참이다."""
+        return self.drop <= self.maximum_drop
+
+    def to_payload(self) -> dict[str, object]:
+        """JSON 호환 단일 지표 회귀 판정 결과를 반환한다."""
+        return {
+            "name": self.name,
+            "baseline_score": self.baseline_score,
+            "current_score": self.current_score,
+            "drop": self.drop,
+            "maximum_drop": self.maximum_drop,
+            "passed": self.passed,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalRegressionDecision:
+    """동일한 고정 평가 세트에 대한 전체 결정론적 회귀 판정이다."""
+
+    top_k: int
+    evaluated_cases: int
+    metrics: tuple[RetrievalRegressionMetricResult, ...]
+
+    @property
+    def passed(self) -> bool:
+        """모든 집계 지표가 정책을 통과했는지 반환한다."""
+        return all(metric.passed for metric in self.metrics)
+
+    def to_payload(self) -> dict[str, object]:
+        """원문·질의·생성 답변 없이 JSON 호환 회귀 판정을 반환한다."""
+        return {
+            "top_k": self.top_k,
+            "evaluated_cases": self.evaluated_cases,
+            "passed": self.passed,
+            "metrics": [metric.to_payload() for metric in self.metrics],
+        }
+
+
+class RetrievalRegressionChecker:
+    """호환되는 고정 평가 보고서를 기준선 및 하락 허용 폭과 비교한다.
+
+    기준선과 현재 보고서는 ``top_k`` 및 사례 순서·ID·질문·기대 청크 ID가 모두 같아야 한다.
+    따라서 서로 다른 데이터셋 또는 다른 관련성 정의를 품질 개선/저하로 오인하지 않는다.
+    이 경계는 로컬 보고서만 비교하며 검색·생성·네트워크·제공자 SDK를 호출하지 않는다.
+    """
+
+    def __init__(
+        self,
+        *,
+        baseline: RetrievalEvaluationBaseline,
+        policy: RetrievalRegressionPolicy | None = None,
+        baseline_audit: RetrievalRegressionBaselineAuditMetadata | None = None,
+    ) -> None:
+        if not isinstance(baseline, RetrievalEvaluationBaseline):
+            raise RagConfigurationError("baseline must be a RetrievalEvaluationBaseline")
+        if baseline_audit is not None and not isinstance(
+            baseline_audit, RetrievalRegressionBaselineAuditMetadata
+        ):
+            raise RagConfigurationError(
+                "baseline_audit must be a RetrievalRegressionBaselineAuditMetadata or null"
+            )
+        self._baseline = baseline
+        self._policy = policy or RetrievalRegressionPolicy()
+        self._baseline_audit = baseline_audit
+        if (
+            baseline_audit is not None
+            and baseline_audit.content_id
+            != retrieval_regression_baseline_content_id(baseline, self._policy)
+        ):
+            raise RagConfigurationError(
+                "baseline_audit content_id must match the supplied baseline and policy content"
+            )
+
+    def evaluate(self, report: RetrievalEvaluationReport) -> RetrievalRegressionDecision:
+        """현재 보고서가 같은 기준선의 품질 하락 정책을 통과하는지 판정한다."""
+        _validate_evaluation_report(report)
+        current_cases = tuple(
+            RetrievalEvaluationBaselineCase(
+                case_id=result.case_id,
+                query=result.query,
+                expected_chunk_ids=result.expected_chunk_ids,
+            )
+            for result in report.results
+        )
+        if report.top_k != self._baseline.top_k:
+            raise RagConfigurationError("regression report top_k must match the baseline")
+        if current_cases != self._baseline.cases:
+            raise RagConfigurationError(
+                "regression report cases must match the baseline case order and expected chunk IDs"
+            )
+        return RetrievalRegressionDecision(
+            top_k=report.top_k,
+            evaluated_cases=report.evaluated_cases,
+            metrics=(
+                self._metric_result(
+                    name="recall_at_k",
+                    baseline_score=self._baseline.recall_at_k,
+                    current_score=report.recall_at_k,
+                    maximum_drop=self._policy.maximum_recall_at_k_drop,
+                ),
+                self._metric_result(
+                    name="hit_rate",
+                    baseline_score=self._baseline.hit_rate,
+                    current_score=report.hit_rate,
+                    maximum_drop=self._policy.maximum_hit_rate_drop,
+                ),
+                self._metric_result(
+                    name="mean_reciprocal_rank",
+                    baseline_score=self._baseline.mean_reciprocal_rank,
+                    current_score=report.mean_reciprocal_rank,
+                    maximum_drop=self._policy.maximum_mean_reciprocal_rank_drop,
+                ),
+            ),
+        )
+
+    def evaluate_record(
+        self,
+        record: RetrievalEvaluationRecord,
+        *,
+        audit_requirement: RetrievalEvaluationAuditRequirement,
+    ) -> RetrievalRegressionDecision:
+        """승인·보존·대상·승인 참조가 연결된 불변 기록만 기준선과 비교한다."""
+        if not isinstance(record, RetrievalEvaluationRecord):
+            raise RagConfigurationError("regression record must be a RetrievalEvaluationRecord")
+        if self._baseline_audit is None:
+            raise RagConfigurationError(
+                "audited regression comparison requires a RetrievalRegressionBaselineAuditMetadata"
+            )
+        self._baseline_audit.assert_matches_requirement(audit_requirement)
+        record.audit.assert_comparable(audit_requirement)
+        return self.evaluate(record.report)
+
+    @staticmethod
+    def _metric_result(
+        *, name: str, baseline_score: float, current_score: float, maximum_drop: float
+    ) -> RetrievalRegressionMetricResult:
+        return RetrievalRegressionMetricResult(
+            name=name,
+            baseline_score=baseline_score,
+            current_score=current_score,
+            drop=max(0.0, baseline_score - current_score),
+            maximum_drop=maximum_drop,
+        )
+
+
+def _date_from_baseline_audit_json(value: object, field_name: str) -> date:
+    """승인 기준선 파일의 ISO-8601 날짜가 날짜형 경계값인지 확인한다."""
+    if not isinstance(value, str):
+        raise RagConfigurationError(
+            f"regression baseline audit {field_name} must be an ISO date string"
+        )
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise RagConfigurationError(
+            f"regression baseline audit {field_name} must be an ISO date string"
+        ) from error
+    if parsed.isoformat() != value:
+        raise RagConfigurationError(
+            f"regression baseline audit {field_name} must be an ISO date string"
+        )
+    return parsed
+
+
+def _date_from_audit_json(value: object, field_name: str) -> date:
+    """감사 파일의 ISO-8601 날짜가 날짜형 경계값인지 확인한다."""
+    if not isinstance(value, str):
+        raise RagConfigurationError(
+            f"evaluation report audit {field_name} must be an ISO date string"
+        )
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as error:
+        raise RagConfigurationError(
+            f"evaluation report audit {field_name} must be an ISO date string"
+        ) from error
+    if parsed.isoformat() != value:
+        raise RagConfigurationError(
+            f"evaluation report audit {field_name} must be an ISO date string"
+        )
+    return parsed
+
+
+def _validate_unit_interval_score(*, field_name: str, value: object) -> None:
+    """점수와 허용 하락 폭이 유한한 0~1 수인지 확인한다."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not 0.0 <= value <= 1.0
+    ):
+        raise RagConfigurationError(f"{field_name} must be a finite number between 0 and 1")
+
+
+def _validate_evaluation_report(report: object) -> None:
+    """직접 생성된 보고서가 비교 계약을 우회하지 못하게 최소 불변식을 확인한다."""
+    if not isinstance(report, RetrievalEvaluationReport):
+        raise RagConfigurationError("regression report must be a RetrievalEvaluationReport")
+    if (
+        isinstance(report.top_k, bool)
+        or not isinstance(report.top_k, int)
+        or not 1 <= report.top_k <= 20
+    ):
+        raise RagConfigurationError("regression report top_k must be an integer between 1 and 20")
+    if not isinstance(report.results, tuple) or not report.results:
+        raise RagConfigurationError("regression report results must be a non-empty tuple")
+    if any(not isinstance(result, RetrievalEvaluationResult) for result in report.results):
+        raise RagConfigurationError(
+            "regression report results must contain RetrievalEvaluationResult values"
+        )
+    case_ids = [result.case_id for result in report.results]
+    if len(set(case_ids)) != len(case_ids):
+        raise RagConfigurationError("regression report case_id values must be unique")
+    if len(report.results) > 1_000:
+        raise RagConfigurationError("regression report contains more cases than supported")
+    for field_name, value in (
+        ("regression report recall_at_k", report.recall_at_k),
+        ("regression report hit_rate", report.hit_rate),
+        ("regression report mean_reciprocal_rank", report.mean_reciprocal_rank),
+    ):
+        _validate_unit_interval_score(field_name=field_name, value=value)
+    expected_count = 0
+    recovered_count = 0
+    hit_count = 0
+    reciprocal_rank_total = 0.0
+    for result in report.results:
+        RetrievalEvaluationCase(
+            case_id=result.case_id,
+            query=result.query,
+            expected_chunk_ids=result.expected_chunk_ids,
+        )
+        if not isinstance(result.retrieved_chunk_ids, tuple):
+            raise RagConfigurationError("regression report retrieved_chunk_ids must be a tuple")
+        if len(result.retrieved_chunk_ids) > report.top_k:
+            raise RagConfigurationError("regression report returned more hits than top_k")
+        if any(
+            not isinstance(chunk_id, str) or not chunk_id.strip()
+            for chunk_id in result.retrieved_chunk_ids
+        ):
+            raise RagConfigurationError(
+                "regression report retrieved_chunk_ids must contain non-empty strings"
+            )
+        if len(set(result.retrieved_chunk_ids)) != len(result.retrieved_chunk_ids):
+            raise RagConfigurationError(
+                "regression report retrieved_chunk_ids must not contain duplicates"
+            )
+        _validate_unit_interval_score(
+            field_name="regression report recall_at_k", value=result.recall_at_k
+        )
+        _validate_unit_interval_score(
+            field_name="regression report reciprocal_rank", value=result.reciprocal_rank
+        )
+        expected_ids = set(result.expected_chunk_ids)
+        first_relevant_rank = next(
+            (
+                rank
+                for rank, chunk_id in enumerate(result.retrieved_chunk_ids, start=1)
+                if chunk_id in expected_ids
+            ),
+            None,
+        )
+        if result.first_relevant_rank != first_relevant_rank:
+            raise RagConfigurationError(
+                "regression report first_relevant_rank must match retrieved chunk IDs"
+            )
+        expected_recall = len(expected_ids.intersection(result.retrieved_chunk_ids)) / len(
+            expected_ids
+        )
+        expected_reciprocal_rank = 0.0 if first_relevant_rank is None else 1.0 / first_relevant_rank
+        if not math.isclose(result.recall_at_k, expected_recall, rel_tol=0.0, abs_tol=1e-12):
+            raise RagConfigurationError(
+                "regression report recall_at_k must match retrieved chunk IDs"
+            )
+        if not math.isclose(
+            result.reciprocal_rank, expected_reciprocal_rank, rel_tol=0.0, abs_tol=1e-12
+        ):
+            raise RagConfigurationError(
+                "regression report reciprocal_rank must match first_relevant_rank"
+            )
+        expected_count += len(expected_ids)
+        recovered_count += len(expected_ids.intersection(result.retrieved_chunk_ids))
+        hit_count += first_relevant_rank is not None
+        reciprocal_rank_total += expected_reciprocal_rank
+    expected_recall_at_k = recovered_count / expected_count
+    expected_hit_rate = hit_count / len(report.results)
+    expected_mean_reciprocal_rank = reciprocal_rank_total / len(report.results)
+    if not math.isclose(report.recall_at_k, expected_recall_at_k, rel_tol=0.0, abs_tol=1e-12):
+        raise RagConfigurationError("regression report recall_at_k must match its results")
+    if not math.isclose(report.hit_rate, expected_hit_rate, rel_tol=0.0, abs_tol=1e-12):
+        raise RagConfigurationError("regression report hit_rate must match its results")
+    if not math.isclose(
+        report.mean_reciprocal_rank,
+        expected_mean_reciprocal_rank,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise RagConfigurationError("regression report mean_reciprocal_rank must match its results")
