@@ -1139,3 +1139,60 @@ def test_json_checkpoint_path_aliases_share_a_normalized_lock_for_risky_starts(
     assert waiting.result is None
     assert [event.node for event in waiting.events] == ["plan", "approval"]
     assert "execute" not in [event.node for event in waiting.events]
+
+
+def test_json_checkpoint_path_aliases_consume_one_mixed_approval_decision(
+    tmp_path: Path,
+) -> None:
+    """별칭 인스턴스의 상반된 동시 결정도 하나만 기록하고 나머지는 충돌한다."""
+    checkpoint_path = tmp_path / "normalized-shared-mixed-decisions.json"
+    alias_directory = tmp_path / "path-alias"
+    alias_directory.mkdir()
+    alias_path = alias_directory / ".." / checkpoint_path.name
+    assert checkpoint_path != alias_path
+    adapters = tuple(
+        WorkflowApiAdapter(
+            workflow=DeterministicWorkflow(
+                checkpointer=JsonFileCheckpointer(
+                    path=checkpoint_path if index % 2 == 0 else alias_path
+                )
+            )
+        )
+        for index in range(8)
+    )
+    run_id = "json-normalized-path-mixed-decision-001"
+    adapters[0].start(
+        request=StartWorkflowRequest(
+            run_id=run_id,
+            task="학습용 배포를 준비한다",
+            action=ActionKind.DEPLOY,
+        )
+    )
+    decisions = (True, False, True, False, True, False, True, False)
+    barrier = Barrier(len(decisions))
+
+    def decide_once(index: int) -> WorkflowStatus | str:
+        barrier.wait(timeout=5)
+        try:
+            return adapters[index].resume(
+                run_id=run_id,
+                request=ApprovalRequest(approved=decisions[index]),
+            ).status
+        except WorkflowRunConflictError:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=len(decisions)) as executor:
+        outcomes = list(executor.map(decide_once, range(len(decisions))))
+
+    assert outcomes.count(WorkflowStatus.COMPLETED) + outcomes.count(WorkflowStatus.REJECTED) == 1
+    assert outcomes.count("conflict") == 7
+    terminal = JsonFileCheckpointer(path=checkpoint_path).load(run_id=run_id)
+    assert terminal.action is ActionKind.DEPLOY
+    assert terminal.status in {WorkflowStatus.COMPLETED, WorkflowStatus.REJECTED}
+    assert terminal.approval_granted is (terminal.status is WorkflowStatus.COMPLETED)
+    if terminal.status is WorkflowStatus.COMPLETED:
+        assert [event.node for event in terminal.events] == [
+            "plan", "approval", "approval", "execute"
+        ]
+    else:
+        assert [event.node for event in terminal.events] == ["plan", "approval", "approval"]

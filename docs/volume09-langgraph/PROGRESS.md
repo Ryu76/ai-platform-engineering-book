@@ -701,39 +701,46 @@ $ git diff --check
 
 - 별도 승인된 의존성·프로젝트 설정 변경이 있을 때에만 실제 `langgraph`와 FastAPI `TestClient` 통합을 추가합니다. 그 전까지는 외부 서버·네트워크·위험 작업을 실행하지 않습니다.
 
-## 최신 슬라이스 — 정규화된 JSON 경로 별칭의 동시 시작
+## 완료 상태
 
-- `docs/volume09-langgraph/21-json-normalized-path-concurrent-start.md`
-  - `..`를 포함한 서로 다른 경로 표기가 `Path.resolve()` 뒤 같은 파일을 가리킬 때 독립 Checkpointer 인스턴스가 Lock을 공유하고 하나만 위험 작업의 승인 대기를 생성하는 계약·운영 경계를 14개 장 템플릿으로 문서화했습니다.
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 최신 슬라이스 — 정규화된 JSON 경로 별칭의 동시 상반 승인 결정
+
+- `docs/volume09-langgraph/22-json-normalized-path-concurrent-mixed-decision.md`
+  - `checkpoints.json`과 `path-alias/../checkpoints.json`을 번갈아 쓰는 독립 Checkpointer 인스턴스의 동시 `approved=True`·`approved=False` 재전송에서, 하나의 종료 결정만 기록되는 비교·교체 계약과 단일 프로세스 경계를 14개 장 템플릿으로 문서화했습니다.
 - `docs/volume09-langgraph/README.md`
-  - 스물한 번째 경로 별칭 동시 시작 안전성 장과 오프라인 예제 범위를 추가했습니다.
-- `examples/volume09/json_normalized_path_concurrent_start_workflow.py`
-  - 원래 경로와 `path-alias/..` 별칭을 번갈아 쓰는 8개 독립 인스턴스가 `waiting_for_approval=1`, `conflicts=7`, 단일 `plan | approval`을 출력하는 오프라인 데모를 추가했습니다.
+  - 스물두 번째 상반 승인 결정 장과 관련 오프라인 예제·테스트 범위를 추가했습니다.
+- `examples/volume09/json_normalized_path_concurrent_mixed_decision_workflow.py`
+  - 원래 경로와 `path-alias/..` 별칭을 번갈아 쓰는 8개 독립 인스턴스가 동시 승인·거절 요청에서 `completed + rejected = 1`, `conflicts=7`을 출력하는 오프라인 데모를 추가했습니다. 최종 결정은 스레드 일정에 따라 달라지지만 실제 위험 작업은 수행하지 않습니다.
 - `tests/unit/test_volume09_graph.py`
-  - 서로 다른 `Path` 객체가 정규화 뒤 같은 JSON 파일을 가리킬 때, 독립 인스턴스 8개가 위험 run 하나만 승인 대기로 생성하고 충돌 요청이 Action·승인 경계·감사 이벤트를 보존하며 `execute`를 추가하지 않음을 검증하는 계약을 추가했습니다.
+  - 정규화 뒤 같은 JSON 파일을 가리키는 독립 인스턴스의 혼합 결정 경쟁에서 단 하나의 `COMPLETED` 또는 `REJECTED` 상태만 남고, 나머지 7개 요청이 충돌하며, 거절에는 `execute`가 없고 완료에는 단 하나의 `execute`만 남는 계약을 추가했습니다.
 
-실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 엄격한 별도 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 엄격한 별도 Boolean 승인 요청에서 승리한 하나의 상태 전이로만 종료하며, `COMPLETED`도 오프라인 시뮬레이션입니다.
 
-## 최신 검증 기록 — 정규화된 JSON 경로 별칭의 동시 시작 슬라이스
+## 최신 검증 기록 — 정규화된 JSON 경로 별칭의 동시 상반 승인 결정 슬라이스
 
 실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
 
 ```text
-$ uv run python examples/volume09/json_normalized_path_concurrent_start_workflow.py
-waiting_for_approval=1
-conflicts=7
-checkpoint=waiting_for_approval
-approval_granted=None
-events=plan | approval
+$ uv run pytest tests/unit/test_volume09_graph.py::test_json_checkpoint_path_aliases_consume_one_mixed_approval_decision -q  # 10회 반복
+각 반복: 1 passed (0.30s~1.30s), 총 10/10 통과
 
-$ uv run pytest tests/unit/test_volume09_graph.py::test_json_checkpoint_path_aliases_share_a_normalized_lock_for_risky_starts -q  # 10회 반복
-각 반복: 1 passed (0.27s~0.71s), 총 10/10 통과
+$ uv run python examples/volume09/json_normalized_path_concurrent_mixed_decision_workflow.py
+completed=0
+rejected=1
+conflicts=7
+checkpoint=rejected
+approval_granted=False
+events=plan | approval | approval
+# Lock 획득 순서에 따라 completed=1 / rejected=0도 유효하다.
 
 $ uv run pytest tests/unit/test_volume09_graph.py -q
-44 passed in 0.79s
+45 passed in 1.29s
 
 $ uv run pytest -q
-105 passed in 1.47s
+106 passed in 3.30s
 
 $ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
 All checks passed!

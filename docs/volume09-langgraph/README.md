@@ -30,10 +30,11 @@
 19. [정규화된 JSON 경로 별칭의 동시 승인 안전성](19-json-normalized-path-concurrent-approval.md)
 20. [정규화된 JSON 경로 별칭의 동시 거절 안전성](20-json-normalized-path-concurrent-rejection.md)
 21. [정규화된 JSON 경로 별칭의 동시 시작 안전성](21-json-normalized-path-concurrent-start.md)
+22. [정규화된 JSON 경로 별칭의 동시 상반 승인 결정 안전성](22-json-normalized-path-concurrent-mixed-decision.md)
 
 ## 예정 장
 
-이 슬라이스에서는 서로 다른 `Path` 표기(`path-alias/../checkpoints.json`)라도 정규화 뒤 같은 JSON 파일을 가리키면, 독립 Checkpointer 인스턴스의 동시 위험 작업 시작 요청 중 정확히 하나만 `WAITING_FOR_APPROVAL` Checkpoint를 생성하도록 경로 단위 Lock과 원자적 생성 계약을 검증했습니다. 중복 요청은 기존 Action·승인 대기 상태·감사 이벤트를 바꾸지 않고 충돌로 끝나며, 어떤 요청도 `execute`를 기록하지 않습니다. 이 Lock 보장은 단일 프로세스의 동일 로컬 경로 범위에만 적용되며, FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
+이 슬라이스에서는 `checkpoints.json`과 `path-alias/../checkpoints.json`처럼 서로 다른 `Path` 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때, 독립 Checkpointer 인스턴스의 동시 `approved=True`·`approved=False` 재전송 중 정확히 하나만 대기 Checkpoint를 소비하도록 경로 단위 Lock과 비교·교체 계약을 검증했습니다. 승자는 `COMPLETED` 또는 `REJECTED` 중 하나로 끝나며 나머지 7개 요청은 종료 Checkpoint·감사 이벤트를 바꾸지 않는 충돌입니다. `COMPLETED`도 오프라인 시뮬레이션일 뿐 실제 위험 실행이 아니고, 이 Lock 보장은 단일 프로세스의 동일 로컬 경로 범위에만 적용됩니다. FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
 
 ## 이번 기반 결과물
 
@@ -60,7 +61,8 @@
 - `examples/volume09/json_normalized_path_concurrent_approval_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 소비하는 데모
 - `examples/volume09/json_normalized_path_concurrent_rejection_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 거절하는 데모
 - `examples/volume09/json_normalized_path_concurrent_start_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 생성하는 데모
-- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작 계약 테스트
+- `examples/volume09/json_normalized_path_concurrent_mixed_decision_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스의 동시 승인·거절 재전송 중 하나만 종료 결정을 기록하는 데모
+- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작·상반 결정 계약 테스트
 
 
 현재 프로젝트 의존성에는 `langgraph` 패키지가 선언되어 있지 않습니다. 이 Volume의 현재 슬라이스들은 LangGraph API 호출을 가장하지 않고, 해당 API가 모델링하는 상태·Node·Edge·interrupt 경계를 직접 구현한 결정론적 참조 모델입니다. 패키지 추가는 이 작업 범위 밖의 프로젝트 설정 변경이므로, 승인된 별도 변경 후 실제 LangGraph 어댑터 장에서 수행합니다.
