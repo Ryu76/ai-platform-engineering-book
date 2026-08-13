@@ -3,9 +3,10 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME04_COMPLETE` 미설정
-- 현재 slice: 25 — cosine score 범위 계약 강화
-- 검증: Volume 04 테스트 69 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
+- 현재 slice: 26 — cosine roundoff score 범위 보장
+- 검증: Volume 04 테스트 70 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
 - 범위: 외부 API, 다운로드 모델, Docker, Qdrant를 실행하지 않았습니다.
+
 
 ## 2026-08-10 — Slice 01 완료
 

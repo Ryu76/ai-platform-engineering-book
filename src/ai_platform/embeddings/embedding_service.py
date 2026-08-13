@@ -76,7 +76,10 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     right_norm = sqrt(sum(value * value for value in right))
     if left_norm == 0 or right_norm == 0:
         raise VectorDimensionError("cosine similarity is undefined for a zero vector")
-    return dot_product(left, right) / (left_norm * right_norm)
+    # Floating-point roundoff can make identical normalized vectors evaluate to
+    # 1.0000000000000002. Preserve the public cosine-score contract exactly.
+    raw_score = dot_product(left, right) / (left_norm * right_norm)
+    return max(-1.0, min(1.0, raw_score))
 
 
 def dot_product(left: Sequence[float], right: Sequence[float]) -> float:

@@ -45,6 +45,14 @@ def test_vector_operations_return_expected_values() -> None:
     assert euclidean_distance(left, right) == pytest.approx(math.sqrt(2))
 
 
+def test_cosine_similarity_clamps_floating_point_roundoff_to_its_public_range() -> None:
+    """동일한 정규화 vector의 반올림 오차가 1.0보다 큰 score가 되면 안 된다."""
+    model = DeterministicEmbeddingModel(dimensions=256)
+    vector = model.embed_one("Python API 오류 처리와 재시도 전략")
+
+    assert cosine_similarity(vector, vector) == 1.0
+
+
 @pytest.mark.parametrize("dimensions", [True, 7, 4097])
 def test_model_rejects_invalid_dimensions(dimensions: int | bool) -> None:
     """잘못된 차원은 데이터가 생성되기 전에 거부해야 한다."""
