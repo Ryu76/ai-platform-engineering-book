@@ -1,5 +1,49 @@
 # Volume 05 RAG 진행 기록
 
+VOLUME05_COMPLETE=true
+
+## 2026-08-13 — PRD 완료 재점검 및 자동 일시 정지
+
+### 완료
+
+- Volume 05 PRD의 21개 필수 내용과 12개 필수 실습을 현재 허용 범위의
+  local/sample data·Mock 제공자 구현, 문서 계약 및 Volume 05 전용 테스트에 대조했습니다.
+  Markdown/PDF 로딩·정제, 청킹/메타데이터, Mock 임베딩과 Qdrant 호환 저장, sparse/dense/
+  hybrid 검색, 질의 변환, 검색 문서 데이터 경계, 인용, No-answer, 보안/비용/성능 점검,
+  FastAPI 어댑터가 모두 재현 가능한 산출물로 연결됩니다.
+- `README.md`에 PRD 항목별 구현·검증 추적표와 결과물 패키지 경로 대응을 추가했습니다.
+  PRD의 교육용 파일명은 현재 패키지 구조에서 `loader.py`, `retrieval.py`, `vector.py`,
+  `api.py`, `fastapi_adapter.py`, Volume 05 전용 테스트로 제공됩니다.
+- 라이브 API, 비밀값, 실제 Qdrant 서버, 포트 바인딩, 배포는 사용하지 않았습니다. 이들은
+  PRD의 교육 범위에서 요구하는 local/Mock 재현 실습의 대체물이 아니며 별도 허가 환경의
+  통합 작업입니다.
+- 모든 PRD DoD가 이 범위에서 테스트되었으므로 `VOLUME05_COMPLETE=true`를 설정했습니다.
+  이 completion marker를 근거로 이후 Volume 05 cron tick은 추가 변경 없이 일시 정지합니다.
+
+### 검증
+
+저장소 루트에서 2026-08-13에 다음을 모두 통과했습니다.
+
+```text
+uv run pytest tests/unit/test_volume05_rag.py -q
+# 208 passed, 1 skipped in 2.30s
+# FastAPI가 기본 의존성이 아니어서 선택적 실제 TestClient 테스트 1개가 skip됨
+uv run python examples/volume05/local_rag.py
+# 고정 평가 Recall@1/Hit rate/MRR 1.00, 승인 기준선 회귀 통과,
+# Mock Qdrant 호환 검색·인용 및 No-answer 확인
+uv run ruff format --check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# 9 files already formatted
+uv run ruff check src/ai_platform/rag tests/unit/test_volume05_rag.py examples/volume05/local_rag.py
+# All checks passed!
+uv run mypy src/ai_platform/rag
+# Success: no issues found in 7 source files
+uv run python -m compileall -q src/ai_platform/rag examples/volume05
+```
+
+### 상태
+
+- 완료. `VOLUME05_COMPLETE=true`; 다음 자동 tick은 self-pause 합니다.
+
 ## 2026-08-13 — 검색 문서 Prompt 데이터 경계 슬라이스 완료
 
 ### 완료

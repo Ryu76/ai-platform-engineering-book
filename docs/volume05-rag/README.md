@@ -33,6 +33,34 @@
 
 생성기와 임베딩·벡터 저장소 경계는 모두 `Protocol`이므로 실습과 테스트는 항상 Mock 구현만 사용합니다. 이 슬라이스는 외부 제공자, 라이브 API, 비밀값, 배포를 사용하지 않습니다.
 
+## PRD 완료 추적
+
+Volume 05 PRD의 필수 내용과 실습은 아래의 local/sample-data 및 Mock 경계로 모두
+재현·검증합니다. 이 매핑은 실제 제공자, Qdrant 서버, 비밀값 또는 배포를 요구하지 않으며,
+그러한 통합은 이 교재 슬라이스의 완료 조건이 아닙니다.
+
+| PRD 항목 | 구현 및 검증 산출물 |
+|---|---|
+| RAG 필요성·Indexing/Retrieval/Generation pipeline | 이 문서의 목표·구성요소 계약, `LocalRagIndex`, `RagPipeline`, `examples/volume05/local_rag.py` |
+| Markdown/PDF loading, parsing, cleaning | `loader.py`, 명시 sample 문서, `test_volume05_rag.py`의 loader/PDF Mock 계약 |
+| Chunking, chunk size/overlap, metadata | `ChunkingConfig`, `DocumentChunk`, `LocalRagIndex`와 문자 범위 인용 테스트 |
+| Embedding, dense/sparse/hybrid retrieval | `VectorRagIndex`·Mock `TextEmbedder`, `LocalRagIndex`, `HybridRagIndex` 및 local/Mock 테스트 |
+| Qdrant 저장 | SDK·서버 없이 `QdrantVectorStore`와 `QdrantCollection` Protocol, `SampleQdrantCollection` Mock 테스트 |
+| Query transformation | `QueryTransformingIndex`와 원 질문 보존·RRF 결합 테스트 |
+| 검색 문서 Prompt 삽입·Citation·No-answer | `format_retrieved_context`, `RagPipeline`, 결정론적 evidence/인용/생성 생략 테스트 |
+| RAG 보안·비용·성능 | 아래 **RAG 보안·비용·성능 점검**, 입력/경로/Mock 출력 검증, 고정 retrieval 평가·회귀 기준선 |
+| FastAPI 기반 RAG API | `LocalRagApi`, 선택적 `create_fastapi_rag_app`, 인프로세스 Mock/TestClient 계약 테스트 |
+
+PRD의 결과물 명칭은 교육용 패키지 구조에 맞게 대응합니다. `loader.py`는
+`src/ai_platform/rag/loader.py`에, chunker/indexer/retriever/generator의 경계는
+`retrieval.py` 및 `vector.py`의 `ChunkingConfig`·`LocalRagIndex`·검색 decorator·
+`RagPipeline`/`ContextualGenerator`에, API 진입점은 `api.py`와 `fastapi_adapter.py`에
+구현되어 있습니다. 전체 Volume 전용 테스트는 `tests/unit/test_volume05_rag.py`입니다.
+
+완료를 재현하려면 이 문서의 **실행** 명령과 `PROGRESS.md`에 기록된 정적 검사, 타입 검사,
+문서/비밀값 검사까지 실행합니다. 완료 상태는 `docs/volume05-rag/PROGRESS.md`의
+`VOLUME05_COMPLETE=true`로 고정합니다.
+
 ## 실행
 
 저장소 루트에서 다음 명령을 실행합니다.
