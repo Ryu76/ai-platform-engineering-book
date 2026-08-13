@@ -31,6 +31,14 @@ class RetrievalMetrics:
         _require_unit_interval_metric(self.reciprocal_rank, name="reciprocal_rank")
         if not isinstance(self.hit_at_k, bool):
             raise RetrievalEvaluationError("hit_at_k must be a bool")
+        has_relevant_result = self.precision_at_k > 0.0
+        if (
+            has_relevant_result != (self.recall_at_k > 0.0)
+            or self.hit_at_k != has_relevant_result
+        ):
+            raise RetrievalEvaluationError(
+                "precision_at_k, recall_at_k, and hit_at_k must agree"
+            )
 
 
 @dataclass(frozen=True, slots=True)

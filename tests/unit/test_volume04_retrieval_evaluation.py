@@ -154,6 +154,18 @@ def test_threshold_rejects_non_finite_or_out_of_cosine_range_values(
             "hit_at_k must be a bool",
         ),
         (
+            lambda: RetrievalMetrics(0.0, 0.0, 0.0, True),
+            "precision_at_k, recall_at_k, and hit_at_k must agree",
+        ),
+        (
+            lambda: RetrievalMetrics(0.5, 0.5, 1.0, False),
+            "precision_at_k, recall_at_k, and hit_at_k must agree",
+        ),
+        (
+            lambda: RetrievalMetrics(0.5, 0.0, 1.0, True),
+            "precision_at_k, recall_at_k, and hit_at_k must agree",
+        ),
+        (
             lambda: RetrievalSummary(0.0, 0.0, 0.0, math.inf),
             "hit_rate_at_k must be a finite number",
         ),

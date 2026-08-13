@@ -746,3 +746,25 @@ git diff --check
 
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+
+## 2026-08-13 — Slice 28 완료: retrieval metric 의미 일관성 고정
+
+### 추가한 결과물
+
+- `retrieval_evaluation.py`의 public `RetrievalMetrics` 생성 계약을 강화했습니다.
+  - top-k에 관련 결과가 없으면 `precision_at_k=0.0`, `recall_at_k=0.0`, `hit_at_k=False`여야 합니다.
+  - 관련 결과가 있으면 precision·recall은 양수이고 `hit_at_k=True`여야 합니다.
+  - 따라서 수동 fixture가 수치상 범위에는 맞지만 hit 결과와 모순되는 상태로 평균 품질 보고서에 섞이는 것을 막습니다.
+- `test_volume04_retrieval_evaluation.py`에 false hit, false non-hit, precision/recall positivity 불일치의 세 회귀 테스트를 추가했습니다.
+- 03장 코드 설명과 문제 해결 표에 이 public metric record의 의미 계약을 기록했습니다.
+
+### 검증 결과
+
+- Volume 04 테스트 5개: **74 passed in 0.37s**.
+- `ruff check`: **All checks passed!**; `mypy src/ai_platform/embeddings`: **5 source files, no issues**.
+- 네 개의 결정적 local mock 예제를 실행했습니다: embedding/search top score `0.548`; retrieval `precision_at_1=1.0`, `recall_at_1=1.0`, `mrr=1.0`, `answerable=True`; lifecycle `deleted_count=1`, `reindexed_version=2`, `collection_size=3`, `top_1_recovered=True`.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
