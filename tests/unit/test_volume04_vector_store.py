@@ -1,6 +1,8 @@
 """Volume 04의 결정적 in-memory vector store 계약 테스트."""
 from __future__ import annotations
 
+from enum import IntEnum
+
 import pytest
 
 from ai_platform.embeddings import (
@@ -92,6 +94,30 @@ def test_metadata_filter_requires_an_existing_key_and_matching_scalar_type() -> 
 
     assert boolean_version_results == []
     assert [result.id for result in null_results] == ["null"]
+
+
+def test_upsert_rejects_scalar_subclasses_that_do_not_match_the_payload_contract() -> None:
+    """payload는 filter 의미가 고정된 built-in JSON scalar만 저장해야 한다."""
+
+    class DocumentVersion(IntEnum):
+        """int처럼 동작하지만 실제 타입은 다른 예제 enum이다."""
+
+        FIRST = 1
+
+    store = InMemoryVectorStore()
+    store.create_collection("payload_contract", vector_size=2)
+
+    with pytest.raises(VectorStoreError, match="built-in JSON scalar"):
+        store.upsert(
+            "payload_contract",
+            [
+                VectorPoint(
+                    id="enum-version",
+                    vector=[1.0, 0.0],
+                    payload={"version": DocumentVersion.FIRST},
+                )
+            ],
+        )
 
 
 def test_upsert_replaces_same_id_and_keeps_collection_size(

@@ -724,3 +724,25 @@ git diff --check
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
 - Commit: `fix(volume04): clamp cosine roundoff scores`.
+
+## 2026-08-13 — Slice 27 완료: payload scalar subclass 계약 고정
+
+### 추가한 결과물
+
+- `vector_store.py`가 payload 값을 정확한 built-in JSON scalar(`str`, `int`, `float`, `bool`, `None`)로만 허용하도록 강화했습니다.
+  - `IntEnum`처럼 `int`의 subclass인 값은 Python의 `isinstance` 검사에서는 통과하지만, 저장·filter 타입 계약은 불명확하므로 명시적으로 거부합니다.
+  - 실제 `float`의 `NaN`/무한대 거부는 유지합니다.
+- `test_volume04_vector_store.py`에 `IntEnum` metadata가 `upsert`에서 거부되는 회귀 테스트를 추가했습니다.
+- 02장에 built-in scalar payload 규칙과 enum/custom scalar 변환 오류 해결을 추가했습니다.
+
+### 검증 결과
+
+- Volume 04 테스트 5개: **71 passed in 2.02s**.
+- `ruff check`: **All checks passed!**; `mypy src/ai_platform/embeddings`: **5 source files, no issues**.
+- 네 개의 결정적 local mock 예제를 실행했습니다: embedding/search top score `0.548`; retrieval `precision_at_1=1.0`, `recall_at_1=1.0`, `mrr=1.0`, `answerable=True`; lifecycle `deleted_count=1`, `reindexed_version=2`, `top_1_recovered=True`.
+- `git diff --check`를 통과했습니다.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.

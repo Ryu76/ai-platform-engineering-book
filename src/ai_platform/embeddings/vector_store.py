@@ -187,10 +187,10 @@ def _prepare_payload(payload: Mapping[str, PayloadValue]) -> dict[str, PayloadVa
     for key, value in payload.items():
         if not isinstance(key, str) or not key.strip():
             raise VectorStoreError("payload keys must be non-empty strings")
-        if isinstance(value, float) and not isfinite(value):
+        if type(value) is float and not isfinite(value):
             raise VectorStoreError("payload float values must be finite")
-        if not isinstance(value, (str, int, float, bool, type(None))):
-            raise VectorStoreError("payload values must be JSON scalar values")
+        if type(value) not in (str, int, float, bool, type(None)):
+            raise VectorStoreError("payload values must be built-in JSON scalar values")
         prepared[key] = value
     return prepared
 
