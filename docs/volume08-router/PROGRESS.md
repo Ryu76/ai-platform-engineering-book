@@ -928,3 +928,51 @@ PRD DoD 상태:
 - Volume 08의 Rule·Keyword·Embedding 기반 Semantic·LLM Router, threshold, fallback, 비용·지연 시간·capability 정책, escalation, decision log, 평가 dataset·accuracy, API, 미니 프로젝트, 체크리스트, Volume 09 인계와 허용 범위의 검증은 완료했습니다.
 - 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
 - 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-13 — Tick 22: local cosine 동점 해소 결정론성 회귀
+
+완료한 범위:
+
+- 고정 local embedding fixture에서 같은 cosine similarity를 내는 두 intent가 fixture·route 선언 순서와 무관하게 intent 이름 오름차순으로 선택되는 회귀 계약을 추가했습니다.
+- 선택된 `order_tracking` intent가 허용된 `order-agent`와 함께 기존 `PolicyRouter` 경계를 통과함을 확인했습니다. fixture는 고정 `Decimal` vector만 사용하며 embedding 모델·LLM·Agent·Tool·HTTP API·네트워크를 호출하지 않습니다.
+- Semantic Router 학습 장에 score fixture와 local cosine fixture가 동일한 결정론적 동점 해소 규칙을 사용함을 명시했습니다.
+
+검증 결과:
+
+```text
+uv run pytest tests/unit/test_volume08_semantic_router.py -q
+11 passed in 0.69s
+
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+34 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 13 source files
+
+uv run pytest tests/unit/test_volume08_*.py -q
+91 passed in 0.56s
+
+uv run pytest -q
+152 passed in 1.15s
+
+uv run python examples/volume08/semantic_router.py
+{"classifier_name": "offline-semantic-intent-router", "confidence": "1", "estimated_cost": "0.003", "estimated_latency_ms": "70", "intent": "order_tracking", "policy_name": "offline-semantic-support-policy", "reason": "healthy-capability-cost-latency-policy", "request_id": "lesson-08-semantic-001", "semantic_similarity": "1", "target_kind": "agent", "target_name": "offline-order-agent"}
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 canonical strict JSON audit report 출력; 외부 호출 없음
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- Volume 08의 Rule·Keyword·Embedding 기반 Semantic·LLM Router, threshold, fallback, 비용·지연 시간·capability 정책, escalation, decision log, 평가 dataset·accuracy, API, 미니 프로젝트, 체크리스트, Volume 09 인계와 허용 범위의 검증은 완료했습니다.
+- 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
+- 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.

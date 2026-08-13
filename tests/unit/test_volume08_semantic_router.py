@@ -149,6 +149,45 @@ def test_semantic_router_resolves_equal_scores_by_intent_name_deterministically(
     assert decision.target.name == "order-agent"
 
 
+def test_semantic_router_resolves_equal_local_cosine_scores_by_intent_name() -> None:
+    router = SemanticRouter(
+        name="fixed-embedding-tie-router",
+        policy_router=PolicyRouter(
+            name="fixed-embedding-tie-policy",
+            targets=(
+                _target("order-agent", frozenset({"lookup_order", "respond"})),
+                _target("refund-agent", frozenset({"issue_refund", "respond"})),
+            ),
+        ),
+        routes=(
+            SemanticRoute("refund_request", frozenset({"issue_refund", "respond"})),
+            SemanticRoute("order_tracking", frozenset({"lookup_order", "respond"})),
+        ),
+        embedding_fixtures=(
+            SemanticEmbeddingFixture(
+                request_id="semantic-embedding-tie-001",
+                query_embedding=(Decimal("1"), Decimal("1")),
+                intent_embeddings=(
+                    SemanticIntentEmbedding("refund_request", (Decimal("0"), Decimal("1"))),
+                    SemanticIntentEmbedding("order_tracking", (Decimal("1"), Decimal("0"))),
+                ),
+            ),
+        ),
+        minimum_similarity=Decimal("0.70"),
+    )
+
+    decision = router.route(
+        RoutingRequest(
+            request_id="semantic-embedding-tie-001",
+            text="private embedding tie request",
+            requirements=RoutingRequirements(permitted_target_names=frozenset({"order-agent"})),
+        )
+    )
+
+    assert decision.intent == "order_tracking"
+    assert decision.target.name == "order-agent"
+
+
 def test_semantic_router_fails_closed_for_missing_fixture_and_below_threshold() -> None:
     with pytest.raises(NoSemanticScoreFixtureError, match="no semantic score fixture"):
         _router().route(RoutingRequest(request_id="semantic-missing-001", text="private request"))

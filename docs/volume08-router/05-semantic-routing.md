@@ -31,7 +31,7 @@ fixture는 요청 원문이 아니라 `request_id`로 조회합니다. embedding
 
 ## 3. 결정론적 선택과 안전 실패
 
-`SemanticRouter`는 threshold 이상인 intent 중 similarity가 가장 높은 것을 선택합니다. 동점은 intent 이름 오름차순으로 해소합니다. 따라서 route 선언·fixture 순서가 달라도 동점 결과가 바뀌지 않습니다.
+`SemanticRouter`는 threshold 이상인 intent 중 similarity가 가장 높은 것을 선택합니다. 동점은 intent 이름 오름차순으로 해소합니다. 이 규칙은 검토된 score fixture와 local cosine 계산 fixture에 동일하게 적용됩니다. 따라서 route 선언·fixture의 intent 나열 순서가 달라도 동점 결과가 바뀌지 않습니다.
 
 다음은 성공으로 위장하지 않는 fail-closed 결과입니다.
 
@@ -87,7 +87,7 @@ uv run pytest tests/unit/test_volume08_semantic_router.py -q
 
 - 최고 similarity intent와 policy 대상의 선택
 - local embedding vector에서 계산한 cosine similarity와 policy 대상의 선택
-- 동일 score에서 intent 이름으로 해소하는 결정론적 동점
+- 검토된 score와 local cosine의 동일 score에서 intent 이름으로 해소하는 결정론적 동점
 - fixture 누락과 threshold 미달의 안전 실패
 - semantic route가 policy의 permission·capability 경계를 우회하지 못하는 동작
 - JSON 로그의 직렬화 가능성과 사용자 원문 부재
