@@ -27,7 +27,7 @@ SemanticEmbeddingFixture(
 )
 ```
 
-fixture는 요청 원문이 아니라 `request_id`로 조회합니다. embedding mode는 fixture vector만으로 local cosine score를 계산하며 모델·API를 호출하지 않습니다. score mode는 검토된 고정 score를 그대로 읽습니다.
+fixture는 요청 원문이 아니라 `request_id`로 조회합니다. embedding mode는 fixture vector만으로 local cosine score를 계산하며 모델·API를 호출하지 않습니다. cosine 계산은 caller가 바꾼 전역 `Decimal` context와 독립적인 고정 precision context를 사용하므로, 같은 fixture의 route와 감사 score가 실행 환경의 precision 설정에 따라 달라지지 않습니다. score mode는 검토된 고정 score를 그대로 읽습니다.
 
 ## 3. 결정론적 선택과 안전 실패
 
@@ -87,6 +87,7 @@ uv run pytest tests/unit/test_volume08_semantic_router.py -q
 
 - 최고 similarity intent와 policy 대상의 선택
 - local embedding vector에서 계산한 cosine similarity와 policy 대상의 선택
+- caller의 낮거나 높은 `Decimal` precision 설정에서도 동일한 local cosine decision·score 출력
 - 검토된 score와 local cosine의 동일 score에서 intent 이름으로 해소하는 결정론적 동점
 - fixture 누락과 threshold 미달의 안전 실패
 - semantic route가 policy의 permission·capability 경계를 우회하지 못하는 동작

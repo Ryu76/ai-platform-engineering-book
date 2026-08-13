@@ -1,7 +1,7 @@
 """Volume 08 Semantic Router의 외부 호출 없는 결정론적 계약 테스트."""
 
 import json
-from decimal import Decimal
+from decimal import Decimal, localcontext
 
 import pytest
 
@@ -186,6 +186,42 @@ def test_semantic_router_resolves_equal_local_cosine_scores_by_intent_name() -> 
 
     assert decision.intent == "order_tracking"
     assert decision.target.name == "order-agent"
+
+
+def test_semantic_router_local_cosine_is_independent_of_callers_decimal_context() -> None:
+    router = SemanticRouter(
+        name="fixed-embedding-context-router",
+        policy_router=PolicyRouter(
+            name="fixed-embedding-context-policy",
+            targets=(_target("order-agent", frozenset({"lookup_order", "respond"})),),
+        ),
+        routes=(SemanticRoute("order_tracking", frozenset({"lookup_order", "respond"})),),
+        embedding_fixtures=(
+            SemanticEmbeddingFixture(
+                request_id="semantic-embedding-context-001",
+                query_embedding=(Decimal("1"), Decimal("1")),
+                intent_embeddings=(
+                    SemanticIntentEmbedding("order_tracking", (Decimal("1"), Decimal("0"))),
+                ),
+            ),
+        ),
+        minimum_similarity=Decimal("0.70"),
+    )
+    request = RoutingRequest(
+        request_id="semantic-embedding-context-001",
+        text="private context-independent embedding request",
+        requirements=RoutingRequirements(permitted_target_names=frozenset({"order-agent"})),
+    )
+
+    with localcontext() as context:
+        context.prec = 4
+        low_precision_decision = router.route(request)
+    with localcontext() as context:
+        context.prec = 40
+        high_precision_decision = router.route(request)
+
+    assert low_precision_decision.intent == "order_tracking"
+    assert low_precision_decision.similarity == high_precision_decision.similarity
 
 
 def test_semantic_router_fails_closed_for_missing_fixture_and_below_threshold() -> None:

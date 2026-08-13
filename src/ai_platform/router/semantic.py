@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, localcontext
 
 from ai_platform.router.base import (
     NoEligibleRouteError,
@@ -306,25 +306,30 @@ def _validate_embedding_fixture(
 def _cosine_similarity(
     query_embedding: tuple[Decimal, ...], intent_embedding: tuple[Decimal, ...]
 ) -> Decimal:
-    """검증된 local vector 두 개의 cosine similarity를 Decimal로 계산한다."""
-    dot_product = sum(
-        (
-            query_component * intent_component
-            for query_component, intent_component in zip(
-                query_embedding, intent_embedding, strict=True
-            )
-        ),
-        Decimal("0"),
-    )
-    query_norm_squared = sum((component * component for component in query_embedding), Decimal("0"))
-    intent_norm_squared = sum(
-        (component * component for component in intent_embedding), Decimal("0")
-    )
-    try:
-        similarity = dot_product / (query_norm_squared.sqrt() * intent_norm_squared.sqrt())
-    except (InvalidOperation, ValueError) as error:
-        raise RoutingConfigurationError(
-            "semantic embedding fixture must produce a finite cosine similarity"
-        ) from error
+    """검증된 local vector 두 개의 cosine similarity를 고정 Decimal context로 계산한다."""
+    # 호출자가 바꾼 전역 Decimal context가 fixture route·감사 점수를 바꾸지 않게 한다.
+    with localcontext() as context:
+        context.prec = 50
+        dot_product = sum(
+            (
+                query_component * intent_component
+                for query_component, intent_component in zip(
+                    query_embedding, intent_embedding, strict=True
+                )
+            ),
+            Decimal("0"),
+        )
+        query_norm_squared = sum(
+            (component * component for component in query_embedding), Decimal("0")
+        )
+        intent_norm_squared = sum(
+            (component * component for component in intent_embedding), Decimal("0")
+        )
+        try:
+            similarity = dot_product / (query_norm_squared.sqrt() * intent_norm_squared.sqrt())
+        except (InvalidOperation, ValueError) as error:
+            raise RoutingConfigurationError(
+                "semantic embedding fixture must produce a finite cosine similarity"
+            ) from error
     _validate_unit_decimal(similarity, "semantic embedding cosine similarity")
     return similarity
