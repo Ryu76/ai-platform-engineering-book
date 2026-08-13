@@ -49,6 +49,9 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     configmap = (repository_root / "k8s/volume11/configmap.yaml").read_text(
         encoding="utf-8"
     )
+    dependencies = (repository_root / "src/ai_platform/api/dependencies.py").read_text(
+        encoding="utf-8"
+    )
     _before_startup, startup_marker, after_startup = deployment.partition("startupProbe:")
     startup_probe, _before_readiness, _after_readiness = after_startup.partition(
         "readinessProbe:"
@@ -98,6 +101,15 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             and "envFrom:\n            - configMapRef:\n"
             "                name: ai-platform-api-config" in deployment
         ),
+        "configmap_declares_nonsecret_readiness_policy_names": all(
+            value in configmap
+            for value in (
+                'AI_PLATFORM_REQUIRED_DEPENDENCIES: "qdrant,redis,postgresql"',
+                'AI_PLATFORM_READY_DEPENDENCIES: "qdrant,redis,postgresql"',
+            )
+        )
+        and '"AI_PLATFORM_REQUIRED_DEPENDENCIES"' in dependencies
+        and '"AI_PLATFORM_READY_DEPENDENCIES"' in dependencies,
         "ingress_references_service_named_http_port_in_declared_namespace": (
             "namespace: ai-platform-example" in ingress
             and "namespace: ai-platform-example" in service

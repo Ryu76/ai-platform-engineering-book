@@ -29,6 +29,7 @@
 21. [Namespace scope: 기본 리소스의 정적 경계](21-namespace-scope-static-contract.md)
 22. [ConfigMap reference: Deployment 환경 주입의 정적 계약](22-configmap-reference-static-contract.md)
 23. [Ingress backend reference: Service HTTP 연결의 정적 계약](23-ingress-backend-reference-static-contract.md)
+24. [ConfigMap readiness policy: 비밀 없는 환경 키의 정적 계약](24-configmap-readiness-policy-static-contract.md)
 
 ## 현재 실습 경계
 

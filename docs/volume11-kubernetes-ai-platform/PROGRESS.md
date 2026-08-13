@@ -2,6 +2,42 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-13 — Slice 24: ConfigMap readiness policy name의 정적 계약
+
+### 완료한 범위
+
+- [ConfigMap readiness policy: 비밀 없는 환경 키의 정적 계약](24-configmap-readiness-policy-static-contract.md) 장을 추가했습니다.
+  - `ai-platform-api-config`의 `AI_PLATFORM_REQUIRED_DEPENDENCIES`·`AI_PLATFORM_READY_DEPENDENCIES`와 `dependencies.py`의 같은 name-only policy key를 local source text로 연결했습니다.
+  - `qdrant,redis,postgresql`은 hostname·URL·credential이 아닌 example dependency name 목록임을 명시했습니다.
+  - static declaration은 ConfigMap object 존재, `envFrom` injection, process environment, policy evaluation, `/readyz`, Qdrant·Redis·PostgreSQL connectivity 또는 deployment 증거가 아님을 명시했습니다.
+- `src/ai_platform/api/operations_review.py`의 local artifact review에 `configmap_declares_nonsecret_readiness_policy_names` check를 추가했습니다.
+  - check는 local UTF-8 ConfigMap과 `dependencies.py`에서 두 environment key 및 example name 목록만 읽습니다.
+  - Docker daemon, Kubernetes API, environment injection, network, container를 호출하지 않습니다.
+- `tests/integration/test_volume11_configmap_readiness_policy.py`를 추가하고 mini-project expected artifact check 및 README를 갱신했습니다.
+  - test는 non-secret example values, parser key, local review key 및 injection/runtime/connectivity evidence boundary를 검증합니다.
+- 실제 ConfigMap 생성·주입, environment 설정, image build/pull, container execution, DNS lookup, dependency connection, Kubernetes API connection, rollout, rollback 또는 deployment를 실행하지 않았습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/local_operations_review_demo.py` | 통과 — 19개 local artifact check가 모두 `true`; 새 ConfigMap policy check는 source text-only이며 image build, container execution, dependency connectivity, telemetry backend, Kubernetes deployment는 `not_verified` |
+| `uv run pytest tests/integration/test_volume11_configmap_readiness_policy.py tests/integration/test_volume11_mini_project.py -q`, `uv run pytest -q` | 통과 — scoped 9 passed, 전체 124 passed |
+| `uv run ruff check src/ai_platform/api/operations_review.py tests/integration/test_volume11_configmap_readiness_policy.py tests/integration/test_volume11_mini_project.py`, `uv run mypy src` | 통과 — Ruff 통과, mypy 14 source files 문제 없음 |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — Volume 11 문서, 링크·코드 블록·비밀값 검사 통과 |
+| `docker compose -f docker/volume11/compose.health.yaml config --no-interpolate` 및 `docker compose -f docker/volume11/compose.dependencies.yaml config --no-interpolate` | 통과 — local Compose config parsing만 수행, image·container·network·volume을 만들지 않음 |
+| `kubectl kustomize k8s/volume11`, `k8s/volume11/batch`, `k8s/volume11/storage`, `k8s/volume11/autoscaling` | 통과 — local render만 수행, Kubernetes API·cluster·resource 생성 없음 |
+| `git diff --check` | 통과 |
+
+### 남은 범위
+
+- PRD Volume DoD는 아직 충족하지 않았습니다. PRD 필수 실습의 API Docker image 생성·Docker Compose 통합 실행·Kubernetes 로컬 환경 구성·Rolling Update·Rollback·최종 AI Platform 배포는 현재 작업 제한의 live cluster·deployment 금지 또는 아직 실행하지 않은 image/container/controller/network evidence와 충돌해 완료 선언할 수 없습니다.
+- 따라서 `VOLUME11_COMPLETE=true`를 설정하거나 self-pause 하지 않습니다. static ConfigMap readiness policy declaration과 local render가 object existence, injection, process environment, readiness result, dependency connectivity 또는 deployment evidence를 대체하지 않습니다.
+
+### 다음 Slice
+
+현재 작업 제한을 유지하는 동안에는 Volume 11 local-only artifact·test·placeholder boundary의 보수만 수행합니다. image build/Compose integration execution, Kubernetes local environment, controller/runtime enforcement, update/rollback, final deployment를 실제로 검증할 수 있도록 명시적 범위가 변경되기 전에는 completion flag를 추가하지 않습니다. 실제 image, container, cluster, Secret, credential, alert, backend 또는 deployment는 하지 않습니다.
+
 ## 2026-08-13 — Slice 23: Ingress backend와 Service HTTP 연결의 정적 계약
 
 ### 완료한 범위
