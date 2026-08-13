@@ -1,5 +1,12 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-13 — Slice 23: Chapter 05 구성 단계 Agent 경계 PRD 학습 문서 완성
+
+- `05-agent-boundary-configuration.md`를 PRD Chapter template의 14개 항목(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 실제 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다.
+- 문서는 `act(context)`/`propose(context)` callable discovery, accessor failure의 cause-preserving `WorkflowConfigurationError`, deterministic Mock declared-role binding, runtime response schema 검증과 explicit human approval의 독립 책임을 현재 `workflow.py`, `delegation.py`, `conflict.py`, `release_handoff.py` 동작에 맞춰 설명한다.
+- `tests/volume07/test_agent_boundary_configuration_documentation.py`를 추가해 이 Chapter의 PRD section, executable boundary test 참조, 전체 regression 명령, local-only safety boundary 문구를 회귀 검증한다. live API, secret, network Agent, tool 실행, 파일 변경, deployment는 추가하거나 사용하지 않았다.
+- `uv run pytest tests/volume07/test_agent_boundary_configuration.py -q`는 5 passed였고, pending review/delegation example의 실제 output을 확인했다. 확장 뒤 `uv run pytest tests/volume07 -q`는 59 passed, 새 문서 contract test는 1 passed였다. 네 original example과 전체 approval mini project도 실제로 completed 경로를 실행해 확인했다.
+
 ## 2026-08-11 — Slice 22: Chapter 03 PRD 학습 문서 완성도 확장
 
 - `03-bounded-conflict-resolution.md`를 PRD Chapter template의 14개 항목(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 실제 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다.
