@@ -1,6 +1,7 @@
 """Volume 09 오프라인 상태형 Workflow의 안전 계약을 검사한다."""
 from __future__ import annotations
 
+import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -481,6 +482,24 @@ def test_json_file_checkpoint_rejects_a_corrupt_payload(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="not valid JSON"):
         JsonFileCheckpointer(path=checkpoint_path).load(run_id="persistent-safe-001")
+
+
+def test_json_file_checkpoint_rejects_an_existing_hard_link_alias(tmp_path: Path) -> None:
+    """원자적 교체가 hard link 별칭을 분리하지 않도록 기존 다중 링크를 거부한다."""
+    checkpoint_path = tmp_path / "checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    checkpointer.save(
+        run_id="hard-link-guard-001",
+        state=WorkflowState.start(task="로컬 문서를 읽는다", action=ActionKind.READ),
+    )
+    hard_link_path = tmp_path / "checkpoints-hard-link.json"
+    os.link(checkpoint_path, hard_link_path)
+
+    with pytest.raises(ValueError, match="multiple hard links"):
+        JsonFileCheckpointer(path=hard_link_path)
+
+    with pytest.raises(ValueError, match="multiple hard links"):
+        checkpointer.load(run_id="hard-link-guard-001")
 
 
 def test_streaming_workflow_emits_saved_node_updates_in_fixed_safe_order() -> None:

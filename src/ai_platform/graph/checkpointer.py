@@ -120,7 +120,13 @@ class JsonFileCheckpointer:
         if not path.parent.is_dir():
             raise ValueError("checkpoint parent directory must already exist")
         self._path = path.resolve()
+        self._reject_existing_hard_link()
         self._lock = _lock_for_path(self._path)
+
+    def _reject_existing_hard_link(self) -> None:
+        """원자적 교체가 별칭을 분리하지 않도록 다중 hard link 파일을 거부한다."""
+        if self._path.exists() and self._path.stat().st_nlink > 1:
+            raise ValueError("checkpoint file must not have multiple hard links")
 
     def save(self, *, run_id: str, state: WorkflowState) -> None:
         """공개 상태를 결정론적 JSON으로 원자적으로 저장한다."""
@@ -231,6 +237,7 @@ class JsonFileCheckpointer:
 
     def _read_checkpoints(self) -> dict[str, object]:
         """파일이 없으면 빈 저장소를, 있으면 검증된 JSON 객체를 반환한다."""
+        self._reject_existing_hard_link()
         if not self._path.exists():
             return {}
         try:

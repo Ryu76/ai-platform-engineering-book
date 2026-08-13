@@ -770,3 +770,47 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+
+## 최신 슬라이스 — JSON Checkpoint hard link 별칭 차단
+
+- `docs/volume09-langgraph/23-json-hard-link-alias-guard.md`: `Path.resolve()`로 통합되지 않는 hard link 별칭, 원자적 `replace()`로 인한 Checkpoint 분리 위험, fail-closed 경계와 승인 보존 조건을 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`: 스물세 번째 hard link 별칭 차단 장과 오프라인 예제를 추가했습니다.
+- `src/ai_platform/graph/checkpointer.py`: 생성 시 및 모든 JSON 읽기 전 `st_nlink > 1`인 기존 파일을 거부합니다. 생성 뒤 추가된 hard link도 다음 load/save/compare-and-swap 전에 차단되어 원자적 교체가 별칭을 분리하지 못합니다.
+- `examples/volume09/json_hard_link_guard_workflow.py`: 임시 디렉터리에서 안전 작업 Checkpoint 뒤 hard link 별칭을 만들고 거부 결과를 출력하는 오프라인 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`: 기존 Checkpoint의 hard link 별칭 생성과 생성 뒤 원래 인스턴스 load 모두가 명시적 오류로 실패하는 계약을 추가했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 별도의 엄격한 Boolean 승인 전에는 `WAITING_FOR_APPROVAL`에 머뭅니다.
+
+## 최신 검증 기록 — JSON Checkpoint hard link 별칭 차단 슬라이스
+
+```text
+$ uv run python examples/volume09/json_hard_link_guard_workflow.py
+hard_link_rejected=checkpoint file must not have multiple hard links
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+46 passed in 1.58s
+
+$ uv run pytest -q
+107 passed in 2.48s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
