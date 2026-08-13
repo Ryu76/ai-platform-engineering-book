@@ -1,6 +1,7 @@
 """Volume 09 오프라인 상태형 Workflow의 안전 계약을 검사한다."""
 from __future__ import annotations
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -503,6 +504,25 @@ def test_json_file_checkpoint_rejects_a_valid_json_payload_with_a_stale_checksum
 
     with pytest.raises(ValueError, match="checksum does not match"):
         checkpointer.load(run_id="checksum-guard-001")
+
+
+def test_json_file_checkpoint_rejects_a_replaced_checksum_field(tmp_path: Path) -> None:
+    """Payload를 바꾸지 않아도 교체된 checksum 필드는 재개 전에 거부한다."""
+    checkpoint_path = tmp_path / "checksummed-field-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    checkpointer.save(
+        run_id="checksum-field-guard-001",
+        state=WorkflowState.start(task="로컬 문서를 읽는다", action=ActionKind.READ),
+    )
+    payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    payload["payload_sha256"] = "0" * 64
+    checkpoint_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="checksum does not match"):
+        checkpointer.load(run_id="checksum-field-guard-001")
 
 
 def test_json_file_checkpoint_rejects_an_existing_hard_link_alias(tmp_path: Path) -> None:

@@ -861,3 +861,56 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 최신 슬라이스 — JSON Checkpoint checksum 필드 변조 차단
+
+- `docs/volume09-langgraph/25-json-checkpoint-checksum-field-guard.md`
+  - payload를 유지한 채 형식은 정상인 64자리 `payload_sha256` 값만 교체해도, canonical payload 재계산 비교가 State 복원과 승인 재개 전에 fail-closed로 거부하는 계약·인증 한계·운영 경계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 스물다섯 번째 checksum 필드 변조 차단 장과 오프라인 예제를 출고 목록에 추가했습니다.
+- `examples/volume09/json_checksum_field_guard_workflow.py`
+  - 임시 JSON Checkpoint의 payload는 그대로 두고 `payload_sha256`을 `"0" * 64`로 바꿔 명시적인 거부 결과를 출력하는 결정론적 오프라인 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - checksum 필드만 교체한 유효 JSON을 `JsonFileCheckpointer.load()`가 `WorkflowState` 복원 전에 거부하는 회귀 계약을 추가했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 checksum 검사와 별개로 별도의 엄격한 Boolean 승인 전에는 `WAITING_FOR_APPROVAL`에 머뭅니다.
+
+## 최신 검증 기록 — JSON Checkpoint checksum 필드 변조 차단 슬라이스
+
+실행 위치: `E:\python\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run python examples/volume09/json_checksum_field_guard_workflow.py
+checksum_field_rejected=checkpoint file checksum does not match its payload
+
+$ uv run pytest tests/unit/test_volume09_graph.py::test_json_file_checkpoint_rejects_a_replaced_checksum_field -q
+1 passed in 0.50s
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+48 passed in 0.97s
+
+$ uv run pytest -q
+109 passed in 1.76s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
