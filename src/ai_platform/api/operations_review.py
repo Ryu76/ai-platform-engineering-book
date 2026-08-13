@@ -98,6 +98,13 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             and "envFrom:\n            - configMapRef:\n"
             "                name: ai-platform-api-config" in deployment
         ),
+        "ingress_references_service_named_http_port_in_declared_namespace": (
+            "namespace: ai-platform-example" in ingress
+            and "namespace: ai-platform-example" in service
+            and "service:\n                name: ai-platform-api\n"
+            "                port:\n                  name: http" in ingress
+            and "name: http\n      port: 80\n      targetPort: http" in service
+        ),
         "deployment_declares_startup_probe_boundary": bool(startup_marker)
         and all(
             value in startup_probe
