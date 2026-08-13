@@ -62,6 +62,17 @@ _ROUTER_AUDIT_REPORT_NAMES: Final = frozenset(
     }
 )
 
+_ROUTER_AUDIT_REQUEST_IDS: Final = {
+    "api": "mini-api-001",
+    "escalation": "mini-escalation-001",
+    "fallback": "mini-fallback-001",
+    "keyword": "mini-keyword-001",
+    "llm": "mini-llm-001",
+    "policy": "mini-policy-001",
+    "rule": "mini-rule-001",
+    "semantic": "mini-semantic-001",
+}
+
 _DECISION_AUDIT_FIELDS: Final = frozenset(
     {
         "confidence",
@@ -203,7 +214,7 @@ def _validate_report_names(values: Mapping[str, object], description: str) -> No
 
 
 def _validate_report_record_shape(route_name: str, record: Mapping[str, object]) -> None:
-    """고정 경로별 audit record가 다른 Router의 field·값 타입을 섞지 않게 한다."""
+    """고정 경로별 audit record의 schema·값·request ID 교차 혼입을 막는다."""
     _validate_expected_fields(
         record,
         _ROUTER_AUDIT_REPORT_RECORD_FIELDS[route_name],
@@ -211,8 +222,22 @@ def _validate_report_record_shape(route_name: str, record: Mapping[str, object])
     )
     if route_name != "api":
         _validate_non_api_record_value_types(route_name, record)
+        _validate_report_request_id(route_name, record["request_id"])
         return
     _validate_api_record_value_types(record)
+    body = record["body"]
+    assert isinstance(body, Mapping)
+    decision = body["decision"]
+    assert isinstance(decision, Mapping)
+    _validate_report_request_id(route_name, decision["request_id"])
+
+
+def _validate_report_request_id(route_name: str, value: object) -> None:
+    """고정 미니 프로젝트 경로가 다른 요청의 audit record를 재사용하지 않게 한다."""
+    if value != _ROUTER_AUDIT_REQUEST_IDS[route_name]:
+        raise UnsafeRouterAuditRecordError(
+            "router audit report record does not match configured route request ID"
+        )
 
 
 def _validate_non_api_record_value_types(route_name: str, record: Mapping[str, object]) -> None:

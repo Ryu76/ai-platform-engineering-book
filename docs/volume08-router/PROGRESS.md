@@ -1024,3 +1024,49 @@ PRD DoD 상태:
 - Volume 08의 Rule·Keyword·Embedding 기반 Semantic·LLM Router, threshold, fallback, 비용·지연 시간·capability 정책, escalation, decision log, 평가 dataset·accuracy, API, 미니 프로젝트, 체크리스트, Volume 09 인계와 허용 범위의 검증은 완료했습니다.
 - 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
 - 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-13 — Tick 24: 경로별 audit request ID 결속 경계
+
+완료한 범위:
+
+- `validate_router_audit_report()`의 고정 여덟 경로 schema 검증에 경로별 고정 request ID 결속을 추가했습니다. non-API record의 `request_id`와 API 중첩 decision의 `request_id` 모두 각 fixture 경로와 일치해야 합니다.
+- 따라서 field schema와 값 범위가 정상인 다른 경로의 audit record를 복사하거나, API body에 다른 Router의 request ID를 주입하는 cross-route replay를 export 전에 fail closed 합니다.
+- 고정 fixture 회귀 테스트로 Policy record와 API 중첩 decision의 교차 request ID를 결정론적으로 거부함을 검증했습니다. live Agent·Tool·Model·LLM·embedding·HTTP API·네트워크 호출은 하지 않았습니다.
+- 미니 프로젝트 장과 학습자 체크리스트에 request ID 결속·cross-route replay 거부 계약을 반영했습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+34 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 13 source files
+
+uv run pytest tests/unit/test_volume08_router_audit.py tests/unit/test_volume08_router_mini_project.py -q
+16 passed in 0.64s
+
+uv run pytest tests/unit/test_volume08_*.py -q
+93 passed in 0.84s
+
+uv run python examples/volume08/router_mini_project.py
+고정 여덟 경로의 canonical strict JSON audit report 출력; 경로별 request ID 결속·schema·수치 범위·원문 비노출 검사 통과, 외부 호출 없음
+
+uv run pytest -q
+154 passed in 1.53s
+
+uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+```
+
+PRD DoD 상태:
+
+- Volume 08의 Rule·Keyword·Embedding 기반 Semantic·LLM Router, threshold, fallback, 비용·지연 시간·capability 정책, escalation, decision log, 평가 dataset·accuracy, API, 미니 프로젝트, 체크리스트, Volume 09 인계와 허용 범위의 검증은 완료했습니다.
+- 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
+- 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.

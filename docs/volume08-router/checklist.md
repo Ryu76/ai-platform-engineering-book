@@ -38,7 +38,7 @@
 - [ ] API layer가 Router 정책을 재구현하거나 임의 fallback을 추가하지 않음을 설명할 수 있다.
 - [ ] 모든 decision 및 안전 실패 로그가 strict JSON 직렬화 가능하며 `NaN`/`Infinity`를 포함하지 않음을 확인했다.
 - [ ] `render_audit_report()`가 export 직전에 audit report를 다시 검증하고 key 정렬 compact JSON을 결정론적으로 출력함을 확인했다.
-- [ ] 미니 프로젝트 audit report가 고정된 여덟 경로를 빠짐없이 포함하고, 각 경로가 자기 Router의 고정 field schema와 allowlist만 사용하며 해당 request 원문의 부분 문자열을 포함하지 않음을 확인했다.
+- [ ] 미니 프로젝트 audit report가 고정된 여덟 경로를 빠짐없이 포함하고, 각 경로가 자기 Router의 고정 field schema, 고정 request ID, allowlist만 사용하며 해당 request 원문의 부분 문자열이나 다른 경로의 audit record를 포함하지 않음을 확인했다.
 - [ ] audit report의 decision 값은 공백 전용이 아닌 문자열이고, confidence·similarity는 `0`~`1` 유한 decimal 문자열, 비용은 0 이상의 유한 decimal 문자열, 지연 시간은 0 이상의 정수 문자열, target kind는 Agent·Tool·Model 중 하나임을 확인했다. 순서 field는 중복·공백 전용 항목이 없는 비어 있지 않은 문자열 `list`, retry·escalation counter는 부울이 아닌 0 이상의 정수, API status code는 `100`~`599` 정수임을 확인했다.
 - [ ] 로그와 API body에 사용자 원문, prompt, raw classifier output, API 키가 없어야 함을 확인했다.
 - [ ] `router_mini_project.py`가 Policy, Keyword, Semantic, LLM, fallback, escalation, API를 하나의 고정 request ID 집합으로 조합함을 확인했다.

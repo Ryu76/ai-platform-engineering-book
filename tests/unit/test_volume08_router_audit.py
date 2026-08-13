@@ -163,6 +163,31 @@ def test_mini_project_report_rejects_malformed_nested_api_audit_schema() -> None
         )
 
 
+def test_mini_project_report_rejects_cross_route_request_ids() -> None:
+    report = build_router_mini_project().run()
+    request_texts = _mini_project_request_texts()
+
+    invalid_reports = (
+        {**report, "policy": {**report["policy"], "request_id": "mini-rule-001"}},
+        {
+            **report,
+            "api": {
+                **report["api"],
+                "body": {
+                    **report["api"]["body"],
+                    "decision": {
+                        **report["api"]["body"]["decision"],
+                        "request_id": "mini-keyword-001",
+                    },
+                },
+            },
+        },
+    )
+    for invalid_report in invalid_reports:
+        with pytest.raises(UnsafeRouterAuditRecordError, match="configured route request ID"):
+            validate_router_audit_report(invalid_report, sensitive_values_by_route=request_texts)
+
+
 def test_mini_project_report_rejects_wrong_route_specific_audit_value_types() -> None:
     report = build_router_mini_project().run()
     request_texts = _mini_project_request_texts()
