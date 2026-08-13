@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-13 — Slice 26: Chapter 06 불변 deterministic Mock PRD 학습 계약
+
+- `06-immutable-mock-scripts.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다. 문서는 네 local `DeterministicMock*`의 non-empty immutable tuple script, script 소진의 fallback 없는 `AgentProtocolError`, workflow별 bounded loop와 별도 runtime policy를 현재 구현에 맞춰 설명한다.
+- `test_immutable_mock_scripts_documentation.py`를 추가해 Chapter 06의 14 section, 네 Mock, focused/full test 명령, tuple·`PENDING`/`APPROVED`, live API·secret·deployment 없는 local-only safety scope를 회귀 검증한다. 고정 script가 유효해도 explicit human approval을 우회하지 않고, `--approve`도 local QA audit만 허용함을 기록했다.
+- `uv run pytest tests/volume07/test_immutable_mock_scripts.py tests/volume07/test_immutable_mock_scripts_documentation.py -q`는 7 passed였다. `uv run python examples/volume07/offline_review_workflow.py`는 `awaiting_human_approval` 및 QA 미호출을, `--approve`는 local QA를 포함한 `completed`를 실제 출력했다. 전체 `uv run pytest tests/volume07 -q`는 65 passed, `uv run ruff check src/ai_platform/agents tests/volume07` 및 `uv run mypy src/ai_platform/agents`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-13 — Slice 25: Chapter 04 PRD 학습 문서 실행 계약
 
 - `test_approval_gated_release_handoff_documentation.py`를 추가해 Chapter 04가 PRD 학습 템플릿의 14개 section, deterministic local release-handoff example·contract test 실행 명령, explicit `--approve` 경계, `completed`의 local handoff note 의미와 no-deployment/API-key safety scope를 계속 포함하도록 회귀 검증했다.
