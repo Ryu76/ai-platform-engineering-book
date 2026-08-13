@@ -810,6 +810,53 @@ $ git diff --check
 (exit 0)
 ```
 
+## 최신 슬라이스 — JSON Checkpoint checksum 무결성 검사
+
+- `docs/volume09-langgraph/24-json-checkpoint-checksum-integrity.md`
+  - 정상 JSON이라도 payload가 저장 후 바뀌면 상태 복원·승인 재개 전에 fail-closed로 차단하는 SHA-256 checksum 계약, 인증과의 차이, 운영 저장소 경계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 스물네 번째 checksum 무결성 검사 장과 오프라인 예제·검증 범위를 추가했습니다.
+- `src/ai_platform/graph/checkpointer.py`
+  - JSON schema version을 2로 올리고, `schema_version`과 `checkpoints`의 canonical JSON SHA-256을 `payload_sha256`으로 기록·검증하게 했습니다. checksum 누락·형식 오류·불일치는 `WorkflowState` 복원 전 거부됩니다. 키 없는 checksum은 우발 변경 탐지일 뿐 인증이나 다중 프로세스 원자성을 제공하지 않습니다.
+- `examples/volume09/json_checksum_guard_workflow.py`
+  - 임시 JSON Checkpoint의 task만 바꿔 JSON 문법은 유지하면서 checksum 불일치가 명시적으로 거부됨을 출력하는 오프라인 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 유효 JSON payload를 변경해도 stale checksum이면 load가 실패하는 계약을 추가했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 checksum 검증과 별개로 별도의 엄격한 Boolean 승인 전에는 `WAITING_FOR_APPROVAL`에 머뭅니다.
+
+## 최신 검증 기록 — JSON Checkpoint checksum 무결성 검사 슬라이스
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run python examples/volume09/json_checksum_guard_workflow.py
+checksum_mismatch_rejected=checkpoint file checksum does not match its payload
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+47 passed in 1.53s
+
+$ uv run pytest -q
+108 passed in 4.29s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
+
 ## 완료 상태
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.

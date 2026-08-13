@@ -484,6 +484,27 @@ def test_json_file_checkpoint_rejects_a_corrupt_payload(tmp_path: Path) -> None:
         JsonFileCheckpointer(path=checkpoint_path).load(run_id="persistent-safe-001")
 
 
+def test_json_file_checkpoint_rejects_a_valid_json_payload_with_a_stale_checksum(
+    tmp_path: Path,
+) -> None:
+    """유효한 JSON이라도 checksum과 다른 Checkpoint 내용은 재개하지 않는다."""
+    checkpoint_path = tmp_path / "checksummed-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    checkpointer.save(
+        run_id="checksum-guard-001",
+        state=WorkflowState.start(task="로컬 문서를 읽는다", action=ActionKind.READ),
+    )
+    checkpoint_path.write_text(
+        checkpoint_path.read_text(encoding="utf-8").replace(
+            "로컬 문서를 읽는다", "로컬 문서를 변경한다"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="checksum does not match"):
+        checkpointer.load(run_id="checksum-guard-001")
+
+
 def test_json_file_checkpoint_rejects_an_existing_hard_link_alias(tmp_path: Path) -> None:
     """원자적 교체가 hard link 별칭을 분리하지 않도록 기존 다중 링크를 거부한다."""
     checkpoint_path = tmp_path / "checkpoints.json"

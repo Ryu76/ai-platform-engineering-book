@@ -1,6 +1,8 @@
 """오프라인 Workflow를 위한 메모리·로컬 파일 Checkpoint 경계."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import re
 from dataclasses import asdict
@@ -111,7 +113,7 @@ class JsonFileCheckpointer:
     기록을 저장하는 용도로 사용하면 안 된다.
     """
 
-    _SCHEMA_VERSION = 1
+    _SCHEMA_VERSION = 2
 
     def __init__(self, *, path: Path) -> None:
         """기존 디렉터리 안의 단일 Checkpoint 파일 경로를 검증한다."""
@@ -135,22 +137,7 @@ class JsonFileCheckpointer:
         with self._lock:
             checkpoints = self._read_checkpoints()
             checkpoints[run_id] = _state_to_payload(state)
-            payload = {
-                "schema_version": self._SCHEMA_VERSION,
-                "checkpoints": checkpoints,
-            }
-            temporary_path = self._path.with_name(
-                f".{self._path.name}.{uuid4().hex}.tmp"
-            )
-            try:
-                temporary_path.write_text(
-                    json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-                    encoding="utf-8",
-                )
-                temporary_path.replace(self._path)
-            finally:
-                if temporary_path.exists():
-                    temporary_path.unlink()
+            self._write_checkpoints(checkpoints)
 
     def load(self, *, run_id: str) -> WorkflowState:
         """저장된 공개 상태를 엄격히 검증해 복원한다."""
@@ -178,22 +165,7 @@ class JsonFileCheckpointer:
             if run_id in checkpoints:
                 return False
             checkpoints[run_id] = _state_to_payload(state)
-            payload = {
-                "schema_version": self._SCHEMA_VERSION,
-                "checkpoints": checkpoints,
-            }
-            temporary_path = self._path.with_name(
-                f".{self._path.name}.{uuid4().hex}.tmp"
-            )
-            try:
-                temporary_path.write_text(
-                    json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-                    encoding="utf-8",
-                )
-                temporary_path.replace(self._path)
-            finally:
-                if temporary_path.exists():
-                    temporary_path.unlink()
+            self._write_checkpoints(checkpoints)
             return True
 
     def save_if_current(
@@ -217,23 +189,32 @@ class JsonFileCheckpointer:
             if raw_current_state is None or _payload_to_state(raw_current_state) != expected_state:
                 return False
             checkpoints[run_id] = _state_to_payload(state)
-            payload = {
-                "schema_version": self._SCHEMA_VERSION,
-                "checkpoints": checkpoints,
-            }
-            temporary_path = self._path.with_name(
-                f".{self._path.name}.{uuid4().hex}.tmp"
-            )
-            try:
-                temporary_path.write_text(
-                    json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
-                    encoding="utf-8",
-                )
-                temporary_path.replace(self._path)
-            finally:
-                if temporary_path.exists():
-                    temporary_path.unlink()
+            self._write_checkpoints(checkpoints)
             return True
+
+    def _write_checkpoints(self, checkpoints: dict[str, object]) -> None:
+        """검증 가능한 checksum을 포함한 payload를 임시 파일 교체로 기록한다."""
+        payload = {
+            "schema_version": self._SCHEMA_VERSION,
+            "checkpoints": checkpoints,
+            "payload_sha256": _checkpoint_payload_digest(
+                schema_version=self._SCHEMA_VERSION,
+                checkpoints=checkpoints,
+            ),
+        }
+        temporary_path = self._path.with_name(
+            f".{self._path.name}.{uuid4().hex}.tmp"
+        )
+        try:
+            temporary_path.write_text(
+                json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            self._reject_existing_hard_link()
+            temporary_path.replace(self._path)
+        finally:
+            if temporary_path.exists():
+                temporary_path.unlink()
 
     def _read_checkpoints(self) -> dict[str, object]:
         """파일이 없으면 빈 저장소를, 있으면 검증된 JSON 객체를 반환한다."""
@@ -248,9 +229,20 @@ class JsonFileCheckpointer:
             raise ValueError("checkpoint file must contain an object")
         if raw_payload.get("schema_version") != self._SCHEMA_VERSION:
             raise ValueError("unsupported checkpoint schema version")
+        if set(raw_payload) != {"schema_version", "checkpoints", "payload_sha256"}:
+            raise ValueError("checkpoint file has an unexpected schema")
         checkpoints = raw_payload.get("checkpoints")
         if not isinstance(checkpoints, dict):
             raise ValueError("checkpoint file must contain a checkpoints object")
+        payload_sha256 = raw_payload.get("payload_sha256")
+        if not isinstance(payload_sha256, str):
+            raise ValueError("checkpoint file must contain a payload_sha256 string")
+        expected_digest = _checkpoint_payload_digest(
+            schema_version=self._SCHEMA_VERSION,
+            checkpoints=checkpoints,
+        )
+        if not _constant_time_digest_matches(payload_sha256, expected_digest):
+            raise ValueError("checkpoint file checksum does not match its payload")
         for stored_run_id in checkpoints:
             if not isinstance(stored_run_id, str):
                 raise ValueError("checkpoint run_id must be a string")
@@ -283,6 +275,28 @@ def _reject_suspected_secret(value: str, *, field: str) -> None:
     )
     if secret_pattern.search(value):
         raise ValueError(f"{field} must not contain suspected sensitive data")
+
+
+def _checkpoint_payload_digest(*, schema_version: int, checkpoints: dict[str, object]) -> str:
+    """공개 payload의 결정론적 SHA-256 checksum을 반환한다.
+
+    이 checksum은 전송·디스크 손상을 발견하기 위한 무결성 검사일 뿐, 비밀 키가
+    없으므로 악의적인 변경을 인증하거나 방지하지는 않는다.
+    """
+    canonical_payload = json.dumps(
+        {"schema_version": schema_version, "checkpoints": checkpoints},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical_payload).hexdigest()
+
+
+def _constant_time_digest_matches(actual: str, expected: str) -> bool:
+    """형식이 맞는 SHA-256 digest를 일정 시간 비교로 확인한다."""
+    if not re.fullmatch(r"[0-9a-f]{64}", actual):
+        return False
+    return hmac.compare_digest(actual, expected)
 
 
 def _state_to_payload(state: WorkflowState) -> dict[str, object]:

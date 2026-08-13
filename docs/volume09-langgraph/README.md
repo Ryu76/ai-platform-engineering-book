@@ -32,12 +32,13 @@
 21. [정규화된 JSON 경로 별칭의 동시 시작 안전성](21-json-normalized-path-concurrent-start.md)
 22. [정규화된 JSON 경로 별칭의 동시 상반 승인 결정 안전성](22-json-normalized-path-concurrent-mixed-decision.md)
 23. [JSON Checkpoint hard link 별칭 차단](23-json-hard-link-alias-guard.md)
+24. [JSON Checkpoint checksum 무결성 검사](24-json-checkpoint-checksum-integrity.md)
 
 ## 예정 장
 
 이 슬라이스에서는 `checkpoints.json`과 `path-alias/../checkpoints.json`처럼 서로 다른 `Path` 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때, 독립 Checkpointer 인스턴스의 동시 `approved=True`·`approved=False` 재전송 중 정확히 하나만 대기 Checkpoint를 소비하도록 경로 단위 Lock과 비교·교체 계약을 검증했습니다. 승자는 `COMPLETED` 또는 `REJECTED` 중 하나로 끝나며 나머지 7개 요청은 종료 Checkpoint·감사 이벤트를 바꾸지 않는 충돌입니다. `COMPLETED`도 오프라인 시뮬레이션일 뿐 실제 위험 실행이 아니고, 이 Lock 보장은 단일 프로세스의 동일 로컬 경로 범위에만 적용됩니다. FastAPI 의존성 추가와 실제 서버 실행은 승인된 별도 범위에서 다룹니다.
 
-현재 슬라이스는 `Path.resolve()`만으로 통합되지 않는 기존 hard link 별칭도 다룹니다. 원자적 `replace()`가 같은 inode의 별칭을 분리하기 전에 link count가 2 이상인 JSON Checkpoint를 fail-closed로 거부합니다. 이 방어는 hard link 동시성을 지원하거나 다중 프로세스 원자성을 보장하지 않으며, 위험 ActionKind는 계속 별도 엄격한 Boolean 승인 전에는 실행되지 않습니다.
+현재 슬라이스는 `Path.resolve()`만으로 통합되지 않는 기존 hard link 별칭도 다룹니다. 원자적 `replace()`가 같은 inode의 별칭을 분리하기 전에 link count가 2 이상인 JSON Checkpoint를 fail-closed로 거부합니다. 또한 `schema_version`과 `checkpoints`의 결정론적 SHA-256 checksum을 기록하고, 유효한 JSON이라도 checksum이 맞지 않으면 상태 복원·승인 재개 전에 거부합니다. 이 checksum은 키 없는 우발 변경 탐지일 뿐 인증이나 다중 프로세스 원자성을 제공하지 않으며, 위험 ActionKind는 계속 별도 엄격한 Boolean 승인 전에는 실행되지 않습니다.
 
 ## 이번 기반 결과물
 
@@ -45,7 +46,7 @@
 - `src/ai_platform/graph/nodes.py`: Plan, Router, 전문 역할, 경로 검토, Approval, Execute, Error Node
 - `src/ai_platform/graph/workflow.py`: 승인 흐름, `StreamingWorkflow`의 Checkpoint 우선 상태 출력, `RoutedWorkflow`의 Conditional Edge 참조 흐름, `PlannerDeveloperReviewerWorkflow`의 고정 역할 순서, `SubgraphWorkflow`의 부모 승인 경계, `RetryWorkflow`의 제한된 재시도, 주입 가능한 Checkpointer 경계
 - `src/ai_platform/graph/api.py`: FastAPI route가 사용할 Pydantic 시작·승인 요청, 공개 응답 스냅샷, 재전송이 기존 Checkpoint를 덮어쓰지 못하게 하는 프레임워크 독립 오프라인 어댑터와 동시 승인 충돌 경계
-- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent`, 승인 Checkpoint를 비교·교체하는 `save_if_current`, 같은 프로세스의 동일 정규화 JSON 경로를 여는 인스턴스가 공유하는 Lock 계약
+- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent`, 승인 Checkpoint를 비교·교체하는 `save_if_current`, 같은 프로세스의 동일 정규화 JSON 경로를 여는 인스턴스가 공유하는 Lock 계약, 우발적 payload 변경을 복원 전에 차단하는 결정론적 SHA-256 checksum
 
 - `examples/volume09/single_node_workflow.py`: 승인 중단 및 재개 데모
 - `examples/volume09/router_conditional_workflow.py`: 낮은 신뢰도 Router의 경로 검토와 실행 승인 데모
@@ -66,7 +67,8 @@
 - `examples/volume09/json_normalized_path_concurrent_start_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스 8개가 하나만 위험 작업의 승인 대기를 생성하는 데모
 - `examples/volume09/json_normalized_path_concurrent_mixed_decision_workflow.py`: 서로 다른 경로 표기가 정규화 뒤 같은 JSON 파일을 가리킬 때 독립 Checkpointer 인스턴스의 동시 승인·거절 재전송 중 하나만 종료 결정을 기록하는 데모
 - `examples/volume09/json_hard_link_guard_workflow.py`: 기존 hard link 별칭이 있는 JSON Checkpoint를 분리 저장 전에 명시적으로 거부하는 데모
-- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작·상반 결정 계약 테스트
+- `examples/volume09/json_checksum_guard_workflow.py`: 정상 JSON의 payload가 기록된 SHA-256 checksum과 다르면 상태 복원 전에 거부하는 데모
+- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작·상반 결정·checksum 불일치 차단 계약 테스트
 
 
 현재 프로젝트 의존성에는 `langgraph` 패키지가 선언되어 있지 않습니다. 이 Volume의 현재 슬라이스들은 LangGraph API 호출을 가장하지 않고, 해당 API가 모델링하는 상태·Node·Edge·interrupt 경계를 직접 구현한 결정론적 참조 모델입니다. 패키지 추가는 이 작업 범위 밖의 프로젝트 설정 변경이므로, 승인된 별도 변경 후 실제 LangGraph 어댑터 장에서 수행합니다.
