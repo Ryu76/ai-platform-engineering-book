@@ -2,10 +2,10 @@
 
 ## 현재 상태
 
-- 현재 Phase: **MCP STDIO fake readiness snapshot 기반 bounded two-stream drain model**
-- 완료 선언: 아직 하지 않음. 실제 concurrent pipe IO/backpressure, decode/redaction,
-  stdin ownership, cancellation/disconnect, Windows/POSIX process-group/signal semantics, exit-code
-  restart supervisor, durable audit/idempotency와 Hermes/Codex 연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
+- 현재 Phase: **MCP STDIO injected binary stdin writer의 bounded frame/partial delivery model**
+- 완료 선언: 아직 하지 않음. actual Popen stdin ownership/backpressure, cancellation/disconnect,
+  Windows/POSIX process-group/signal semantics, exit-code restart supervisor, durable audit/idempotency와
+  Hermes/Codex 연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
 
 ## 이번 슬라이스: 두 binary output stream을 fake seam에서 공정하게 bounded drain하기
 
@@ -227,16 +227,85 @@ $ uv run python scripts/check_secrets.py
 비밀값 검사 통과
 ```
 
-모든 `uv` command는 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 warning을
-출력했지만 project environment에서 정상 완료했습니다. example/test는 in-memory fixed bytes와
-fixed redaction literal만 사용했으며 actual process, OS pipe, shell, filesystem, network, external
-MCP server, Tool 또는 destructive action을 호출하지 않았습니다.
+## 이번 슬라이스: immutable stdin JSON-RPC frame을 bounded binary writer로 전송하기
+
+- `src/ai_platform/mcp/input_write.py`
+  - `build_mcp_stdio_input_frame()`은 dict request/notification을 existing strict JSON-RPC
+    encoder/parser로 round-trip 검증해 immutable UTF-8/LF bytes snapshot만 만듭니다. malformed
+    envelope, raw incomplete frame, invalid UTF-8, 16 KiB 초과 payload는 writer I/O 전에 거부합니다.
+  - `write_mcp_stdio_input_frame()`은 trusted host가 주입한 binary `write`/`flush` seam만 사용합니다.
+    한 write는 최대 4 KiB이고 positive short write에는 unsent suffix만 계속 보내며, complete frame
+    뒤 flush를 정확히 한 번 호출합니다.
+  - write exception, zero/negative/boolean/non-int/oversized write count와 flush failure는 raw adapter
+    detail·partial receipt·retry 없이 `frame_may_be_partial=True` error로 끝납니다. receiver가 prefix
+    또는 complete frame을 이미 받았을 수 있으므로 child shutdown, Tool execution, audit/logging은
+    caller의 별도 ownership입니다.
+- `src/ai_platform/mcp/__init__.py`
+  - input frame, writer protocol, error/receipt와 builder/writer public APIs를 export했습니다.
+- `examples/volume03/mcp_stdio_bounded_input_write.py`
+  - memory-only `OfflineBinaryWriter`와 fixed initialized notification만 사용해 frame byte count,
+    write count, flush count를 출력합니다. actual process, OS pipe, shell, filesystem, network, MCP
+    server, Tool 또는 destructive action은 수행하지 않습니다.
+- `tests/volume03/test_mcp_input_write.py`
+  - complete write/one flush, short-write suffix continuation, 4 KiB chunk ceiling, malformed write count,
+    write/flush failure에서 no retry/no extra flush/ambiguity, invalid raw/oversized frame 및 invalid writer의
+    I/O-before-reject behavior를 fake seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/28-mcp-stdio-bounded-input-write.md`
+  - strict frame construction, partial delivery semantics, safe offline exercise, exactly-once/idempotency와
+    production Popen ownership의 명시적 차이를 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 스물여덟 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: bounded stdin write slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_stdio_bounded_input_write.py
+frame_bytes: 55
+write_calls: 1
+flush_calls: 1
+
+$ uv run ruff check src/ai_platform/mcp/input_write.py src/ai_platform/mcp/__init__.py tests/volume03/test_mcp_input_write.py examples/volume03/mcp_stdio_bounded_input_write.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/input_write.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 2 source files
+
+$ uv run pytest tests/volume03/test_mcp_input_write.py -q
+13 passed in 0.79s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 27 source files
+
+$ uv run pytest -q
+255 passed in 3.49s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 warning을 출력했지만
+project environment에서 정상 완료했습니다. example/test는 in-memory fixed bytes와 fake binary writer만
+사용했으며 actual process, OS pipe, shell, filesystem, network, external MCP server, Tool 또는 destructive
+action을 호출하지 않았습니다.
 
 ## 다음 슬라이스
 
-strict output text snapshot을 Popen child에 바로 결합하지 말고, stdin JSON-RPC framing의 bounded
-partial write/flush ownership을 small injected binary writer seam으로 모델링해야 합니다. write
-failure·short write·flush failure에서 partial frame, child shutdown request, host error를 누가
-소유하는지 명확히 분리해 검증하세요. 그 뒤 cancellation/disconnect, Windows/POSIX process groups,
-exit-code restart/backoff, durable approval/audit/idempotency, Hermes/Codex integration을 각각 별도
-slice로 진행해야 합니다.
+actual Popen stdin handle을 직접 결합하지 말고, cancellation/disconnect를 typed request ID와
+partial-frame ambiguity에 묶는 small injected policy seam을 모델링해야 합니다. disconnected writer에
+새 frame을 쓰지 않고, in-flight partial frame failure와 caller-owned child shutdown request를 분리해
+검증하세요. 그 뒤 Windows/POSIX process groups, exit-code restart/backoff, durable approval/audit/
+idempotency, Hermes/Codex integration을 각각 별도 slice로 진행해야 합니다.

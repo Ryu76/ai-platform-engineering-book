@@ -35,5 +35,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 25. [MCP STDIO fair stream pair drain: 두 fake output을 교대로 bounded 수집하기](25-mcp-stdio-fair-stream-pair-drain.md) — 실제 OS pipe를 열지 않고 two independent stream을 round-robin으로 읽되 independent ceiling failure 뒤 추가 read·partial capture를 막는 scheduling model
 26. [MCP STDIO ready drain: fake readiness snapshot에서만 읽기](26-mcp-stdio-ready-drain.md) — actual selector를 열지 않고 host-owned ready snapshot의 stdout-then-stderr 순서를 검증하며 stale/no-progress signal과 partial capture를 거부하는 adapter model
 27. [MCP STDIO output decode/redaction: 성공한 raw snapshot만 strict text로 바꾸기](27-mcp-stdio-output-decode-redaction.md) — EOF까지 bounded capture한 bytes만 strict UTF-8로 decode하고 deployment-owned fixed literal을 가리며 process·logging·shutdown ownership과 분리하는 model
+28. [MCP STDIO bounded stdin write: immutable JSON-RPC frame을 partial write/flush 경계로 보내기](28-mcp-stdio-bounded-input-write.md) — strict LF frame만 injected binary writer에 4 KiB 이하로 전송하고 partial/flush failure의 ambiguous delivery를 retry·shutdown과 분리하는 model
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.

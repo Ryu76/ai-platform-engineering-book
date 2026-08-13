@@ -18,6 +18,14 @@ from ai_platform.mcp.host import (
     shutdown_mcp_stdio_child,
     start_mcp_stdio_child,
 )
+from ai_platform.mcp.input_write import (
+    McpStdioInputFrame,
+    McpStdioInputWriteError,
+    McpStdioInputWriteReceipt,
+    McpStdioWritableBinaryStream,
+    build_mcp_stdio_input_frame,
+    write_mcp_stdio_input_frame,
+)
 from ai_platform.mcp.output_decode import (
     McpStdioDecodedOutputPair,
     McpStdioOutputDecodeError,
@@ -83,6 +91,9 @@ __all__ = [
     "McpStdioHostError",
     "McpStdioHostLaunchPlan",
     "McpStdioHostShutdownResult",
+    "McpStdioInputFrame",
+    "McpStdioInputWriteError",
+    "McpStdioInputWriteReceipt",
     "McpStdioOutputDecodeError",
     "McpStdioOutputRedactionPolicy",
     "McpStdioPopenFactory",
@@ -111,6 +122,7 @@ __all__ = [
     "McpStdioSession",
     "McpStdioState",
     "McpStdioTransportError",
+    "McpStdioWritableBinaryStream",
     "McpStdioServerSpec",
     "McpToolCallBoundary",
     "McpServerCatalog",
@@ -125,8 +137,10 @@ __all__ = [
     "shutdown_mcp_stdio_child",
     "start_mcp_stdio_child",
     "dispatch_mcp_tool_call",
+    "build_mcp_stdio_input_frame",
     "decode_and_redact_mcp_stdio_output",
     "drain_mcp_stdio_binary_stream",
     "drain_mcp_stdio_ready_stream_pair",
     "drain_mcp_stdio_stream_pair_fairly",
+    "write_mcp_stdio_input_frame",
 ]
