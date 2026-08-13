@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-13 — Slice 25: Chapter 04 PRD 학습 문서 실행 계약
+
+- `test_approval_gated_release_handoff_documentation.py`를 추가해 Chapter 04가 PRD 학습 템플릿의 14개 section, deterministic local release-handoff example·contract test 실행 명령, explicit `--approve` 경계, `completed`의 local handoff note 의미와 no-deployment/API-key safety scope를 계속 포함하도록 회귀 검증했다.
+- 기존 Chapter 04와 example은 이미 Planner→bounded Developer/Reviewer→explicit human approval→QA→local DevOps handoff 순서, `PENDING`의 QA/DevOps 미호출, `REJECTED`의 pre-call 종료, immutable message audit trail을 설명하고 구현한다. 이 slice는 그 실습 문서의 PRD 형식과 실행 가능한 local-only contract를 테스트로 고정한 한 tick이다.
+- `uv run python examples/volume07/offline_release_handoff.py`는 `status=awaiting_human_approval`과 QA/DevOps 없는 audit trail을, `--approve`는 `status=completed` 및 `Handoff: local release notes are ready; no deployment ran.`을 실제로 출력했다. 새 documentation test는 1 passed였고, `uv run pytest tests/volume07 -q`는 64 passed, `uv run ruff check src/ai_platform/agents tests/volume07` 및 `uv run mypy src/ai_platform/agents`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-13 — Slice 24: 구성 단계 context-compatible Agent signature 경계
 
 - `validate_callable_boundary()`는 이제 `act`/`propose` attribute가 callable인지 확인한 뒤에도 `inspect.signature(...).bind(context)`로 orchestrator가 전달하는 한 positional immutable context를 실제로 받을 수 있는지 **호출 없이** 검증한다. `act()`나 `propose()`처럼 callable이지만 arity가 맞지 않는 boundary와 추가 required argument가 있는 boundary는 첫 Agent call 전에 cause-preserving `WorkflowConfigurationError`로 fail-closed한다.
