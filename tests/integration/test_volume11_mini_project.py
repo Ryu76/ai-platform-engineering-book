@@ -37,6 +37,7 @@ def test_local_operations_review_combines_probe_telemetry_and_render_only_bounda
         "deployment_template_and_service_selector_share_app_label": True,
         "deployment_selector_matches_template_app_label": True,
         "base_resources_share_example_namespace": True,
+        "deployment_references_example_configmap_in_its_declared_namespace": True,
         "deployment_declares_startup_probe_boundary": True,
         "deployment_declares_resource_requests_and_limits": True,
         "deployment_declares_restricted_runtime_security": True,

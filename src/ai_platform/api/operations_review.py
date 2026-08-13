@@ -92,6 +92,12 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             )
             and "- namespace.yaml" in base_kustomization
         ),
+        "deployment_references_example_configmap_in_its_declared_namespace": (
+            "name: ai-platform-api-config\n  namespace: ai-platform-example" in configmap
+            and "namespace: ai-platform-example" in deployment
+            and "envFrom:\n            - configMapRef:\n"
+            "                name: ai-platform-api-config" in deployment
+        ),
         "deployment_declares_startup_probe_boundary": bool(startup_marker)
         and all(
             value in startup_probe

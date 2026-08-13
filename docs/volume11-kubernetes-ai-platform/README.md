@@ -27,6 +27,7 @@
 19. [Service Selector: Pod template label 연결의 정적 계약](19-service-selector-static-contract.md)
 20. [Deployment Selector: Pod template label 불변식의 정적 계약](20-deployment-selector-template-static-contract.md)
 21. [Namespace scope: 기본 리소스의 정적 경계](21-namespace-scope-static-contract.md)
+22. [ConfigMap reference: Deployment 환경 주입의 정적 계약](22-configmap-reference-static-contract.md)
 
 ## 현재 실습 경계
 
