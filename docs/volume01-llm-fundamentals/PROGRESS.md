@@ -70,3 +70,33 @@ Success: no issues found in 7 source files
 ```
 
 모든 검증은 프로젝트 `.venv`에서 실행했으며 실제 키·라이브 API·외부 서비스 호출을 사용하지 않았다. Hermes 활성 가상환경과 프로젝트 `.venv`의 경로가 다르다는 `uv` 경고만 있었고, 모든 명령은 종료 코드 0으로 완료됐다.
+
+## 재검증 슬라이스: 완료 상태 및 일정 중지
+
+- 마지막 갱신: 2026-08-13T15:26:54+09:00
+- 현재 `volume-01` 브랜치에서 Volume 01의 PRD 계약, 문서, 오프라인 예제 및 전체 테스트를 다시 검수했다. 이미 선언된 `VOLUME01_COMPLETE=true`는 유지한다.
+- Hermes 세션 환경의 ID는 `cron_f47b02d46ebb_20260813_145827`였다. Hermes CLI가 셸 PATH에 없어서 설치 경로의 프로젝트 가상환경 Python으로 CLI를 실행했다.
+- `hermes cron list`는 활성 일정이 없다고 보고했다. 일정 저장소를 대조해 세션 ID의 작업 `f47b02d46ebb`를 식별했으며, `hermes cron pause f47b02d46ebb`는 `Paused job: ai-book-volume-08-author (f47b02d46ebb)`를 반환했다. 재확인한 `cron list`와 `cron status`도 활성 작업이 없음을 보고했으므로, 이 실행의 일정은 중지된 상태다.
+
+## 재검증 결과
+
+```text
+bash scripts/run_all_tests.sh
+All checks passed!
+Success: no issues found in 7 source files
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+88 passed in 2.28s
+
+/c/Users/HODI/AppData/Local/hermes/hermes-agent/.venv/Scripts/python.exe \
+  /c/Users/HODI/AppData/Local/hermes/hermes-agent/hermes cron list
+No scheduled jobs.
+
+/c/Users/HODI/AppData/Local/hermes/hermes-agent/.venv/Scripts/python.exe \
+  /c/Users/HODI/AppData/Local/hermes/hermes-agent/hermes cron pause f47b02d46ebb
+Paused job: ai-book-volume-08-author (f47b02d46ebb)
+```
+
+검증 중 실제 키·라이브 API·외부 서비스 호출은 사용하지 않았다. `uv`가 Hermes 활성 가상환경과 프로젝트 `.venv` 경로 차이를 경고했지만, 모든 품질 검사와 pytest는 종료 코드 0으로 완료됐다.
