@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -104,11 +105,13 @@ def validate_agent_boundary(name: str, agent: object) -> None:
 
 
 def validate_callable_boundary(name: str, method_name: str, boundary: object) -> None:
-    """Read one protocol method safely and reject inaccessible setup boundaries.
+    """Read and bind one protocol method without invoking an Agent.
 
     A boundary may expose its protocol method through a property.  Reading that property
     is still configuration work, not permission to run an Agent, so an accessor failure
-    must become a stable configuration error before any workflow invocation.
+    must become a stable configuration error before any workflow invocation. A callable
+    with the wrong arity is also unsafe: the orchestrator always supplies one positional
+    immutable context, so verify that binding at setup rather than after prior roles run.
     """
     try:
         method = getattr(boundary, method_name, None)
@@ -120,6 +123,13 @@ def validate_callable_boundary(name: str, method_name: str, boundary: object) ->
         raise WorkflowConfigurationError(
             f"{name} must provide a callable {method_name}(context) method"
         )
+    try:
+        signature = inspect.signature(method)
+        signature.bind(object())
+    except (TypeError, ValueError) as error:
+        raise WorkflowConfigurationError(
+            f"{name} {method_name} boundary must accept one positional context argument"
+        ) from error
 
 
 def validate_fixed_script(name: str, script: object) -> None:

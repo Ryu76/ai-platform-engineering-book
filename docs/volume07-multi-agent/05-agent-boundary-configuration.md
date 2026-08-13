@@ -21,7 +21,7 @@
 ## 3. 핵심 개념
 
 - **구성 단계(configuration time):** workflow constructor가 역할 mapping, callable method, immutable allow-list, declared Mock role을 검사하는 시점입니다. Agent method 자체를 호출하지 않습니다.
-- **호출 가능 경계(callable boundary):** review/release 역할은 `act(context)`, delegation coordinator와 conflict peer는 `propose(context)`, delegation Worker는 `act(context)`를 제공해야 합니다.
+- **호출 가능 경계(callable boundary):** review/release 역할은 한 positional context를 받는 `act(context)`, delegation coordinator와 conflict peer는 `propose(context)`, delegation Worker는 `act(context)`를 제공해야 합니다. 단순히 callable인 `act()`는 충분하지 않습니다.
 - **접근 불가 경계:** `getattr(boundary, "act")` 또는 `getattr(boundary, "propose")`가 property exception을 발생시키는 경우입니다. 이 경우도 `WorkflowConfigurationError`로 원인을 보존하며 fail-closed합니다.
 - **선언 역할 바인딩:** `DeterministicMockAgent`처럼 `role` 속성을 선언하는 local Mock은 구성 slot과 정확히 일치해야 합니다. production-style adapter처럼 `role`을 제공하지 않는 경계는 callable contract만 검사합니다.
 - **runtime protocol 검증:** 호출 뒤 반환되는 `AgentResponse`, `WorkerResponse`, `ConflictProposal`의 type과 non-empty field는 별도 책임입니다. 구성 검증이 response 내용을 신뢰하게 만들지 않습니다.
@@ -70,6 +70,7 @@ src/ai_platform/agents/workflow.py
 tests/volume07/test_agent_boundary_configuration.py
 tests/volume07/test_inaccessible_agent_boundaries.py
 tests/volume07/test_declared_mock_role_binding.py
+tests/volume07/test_callable_signature_configuration.py
 ```
 
 외부 package 설치, API key, `.env`, network connection, Docker, deployment target은 필요하지 않습니다.
@@ -97,7 +98,16 @@ uv run pytest tests/volume07/test_agent_boundary_configuration.py -q
 
 이 test는 `act` 또는 `propose`가 없거나 callable이 아닌 역할을 각 workflow constructor가 거절하는지 확인합니다. workflow를 만들지 못했으므로 Planner, Coordinator, Worker, conflict peer, QA, DevOps call history는 모두 비어 있어야 합니다.
 
-### 6.3 접근 불가 property와 role mismatch 확인
+### 6.3 한 context를 받을 수 없는 callable 거절
+
+```bash
+# 실행 위치: 저장소 루트의 Git Bash 또는 WSL Bash
+uv run pytest tests/volume07/test_callable_signature_configuration.py -q
+```
+
+`def act(self): ...` 또는 `def propose(self): ...`처럼 이름은 callable이지만 context를 받지 못하는 local boundary는 `inspect.signature(...).bind(context)` 검사에서 구성 오류가 됩니다. 검사는 method를 실행하지 않으며, valid peer, Coordinator, Worker의 `calls`도 비어 있어야 합니다.
+
+### 6.4 접근 불가 property와 role mismatch 확인
 
 ```bash
 # 실행 위치: 저장소 루트의 Git Bash 또는 WSL Bash
@@ -108,7 +118,7 @@ uv run pytest \
 
 첫 test는 `act`/`propose` property accessor가 예외를 내도 원인(chain)을 유지한 `WorkflowConfigurationError`가 되는지를 확인합니다. 두 번째 test는 `role="qa"` Mock을 `planner=` slot에 배선하는 오류가 첫 Agent call 전에 중단되는지를 확인합니다.
 
-### 6.4 전체 Volume 07 contract 재실행
+### 6.5 전체 Volume 07 contract 재실행
 
 ```bash
 # 실행 위치: 저장소 루트의 Git Bash 또는 WSL Bash
@@ -119,7 +129,7 @@ uv run pytest tests/volume07 -q
 
 ## 7. 코드 설명
 
-공통 helper `validate_callable_boundary()`는 protocol method를 실행하지 않고 먼저 읽습니다.
+공통 helper `validate_callable_boundary()`는 protocol method를 실행하지 않고 먼저 읽은 뒤, orchestrator가 전달할 한 positional context에 signature를 bind할 수 있는지 확인합니다.
 
 ```python
 try:
@@ -132,9 +142,16 @@ if not callable(method):
     raise WorkflowConfigurationError(
         f"{name} must provide a callable {method_name}(context) method"
     )
+try:
+    signature = inspect.signature(method)
+    signature.bind(object())
+except (TypeError, ValueError) as error:
+    raise WorkflowConfigurationError(
+        f"{name} {method_name} boundary must accept one positional context argument"
+    ) from error
 ```
 
-`getattr()`의 accessor failure를 잡는 이유는 property도 local adapter의 configuration boundary이기 때문입니다. `from error`를 사용하면 caller가 stable public exception을 처리하면서 원래 adapter 오류도 조사할 수 있습니다. `callable()` 검사는 method signature를 호출해 추측하지 않으므로 구성 중 side effect를 만들지 않습니다.
+`getattr()`의 accessor failure를 잡는 이유는 property도 local adapter의 configuration boundary이기 때문입니다. `from error`를 사용하면 caller가 stable public exception을 처리하면서 원래 adapter 오류도 조사할 수 있습니다. `inspect.signature()`와 `bind()`는 protocol method를 호출하지 않으므로 구성 중 Agent side effect를 만들지 않습니다. `act(context, extra_required)`처럼 추가 필수 positional argument가 있는 boundary도 이 시점에 거절됩니다.
 
 Review와 release workflow는 `validate_agent_boundary(role, agent)`를 사용합니다. 이 helper는 `act` callable을 검사한 뒤 optional `role` declaration을 검사합니다. Delegation과 conflict workflow는 method 이름이 다르므로 다음처럼 명시적으로 적용합니다.
 
@@ -167,6 +184,7 @@ review_cycles=1
 WorkflowConfigurationError: planner must provide a callable act(context) method
 WorkflowConfigurationError: agent for reviewer propose boundary could not be read
 WorkflowConfigurationError: qa declared role must match 'planner'
+WorkflowConfigurationError: planner act boundary must accept one positional context argument
 ```
 
 오류는 workflow constructor에서 발생하므로 계획, proposal, worker result, audit message가 생성되기 전입니다.
@@ -176,6 +194,7 @@ WorkflowConfigurationError: qa declared role must match 'planner'
 | 증상 | 원인 | 확인 및 해결 |
 |---|---|---|
 | `WorkflowConfigurationError: ... callable act(context)` | 역할 객체에 `act`가 없거나 callable이 아닙니다. | 해당 slot에 local Mock 또는 `act(context)` adapter를 전달합니다. `act`를 호출해 값을 미리 만들지 마십시오. |
+| `... boundary must accept one positional context argument` | `act()`/`propose()`가 callable이지만 orchestrator의 context argument를 받을 수 없습니다. | method를 `act(context)` 또는 `propose(context)` 형태로 고칩니다. configuration 중 method를 실행하거나 placeholder response로 우회하지 마십시오. |
 | `... propose boundary could not be read` | adapter property가 method lookup 시 예외를 냈습니다. | property의 local configuration 오류를 고친 뒤 새 workflow를 구성합니다. exception을 숨기거나 다른 Agent로 fallback하지 마십시오. |
 | `declared role must match` | deterministic Mock의 `role`과 workflow slot/mapping key가 다릅니다. | Mock role label 또는 slot을 정확히 맞춥니다. production identity 검증으로 오해하지 마십시오. |
 | 구성은 성공했지만 `AgentProtocolError` 발생 | 호출 뒤 반환된 response type, content, review field, script budget이 runtime contract를 위반했습니다. | 다음 역할을 호출하지 말고 response schema와 immutable script를 수정합니다. |
@@ -188,6 +207,7 @@ WorkflowConfigurationError: qa declared role must match 'planner'
 2. Delegation workflow에서 `workers` mapping key와 `DeterministicMockWorker.role`을 일부러 다르게 하고, Coordinator의 `calls`가 비어 있는지 test로 고정합니다.
 3. `role` 속성이 없는 minimal adapter를 작성해 callable boundary만으로 구성할 수 있음을 확인합니다. 반환 response는 deterministic local fixture로 고정하고 network/tool을 추가하지 마십시오.
 4. 잘못된 runtime response와 잘못된 configuration boundary를 각각 만들어 `WorkflowConfigurationError`와 `AgentProtocolError`가 발생하는 시점 차이를 표로 비교합니다.
+5. `def act(self): ...`와 `def act(self, context, required): ...` boundary를 각각 구성하고, 둘 다 첫 Agent call 전에 거절되는지 확인합니다.
 
 ## 11. 실무 적용
 
@@ -224,7 +244,7 @@ WorkflowConfigurationError: qa declared role must match 'planner'
 ## 13. 완료 체크리스트
 
 - [ ] `act(context)`와 `propose(context)`가 각 workflow에서 요구되는 역할을 구분했다.
-- [ ] non-callable 또는 inaccessible boundary가 첫 Agent call 전에 `WorkflowConfigurationError`가 됨을 확인했다.
+- [ ] non-callable, inaccessible, 또는 context를 받을 수 없는 callable boundary가 첫 Agent call 전에 `WorkflowConfigurationError`가 됨을 확인했다.
 - [ ] deterministic Mock의 declared role과 workflow slot이 일치해야 함을 확인했다.
 - [ ] 구성 검증과 runtime `AgentProtocolError`의 발생 시점 및 책임을 구분했다.
 - [ ] `PENDING`에서 QA, Worker, DevOps가 실행되지 않음을 확인했다.
@@ -234,4 +254,4 @@ WorkflowConfigurationError: qa declared role must match 'planner'
 
 ## 14. 핵심 정리
 
-안전한 Multi-Agent workflow는 역할 객체가 실패하기 쉬운 runtime path에 들어가기 전에 boundary를 검사합니다. 구성 단계에서는 callable method, inaccessible accessor, deterministic Mock role wiring 같은 배선 오류를 fail-closed로 중단합니다. 실행 단계에서는 response schema와 bounded loop를 검사하고, 사람 승인은 그 이후에도 독립적으로 next stage를 제어합니다. 따라서 valid adapter는 실행 허가가 아니며, `completed`는 이 Volume에서만 local deterministic workflow completion을 뜻합니다.
+안전한 Multi-Agent workflow는 역할 객체가 실패하기 쉬운 runtime path에 들어가기 전에 boundary를 검사합니다. 구성 단계에서는 callable method, one-context signature, inaccessible accessor, deterministic Mock role wiring 같은 배선 오류를 fail-closed로 중단합니다. 실행 단계에서는 response schema와 bounded loop를 검사하고, 사람 승인은 그 이후에도 독립적으로 next stage를 제어합니다. 따라서 valid adapter는 실행 허가가 아니며, `completed`는 이 Volume에서만 local deterministic workflow completion을 뜻합니다.
