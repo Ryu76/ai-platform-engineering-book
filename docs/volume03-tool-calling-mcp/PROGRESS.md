@@ -157,11 +157,86 @@ $ uv run python scripts/check_secrets.py
 fake scheduler만 사용했으며 실제 process, OS pipe, selector, shell, filesystem, network 또는 Tool을
 호출하지 않았습니다.
 
+## 이번 슬라이스: 성공한 raw MCP output을 strict decode하고 fixed literal만 redaction하기
+
+- `src/ai_platform/mcp/output_decode.py`
+  - `decode_and_redact_mcp_stdio_output()`은 이미 EOF까지 bounded drain된 immutable
+    `McpStdioStreamPairCapture`와 typed, deployment-owned
+    `McpStdioOutputRedactionPolicy`만 받아 stdout/stderr를 strict UTF-8로 decode합니다.
+  - valid bytes와 correct `stdout`/`stderr` channel identity를 decode 전에 재검증합니다. invalid
+    UTF-8, malformed capture, invalid policy에는 raw bytes, secret literal, decoder detail 또는 partial
+    text를 반환하지 않는 generic error로 종료합니다.
+  - policy는 최대 16개의 non-empty, deduplicated, 256-character 이하 literal tuple만 받으며
+    NUL/LF/CR을 거부합니다. 긴 literal부터 deterministic하게 `[REDACTED]`로 치환해 overlap의
+    partial masking을 피합니다.
+  - subprocess, pipe, selector, logging sink, JSON-RPC framing, child shutdown, retry 또는 external
+    I/O를 수행하지 않습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - output decode/redaction policy, snapshot, error와 public function을 export했습니다.
+- `examples/volume03/mcp_stdio_output_decode_redaction.py`
+  - memory-only fixed byte pair와 교육용 `demo-secret` literal만 decode/redact해 결과 text를
+    출력합니다. 실제 process, shell, filesystem, network, MCP server, Tool 또는 destructive action을
+    수행하지 않습니다.
+- `tests/volume03/test_mcp_output_decode.py`
+  - both-channel redaction, overlap ordering, empty policy, invalid UTF-8 detail hiding,
+    mutable/ambiguous/oversize policy, invalid policy/capture 및 swapped/non-bytes capture의 decode 전
+    거부를 검증합니다.
+- `docs/volume03-tool-calling-mcp/27-mcp-stdio-output-decode-redaction.md`
+  - strict decode/redaction contract, safe offline exercise, literal-only limitation 및 production
+    observability/DLP responsibility를 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 스물일곱 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: output decode/redaction slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_stdio_output_decode_redaction.py
+stdout: result=ok; token=[REDACTED]
+stderr: diagnostic=[REDACTED]
+
+$ uv run ruff check src/ai_platform/mcp/output_decode.py src/ai_platform/mcp/__init__.py tests/volume03/test_mcp_output_decode.py examples/volume03/mcp_stdio_output_decode_redaction.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/output_decode.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 2 source files
+
+$ uv run pytest tests/volume03/test_mcp_output_decode.py -q
+13 passed in 0.16s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 26 source files
+
+$ uv run pytest -q
+242 passed in 1.59s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 warning을
+출력했지만 project environment에서 정상 완료했습니다. example/test는 in-memory fixed bytes와
+fixed redaction literal만 사용했으며 actual process, OS pipe, shell, filesystem, network, external
+MCP server, Tool 또는 destructive action을 호출하지 않았습니다.
+
 ## 다음 슬라이스
 
-fake readiness model을 Popen child에 바로 결합하지 말고, OS-level concurrent pipe adapter의
-ready/readability contract와 finite backpressure ownership을 OS-specific boundary로 작게 모델링해야
-합니다. block·overflow·read failure에서 scheduler, child shutdown, partial capture와 host error를 누가
-소유하는지 명확히 분리해 검증하세요. 그 뒤 decode/redaction, stdin framing/write,
-cancellation/disconnect, Windows/POSIX process groups, exit-code restart/backoff, durable approval/audit/
-idempotency, Hermes/Codex integration을 각각 별도 slice로 진행해야 합니다.
+strict output text snapshot을 Popen child에 바로 결합하지 말고, stdin JSON-RPC framing의 bounded
+partial write/flush ownership을 small injected binary writer seam으로 모델링해야 합니다. write
+failure·short write·flush failure에서 partial frame, child shutdown request, host error를 누가
+소유하는지 명확히 분리해 검증하세요. 그 뒤 cancellation/disconnect, Windows/POSIX process groups,
+exit-code restart/backoff, durable approval/audit/idempotency, Hermes/Codex integration을 각각 별도
+slice로 진행해야 합니다.

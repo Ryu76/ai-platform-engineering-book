@@ -18,6 +18,12 @@ from ai_platform.mcp.host import (
     shutdown_mcp_stdio_child,
     start_mcp_stdio_child,
 )
+from ai_platform.mcp.output_decode import (
+    McpStdioDecodedOutputPair,
+    McpStdioOutputDecodeError,
+    McpStdioOutputRedactionPolicy,
+    decode_and_redact_mcp_stdio_output,
+)
 from ai_platform.mcp.prompts import (
     McpPromptCatalog,
     McpPromptError,
@@ -71,11 +77,14 @@ __all__ = [
     "McpDispatchError",
     "McpStdioChildFactory",
     "McpStdioChildProcess",
+    "McpStdioDecodedOutputPair",
     "McpStdioFairDrainError",
     "McpStdioHostAllowlist",
     "McpStdioHostError",
     "McpStdioHostLaunchPlan",
     "McpStdioHostShutdownResult",
+    "McpStdioOutputDecodeError",
+    "McpStdioOutputRedactionPolicy",
     "McpStdioPopenFactory",
     "McpStdioPopenProcess",
     "McpStdioReadyChannels",
@@ -116,6 +125,7 @@ __all__ = [
     "shutdown_mcp_stdio_child",
     "start_mcp_stdio_child",
     "dispatch_mcp_tool_call",
+    "decode_and_redact_mcp_stdio_output",
     "drain_mcp_stdio_binary_stream",
     "drain_mcp_stdio_ready_stream_pair",
     "drain_mcp_stdio_stream_pair_fairly",
