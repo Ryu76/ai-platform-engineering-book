@@ -8,7 +8,7 @@
 
 `act(context)` 또는 `propose(context)` 메서드가 호출 가능하다는 사실만으로는 역할 배선이 올바른지 알 수 없습니다. 예를 들어 `role="developer"`로 만든 고정 Mock을 `planner=`에 전달하면, 응답 형식은 정상이어도 audit trail의 책임자가 실제 fixture 의도와 달라집니다.
 
-결정론적 Mock은 테스트 fixture이면서 학습용 역할 모델입니다. 따라서 Mock이 스스로 role을 선언했다면 workflow가 구성될 때 그 선언과 슬롯 이름을 비교해야 합니다. 이 검사는 runtime 응답 검증이나 사람 승인보다 앞선 구성 안전 경계입니다.
+결정론적 Mock은 테스트 fixture이면서 학습용 역할 모델입니다. 따라서 Mock이 스스로 role을 선언했다면 workflow가 구성될 때 그 선언과 슬롯 이름을 비교해야 합니다. 이 검사는 runtime 응답 검증이나 사람 승인보다 앞선 구성 안전 경계입니다. role 검사가 통과해도 bounded loop의 호출 상한은 그대로이며, 구성 검사는 loop를 늘리거나 새 capability를 부여하지 않습니다.
 
 ## 3. 핵심 개념
 
@@ -16,7 +16,7 @@
 - **구성 role:** workflow 생성자의 `planner`, `reviewer`, `devops`, Worker mapping key, conflict Agent mapping key처럼 workflow가 기대하는 역할입니다.
 - **선택적 선언:** 실제 adapter처럼 `role` 속성이 없는 protocol 구현체는 계속 구조적 boundary 검사만 받습니다. 이 장의 추가 검사는 role을 명시한 Mock의 fixture 배선 오류를 잡습니다.
 - **fail-closed:** 선언 role이 비어 있거나 구성 role과 다르면 `WorkflowConfigurationError`를 발생시키고 어떤 Agent도 호출하지 않습니다.
-- **승인과 분리:** `APPROVED`는 올바르게 구성되고 Reviewer가 승인한 실행의 다음 단계를 열 뿐입니다. 구성 오류를 우회하지 않습니다.
+- **승인과 분리:** `PENDING`은 안전하게 pause하고, `APPROVED`는 올바르게 구성되고 Reviewer가 승인한 실행의 다음 local 단계를 열 뿐이며, `REJECTED`는 Agent 호출 전에 종료합니다. 어느 값도 구성 오류를 우회하지 않습니다.
 
 ## 4. 동작 구조
 
@@ -63,6 +63,13 @@ uv run pytest tests/volume07/test_declared_mock_role_binding.py -q
 
 모든 경우 생성자에서 `WorkflowConfigurationError`가 발생하고, coordinator·peer·후속 Agent를 포함한 호출 기록은 비어 있어야 합니다.
 
+이 Chapter의 문서 계약도 실행합니다. 이 테스트는 14개 학습 section, role binding 경계, bounded loop와 명시적 사람 승인의 분리를 계속 확인합니다.
+
+```bash
+# 실행 위치: 저장소 루트의 bash 또는 WSL 터미널
+uv run pytest tests/volume07/test_declared_mock_role_binding_documentation.py -q
+```
+
 전체 Volume 07의 offline 계약도 실행합니다.
 
 ```bash
@@ -96,7 +103,7 @@ if declared_role != expected_role:
 uv run python examples/volume07/offline_review_workflow.py
 ```
 
-기본 실행은 role 검증 뒤에도 `status=awaiting_human_approval`에서 멈춥니다. 이 결과는 role 일치가 QA 승인이나 완료를 자동으로 허용하지 않음을 보여 줍니다.
+기본 실행은 role 검증 뒤에도 `status=awaiting_human_approval`에서 멈춥니다. 이 결과는 role 일치가 QA 승인이나 완료를 자동으로 허용하지 않음을 보여 줍니다. `PENDING`은 pause, `APPROVED`는 gated local QA만 허용, `REJECTED`는 첫 Agent 호출 전에 종료한다는 explicit human approval 경계도 독립적으로 유지됩니다.
 
 ## 9. 오류 해결
 
@@ -118,7 +125,9 @@ uv run python examples/volume07/offline_review_workflow.py
 
 ## 11. 실무 적용
 
-실제 Agent runtime에서 단순 문자열 role은 신뢰할 수 있는 identity가 아닙니다. service account, signed workload identity 또는 정책 엔진에서 부여한 principal과 권한을 사용해야 합니다. 또한 role 검증은 도구 권한, release 승인, 사람 검토의 대체물이 아닙니다. 이 예제처럼 각 경계를 분리하고, 구성 오류는 외부 호출 전에 중단하는 원칙만 유지합니다.
+실제 Agent runtime에서 단순 문자열 role은 신뢰할 수 있는 identity가 아닙니다. service account, signed workload identity 또는 정책 엔진에서 부여한 principal과 권한을 사용해야 합니다. 또한 role 검증은 tool 권한, release 승인, 사람 검토의 대체물이 아닙니다. 이 예제처럼 각 경계를 분리하고, 구성 오류는 외부 호출 전에 중단하는 원칙만 유지합니다.
+
+Volume 07의 이 lesson은 deterministic local Mock만 다룹니다. live API, network Agent, secret 조회, tool 실행, 파일 변경, deployment는 구현하거나 실행하지 않습니다. `completed`는 외부 변경이 아니라 명시적으로 승인된 local audit 결과일 뿐입니다.
 
 ## 12. 과제
 

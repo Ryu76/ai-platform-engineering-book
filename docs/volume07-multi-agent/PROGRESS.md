@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 36: Chapter 11 선언 deterministic Mock 역할 바인딩 PRD 문서 계약
+
+- `test_declared_mock_role_binding_documentation.py`를 추가해 Chapter 11의 14개 학습 section, `DeterministicMockAgent`/`DeterministicMockWorker`/`DeterministicMockConflictAgent`, `validate_declared_role`, `WorkflowConfigurationError`, focused/full regression 명령을 회귀 검증한다. 문서 contract는 local fixture role 배선과 production identity·tool authority를 분리한다.
+- Chapter 11은 role label 검사가 bounded loop 호출 상한을 변경하거나 capability를 부여하지 않으며, `PENDING` safe pause, `APPROVED`의 gated local 다음 단계, `REJECTED`의 pre-call 종료가 구성 fail-closed 검사를 우회하지 않음을 명시한다. deterministic local Mock만 다루며 live API, network Agent, secret 조회, tool 실행, 파일 변경, deployment가 없음을 고정했다.
+- `uv run pytest tests/volume07/test_declared_mock_role_binding.py tests/volume07/test_declared_mock_role_binding_documentation.py -q`는 5 passed였고, `uv run pytest tests/volume07 -q`는 79 passed였다. `uv run ruff check src/ai_platform/agents tests/volume07`, `uv run mypy src/ai_platform/agents`, `validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py`도 통과했다. review example 기본 실행은 `awaiting_human_approval`, `--approve`는 local QA만 포함한 `completed`를 실제 출력했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 35: Chapter 03 유한 충돌 해결 PRD 문서 계약
 
 - `test_bounded_conflict_resolution_documentation.py`를 추가해 Chapter 03의 14개 학습 section, `ConflictProposal`/`ConflictContext`/`DeterministicMockConflictAgent`, exact consensus, `max_agents`/`max_rounds` bounded loop, `PENDING`/`APPROVED`/`REJECTED`, `awaiting_human_approval`/`conflict_limit_reached`를 회귀 검증한다. 예제·focused/full regression 명령과 live API·secret·tool·deployment 없는 local-only 범위도 test contract로 고정했다.
