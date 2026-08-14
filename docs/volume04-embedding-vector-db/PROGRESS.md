@@ -812,3 +812,25 @@ git diff --check
 
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+
+## 2026-08-14 — Slice 31 완료: reciprocal-rank 이산 순위 의미 보장
+
+### 추가한 결과물
+
+- `retrieval_evaluation.py`의 public `RetrievalMetrics` 생성 계약을 강화했습니다.
+  - `reciprocal_rank`는 `0.0` 또는 실제 1-indexed 정수 순위의 역수여야 합니다.
+  - 따라서 수치 범위에는 맞지만 실제 rank에서 나올 수 없는 `0.6` 같은 수동 fixture가 평균 MRR 보고서에 섞이지 않습니다.
+  - IEEE-754 반올림 오차를 고려해 결정적인 `1 / n` 결과는 허용합니다.
+- `test_volume04_retrieval_evaluation.py`에 `reciprocal_rank=0.6` 수동 metric record 거부 회귀 테스트를 추가했습니다.
+- 03장에 reciprocal-rank의 이산 rank 계약과 새 오류 해결 항목을 기록했습니다.
+
+### 검증 결과
+
+- Volume 04 테스트 5개: **77 passed in 0.33s**.
+- `ruff check`: **All checks passed!**; `mypy src/ai_platform/embeddings`: **5 source files, no issues**.
+- 네 개의 결정적 local mock 예제를 실행했습니다: embedding/search top score `0.548`; retrieval `precision_at_1=1.0`, `recall_at_1=1.0`, `mrr=1.0`, `answerable=True`; lifecycle `deleted_count=1`, `reindexed_version=2`, `collection_size=3`, `top_1_recovered=True`.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.

@@ -150,6 +150,10 @@ def test_threshold_rejects_non_finite_or_out_of_cosine_range_values(
             "precision_at_k must be between",
         ),
         (
+            lambda: RetrievalMetrics(0.5, 0.5, 0.6, True),
+            "reciprocal_rank must be zero or the reciprocal",
+        ),
+        (
             lambda: RetrievalMetrics(0.0, 0.0, 0.0, 1),
             "hit_at_k must be a bool",
         ),

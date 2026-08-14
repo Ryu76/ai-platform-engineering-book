@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from math import isfinite
+from math import isclose, isfinite
 
 
 class RetrievalEvaluationError(ValueError):
@@ -29,6 +29,7 @@ class RetrievalMetrics:
         _require_unit_interval_metric(self.precision_at_k, name="precision_at_k")
         _require_unit_interval_metric(self.recall_at_k, name="recall_at_k")
         _require_unit_interval_metric(self.reciprocal_rank, name="reciprocal_rank")
+        _require_reciprocal_rank(self.reciprocal_rank)
         if not isinstance(self.hit_at_k, bool):
             raise RetrievalEvaluationError("hit_at_k must be a bool")
         has_relevant_result = self.precision_at_k > 0.0
@@ -187,3 +188,14 @@ def _require_unit_interval_metric(value: float, *, name: str) -> None:
     _require_finite_score(value, name=name)
     if not 0.0 <= value <= 1.0:
         raise RetrievalEvaluationError(f"{name} must be between 0.0 and 1.0")
+
+
+def _require_reciprocal_rank(value: float) -> None:
+    """reciprocal rank가 0 또는 실제 1-indexed 순위의 역수인지 검증한다."""
+    if value == 0.0:
+        return
+    inverse_rank = 1.0 / value
+    if not isclose(inverse_rank, round(inverse_rank), rel_tol=0.0, abs_tol=1e-12):
+        raise RetrievalEvaluationError(
+            "reciprocal_rank must be zero or the reciprocal of a positive integer rank"
+        )
