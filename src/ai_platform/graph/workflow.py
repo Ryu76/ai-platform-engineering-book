@@ -124,13 +124,42 @@ class StreamingWorkflow:
             yield self._save_and_update(run_id=run_id, state=state)
 
     def resume_stream(self, *, run_id: str, approved: bool) -> Iterator[StreamUpdate]:
-        """사람 결정을 기록한 뒤 허용된 Node 전이만 순서대로 내보낸다."""
-        state = self._checkpointer.load(run_id=run_id)
-        state = resolve_approval_node(state, approved=approved)
-        yield self._save_and_update(run_id=run_id, state=state)
+        """사람 결정을 CAS로 한 번만 기록한 뒤 저장된 전이만 내보낸다.
+
+        동시에 도착한 재개 요청은 같은 승인 대기 상태를 읽을 수 있다. 각 전이의
+        저장에 ``save_if_current()``를 사용하므로 첫 요청만 승인 결정과 오프라인
+        실행 시뮬레이션을 기록한다. 나머지는 update를 yield하기 전에 충돌로 끝난다.
+        """
+        expected_state = self._checkpointer.load(run_id=run_id)
+        try:
+            state = resolve_approval_node(expected_state, approved=approved)
+        except ValueError as error:
+            if "waiting state" not in str(error):
+                raise
+            raise WorkflowRunConflictError(
+                f"workflow approval is no longer pending: {run_id}"
+            ) from error
+        if not self._checkpointer.save_if_current(
+            run_id=run_id,
+            expected_state=expected_state,
+            state=state,
+        ):
+            raise WorkflowRunConflictError(
+                f"workflow checkpoint changed before approval was recorded: {run_id}"
+            )
+        yield StreamUpdate(run_id=run_id, state=state, event=state.events[-1])
         if state.status is WorkflowStatus.READY:
+            expected_state = state
             state = execute_node(state)
-            yield self._save_and_update(run_id=run_id, state=state)
+            if not self._checkpointer.save_if_current(
+                run_id=run_id,
+                expected_state=expected_state,
+                state=state,
+            ):
+                raise WorkflowRunConflictError(
+                    f"workflow checkpoint changed before execution was recorded: {run_id}"
+                )
+            yield StreamUpdate(run_id=run_id, state=state, event=state.events[-1])
 
     def checkpoint(self, *, run_id: str) -> WorkflowState:
         """검증 또는 표시를 위해 최신 Checkpoint를 읽는다."""

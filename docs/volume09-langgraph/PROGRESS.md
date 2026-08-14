@@ -1020,3 +1020,59 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+
+## 최신 슬라이스 — 동시 Streaming 승인 CAS
+
+- `src/ai_platform/graph/workflow.py`
+  - `StreamingWorkflow.resume_stream()`이 승인 결정과 `execute` 시뮬레이션을 각각 `save_if_current()`으로 checkpoint-before-yield 하도록 변경했습니다. 같은 `WAITING_FOR_APPROVAL` 상태를 동시에 읽은 후발 재전송은 어떤 update도 내보내기 전에 `WorkflowRunConflictError`로 끝나며, 이미 소비된 대기도 같은 충돌 계약으로 정규화합니다.
+- `tests/unit/test_volume09_graph.py`
+  - 8개의 동시 `approved=True` Streaming 재개에서 정확히 하나만 `approval | execute` update와 `COMPLETED` Checkpoint를 기록하고, 나머지 7개는 충돌하며 최종 감사 이벤트가 하나의 실행만 포함하는 회귀 계약을 추가했습니다.
+- `examples/volume09/streaming_concurrent_approval_workflow.py`
+  - 프로세스 내 메모리 Checkpointer에서 8개 동시 승인 재전송이 `completed=1`, `conflicts=7`, `plan | approval | approval | execute`를 출력하는 결정론적 오프라인 데모를 추가했습니다.
+- `docs/volume09-langgraph/28-streaming-concurrent-approval-cas.md`, `README.md`
+  - Streaming 승인·실행의 이중 CAS 경계, conflict의 무-update 계약, 단일 프로세스 한계와 실제 위험 작업에 필요한 별도 인증·분산 멱등성을 14개 장 템플릿으로 문서화했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. `DEPLOY`는 여전히 별도의 엄격한 Boolean 승인 없이는 `WAITING_FOR_APPROVAL`에서 `execute` Node로 이동하지 않습니다.
+
+## 최신 검증 기록 — 동시 Streaming 승인 CAS 슬라이스
+실행 위치: `E:\python\ai-platform-engineering-book-volume-09`
+실행 위치: `E:\pythoni-platform-engineering-book-volume-09`
+
+```text
+$ uv run python examples/volume09/streaming_concurrent_approval_workflow.py
+completed=1
+conflicts=7
+events=plan | approval | approval | execute
+
+$ uv run pytest tests/unit/test_volume09_graph.py::test_concurrent_streaming_approvals_emit_one_execution_and_preserve_terminal_checkpoint -q  # 10회 반복
+각 반복: 1 passed (0.26s~0.44s), 총 10/10 통과
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+51 passed in 1.02s
+
+$ uv run pytest -q
+112 passed in 1.69s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
