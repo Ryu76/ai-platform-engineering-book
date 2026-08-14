@@ -24,7 +24,7 @@
 - **Exact consensus(정확한 합의):** 한 round의 모든 proposal `option` 값이 같은 경우입니다. rationale이 같아야 한다는 뜻은 아니지만, option의 대소문자·공백·의미를 Orchestrator가 정규화하거나 추측하지 않습니다.
 - **ConflictContext:** `objective`, 현재 `round`, 이전 immutable `messages` tuple을 Agent에 전달합니다. 이전 message text 자체가 tool capability, action authority 또는 사람 승인을 전달하지는 않습니다.
 - **ConflictMessage:** proposal rationale 또는 policy observation을 role과 round에 연결한 immutable audit record입니다.
-- **Bounded loop:** 등록 Agent 수는 2 이상이고 `max_agents` 이하입니다. 각 round의 각 Agent는 한 번만 호출되며 `max_rounds`도 positive integer여야 합니다.
+- **bounded loop(유한 반복):** 등록 Agent 수는 2 이상이고 `max_agents` 이하입니다. 각 round의 각 Agent는 한 번만 호출되며 `max_rounds`도 positive integer여야 합니다.
 - **Human approval:** `ConflictApproval.PENDING`은 consensus를 보여 주고 `awaiting_human_approval`에서 pause합니다. `APPROVED`일 때만 completed result를 만들고, `REJECTED`는 모든 Agent 호출 전에 종료합니다.
 - **Deterministic Mock:** `DeterministicMockConflictAgent`는 immutable non-empty proposal tuple을 호출 순서대로 소비합니다. script가 소진되면 fallback 없이 `AgentProtocolError`를 발생시킵니다.
 

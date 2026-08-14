@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 35: Chapter 03 유한 충돌 해결 PRD 문서 계약
+
+- `test_bounded_conflict_resolution_documentation.py`를 추가해 Chapter 03의 14개 학습 section, `ConflictProposal`/`ConflictContext`/`DeterministicMockConflictAgent`, exact consensus, `max_agents`/`max_rounds` bounded loop, `PENDING`/`APPROVED`/`REJECTED`, `awaiting_human_approval`/`conflict_limit_reached`를 회귀 검증한다. 예제·focused/full regression 명령과 live API·secret·tool·deployment 없는 local-only 범위도 test contract로 고정했다.
+- Chapter 03의 핵심 개념에 `bounded loop(유한 반복)` 표기를 명시해 PRD 언어와 현재 호출 예산 설명을 일치시켰다. exact consensus policy message는 approval이나 action capability가 아니며, 모든 loop와 Agent script는 deterministic local fixture 및 유한 상한을 유지한다.
+- `uv run pytest tests/volume07/test_bounded_conflict_resolution.py tests/volume07/test_bounded_conflict_resolution_documentation.py -q`는 8 passed였다. conflict example의 기본 실행은 `awaiting_human_approval`, `--approve` 실행은 동일한 local audit과 `completed`를 실제 출력했다. 전체 `uv run pytest tests/volume07 -q`는 78 passed였으며, `uv run ruff check src/ai_platform/agents tests/volume07`, `uv run mypy src/ai_platform/agents`, `validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 34: 불변 Audit Snapshot message passing 계약
 
 - `16-immutable-audit-snapshots.md`를 PRD 학습 template의 14개 section으로 추가했다. 문서는 `AgentContext`·`DelegationContext`·`ConflictContext`의 per-call immutable tuple snapshot, deterministic Mock의 고정 script, bounded loop, `PENDING`/`APPROVED`/`REJECTED` explicit human approval의 독립 책임을 설명한다. 과거 context는 이후 QA·Worker·policy·DevOps message를 받지 않으며, message text는 approval 또는 tool capability가 아니다.
