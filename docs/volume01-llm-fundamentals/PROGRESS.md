@@ -100,3 +100,37 @@ Paused job: ai-book-volume-08-author (f47b02d46ebb)
 ```
 
 검증 중 실제 키·라이브 API·외부 서비스 호출은 사용하지 않았다. `uv`가 Hermes 활성 가상환경과 프로젝트 `.venv` 경로 차이를 경고했지만, 모든 품질 검사와 pytest는 종료 코드 0으로 완료됐다.
+
+## 재검증 슬라이스: Volume 01 완료 상태 확인 및 실제 일정 식별
+
+- 마지막 갱신: 2026-08-14T11:40:08+09:00
+- `VOLUME01_COMPLETE=true`를 유지한다. PRD Volume 01의 필수 개념, 10개 실습, Client·CLI·`.env.example`·Mock/통합 테스트 결과물은 권 전용 계약 테스트와 오프라인 CLI 실행으로 재확인했다.
+- Hermes cron 목록에서 현재 작업 디렉터리 `E:\python\ai-platform-engineering-book-volume-01` 및 작업명 `ai-book-volume-01-author`를 기준으로 이 작업을 `f9dcb63c71e4`로 식별했다. 이전 기록의 Volume 08 작업 ID와 혼동하지 않는다.
+
+## 재검증 결과
+
+```text
+uv run pytest tests/unit/test_llm_client.py tests/unit/test_chat.py tests/unit/test_usage.py tests/integration/test_volume01_prd_contract.py tests/integration/test_volume01_completion_contract.py tests/integration/test_volume01_chat_cli.py tests/integration/test_volume01_exercises.py tests/integration/test_volume01_summary.py -q
+86 passed in 1.48s
+
+uv run ruff check .
+All checks passed!
+uv run mypy src
+Success: no issues found in 7 source files
+
+uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+uv run python scripts/validate_links.py
+링크 검증 통과
+uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+uv run python scripts/check_secrets.py
+비밀값 검사 통과
+
+printf '/help\\n/quit\\n' | uv run python examples/volume01/chat_cli.py --offline-demo
+AI 업무 처리 플랫폼 챗봇입니다. 종료하려면 /exit 또는 /quit을 입력하세요.
+사용자> 도움말: 질문을 입력하면 선택한 LLM에 전송될 수 있습니다. 종료하려면 /exit 또는 /quit을 입력하세요.
+사용자> 대화를 마칩니다.
+```
+
+모든 명령은 종료 코드 0으로 완료됐으며 실제 키·라이브 API·외부 서비스 호출을 사용하지 않았다. `uv`는 Hermes 활성 가상환경과 프로젝트 `.venv` 경로 차이에 대한 경고만 출력했다.
