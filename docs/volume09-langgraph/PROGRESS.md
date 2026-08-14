@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 같은 Python 프로세스에서 `checkpoints.json`과 `path-alias/../checkpoints.json`처럼 **서로 다른 Path 표기**로 같은 파일을 여는 8개의 독립 `JsonFileCheckpointer` 인스턴스가 동시 `DEPLOY` 시작을 재전송해도, `Path.resolve()` 기반 경로 단위 Lock이 정확히 하나의 `WAITING_FOR_APPROVAL` Checkpoint만 생성함을 검증했습니다. 나머지 7개는 `WorkflowRunConflictError`로 끝나며, 중복 요청은 기존 Action·승인 대기 상태·감사 이벤트를 바꾸지 않고 어떤 요청도 `execute`를 기록하지 않습니다. 보장은 하나의 프로세스와 정규화 뒤 같은 로컬 경로로 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
-- 이번 검증: `json_normalized_path_concurrent_start_workflow.py`는 `waiting_for_approval=1`, `conflicts=7`, `plan | approval`를 출력했습니다. 새 경로 별칭 동시 시작 계약 테스트는 10회 반복 모두 통과했고, Volume 09 단위 테스트는 `44 passed`, 전체 테스트는 `105 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
+- 이번 슬라이스: 같은 Python 프로세스의 `MemoryCheckpointer`를 공유하는 8개의 동시 `approved=False` Streaming 재개가 하나의 `WAITING_FOR_APPROVAL` Checkpoint를 정확히 한 번만 소비함을 검증했습니다. 승자만 `REJECTED` Checkpoint와 단일 `approval` update를 기록하고, 나머지 7개는 `WorkflowRunConflictError`로 끝나며 어떤 update·감사 이벤트·`execute`도 추가하지 않습니다. 보장은 프로세스 내 Lock 범위에 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+- 이번 검증: `streaming_concurrent_rejection_workflow.py`는 `rejected=1`, `conflicts=7`, `plan | approval | approval`를 출력했습니다. 새 동시 Streaming 거절 계약 테스트는 10회 반복 모두 통과했고, Volume 09 단위 테스트는 `52 passed`, 전체 테스트는 `113 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
@@ -1021,6 +1021,19 @@ $ git diff --check
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
 
+
+## 최신 슬라이스 — 동시 Streaming 거절 CAS
+
+- `docs/volume09-langgraph/29-streaming-concurrent-rejection-cas.md`, `README.md`
+  - 동시 `approved=False` 재전송이 하나의 대기 Checkpoint만 `REJECTED`로 전이하고, 후발 요청은 update 없이 충돌하며 `execute` 경로가 열리지 않는 CAS·checkpoint-before-yield 계약을 14개 장 템플릿으로 문서화했습니다.
+- `examples/volume09/streaming_concurrent_rejection_workflow.py`
+  - 프로세스 내 메모리 Checkpointer에서 8개 동시 거절 재전송이 `rejected=1`, `conflicts=7`, `plan | approval | approval`을 출력하는 결정론적 오프라인 데모를 추가했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 8개의 동시 Streaming 거절 재개에서 정확히 하나만 `approval` update와 `REJECTED` Checkpoint를 기록하고, 나머지 7개는 충돌하며 최종 감사 이벤트에 `execute`가 없고 결과가 없는 회귀 계약을 추가했습니다.
+
+검증: 예제 출력은 `rejected=1`, `conflicts=7`, `events=plan | approval | approval`이었습니다. 새 계약 테스트는 10회 반복 모두 통과했고, Volume 09 테스트는 `52 passed`, 전체 테스트는 `113 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. `DEPLOY`는 별도의 엄격한 Boolean 승인 없이는 `WAITING_FOR_APPROVAL`에서 `execute` Node로 이동하지 않으며, 명시적 거절도 오프라인 상태 전이일 뿐 실제 부작용을 만들지 않습니다.
 
 ## 최신 슬라이스 — 동시 Streaming 승인 CAS
 

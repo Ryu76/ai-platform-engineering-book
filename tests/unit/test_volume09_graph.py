@@ -679,6 +679,41 @@ def test_concurrent_streaming_approvals_emit_one_execution_and_preserve_terminal
     ]
 
 
+def test_concurrent_streaming_rejections_emit_one_decision_and_no_execution() -> None:
+    """동시 거절 재전송은 한 승인 대기만 종료하고 execute update를 만들지 않는다."""
+    checkpointer = MemoryCheckpointer()
+    workflow = StreamingWorkflow(checkpointer=checkpointer)
+    run_id = "stream-concurrent-rejection-001"
+    list(
+        workflow.stream(
+            run_id=run_id,
+            task="학습용 배포를 준비한다",
+            action=ActionKind.DEPLOY,
+        )
+    )
+    barrier = Barrier(8)
+
+    def reject_once() -> tuple[WorkflowStatus, tuple[str, ...]] | str:
+        barrier.wait(timeout=5)
+        try:
+            updates = tuple(workflow.resume_stream(run_id=run_id, approved=False))
+        except WorkflowRunConflictError:
+            return "conflict"
+        return updates[-1].state.status, tuple(update.event.node for update in updates)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(lambda _: reject_once(), range(8)))
+
+    assert outcomes.count((WorkflowStatus.REJECTED, ("approval",))) == 1
+    assert outcomes.count("conflict") == 7
+    rejected = checkpointer.load(run_id=run_id)
+    assert rejected.status is WorkflowStatus.REJECTED
+    assert rejected.approval_granted is False
+    assert rejected.result is None
+    assert [event.node for event in rejected.events] == ["plan", "approval", "approval"]
+    assert "execute" not in [event.node for event in rejected.events]
+
+
 def test_streaming_workflow_emits_no_execute_update_when_risky_action_is_rejected() -> None:
     """거절된 위험 작업은 approval 결정만 스트리밍하고 execute를 생략한다."""
     workflow = StreamingWorkflow()
