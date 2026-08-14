@@ -16,7 +16,7 @@
 - **역할 권한 계약:** `ReviewDecision.APPROVE`와 `ReviewDecision.REVISE`는 Reviewer만 반환할 수 있습니다.
 - **Reviewer 결정:** Reviewer는 `APPROVE` 또는 `REVISE` 중 하나를 반드시 명시해야 합니다. `None`은 유효한 검토 결과가 아닙니다.
 - **fail-closed:** 권한 위반 또는 결정 누락은 `AgentProtocolError`로 즉시 종료합니다. fallback, 추가 반복, 다음 역할 호출은 하지 않습니다.
-- **사람 승인:** `HumanApproval.APPROVED`는 유효한 Reviewer 승인 뒤 QA와 로컬 handoff를 허용할 뿐, 역할 권한을 부여하지 않습니다.
+- **사람 승인:** `HumanApproval.PENDING`은 유효한 Reviewer 승인 뒤에도 안전하게 멈추고, `APPROVED`만 QA와 로컬 handoff를 허용합니다. `REJECTED`는 모든 Agent 호출 전에 종료합니다. 어느 값도 역할 권한을 부여하거나 protocol 오류를 우회하지 않습니다.
 
 ## 4. 동작 구조
 
@@ -50,7 +50,7 @@ AgentProtocolError (후속 역할 호출 없음)
 
 - Python 3.12 이상과 프로젝트의 `uv` 환경이 필요합니다.
 - 명령 실행 위치는 저장소 루트의 bash 또는 WSL 터미널입니다.
-- 실습은 결정론적 local Mock만 사용합니다. live API, 네트워크, secret, 도구 실행, 배포는 사용하지 않습니다.
+- 실습은 결정론적 local Mock만 사용합니다. live API, 네트워크, secret, tool 실행, deployment는 사용하지 않습니다.
 
 ## 6. 단계별 실습
 
@@ -72,7 +72,7 @@ uv run pytest tests/volume07 -q
 
 ## 7. 코드 설명
 
-두 workflow의 `_validate_role_response()`는 먼저 기존 `_validate_response()`로 `AgentResponse`, 비어 있지 않은 `content`, `review` enum 형식을 검사합니다. 그 뒤 역할별 정책을 적용합니다.
+`BoundedReviewWorkflow`와 `ApprovalGatedReleaseHandoffWorkflow`의 `_validate_role_response()`는 먼저 기존 `_validate_response()`로 `AgentResponse`, 비어 있지 않은 `content`, `review` enum 형식을 검사합니다. 그 뒤 역할별 정책을 적용합니다.
 
 ```python
 if role != "reviewer" and response.review is not None:

@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 32: Chapter 09 역할 범위 검토 권한 PRD 학습 계약
+
+- `09-role-scoped-review-authority.md`의 사람 승인 설명을 `PENDING`의 safe pause, `APPROVED`의 gated local QA/handoff, `REJECTED`의 pre-call 종료로 명확히 했다. 어느 approval 값도 Reviewer-only `ReviewDecision` 권한이나 `AgentProtocolError` fail-closed protocol 검증을 우회하지 않는다.
+- `test_role_scoped_review_authority_documentation.py`를 추가해 Chapter 09의 14 section, `AgentResponse`/`ReviewDecision`/`AgentProtocolError`, 두 bounded local workflow, focused/full regression 명령, `PENDING`/`APPROVED`/`REJECTED`, live API·secret·tool 실행·deployment 없는 범위를 회귀 검증한다.
+- `uv run pytest tests/volume07/test_runtime_review_decision_contract.py tests/volume07/test_role_scoped_review_authority_documentation.py -q`는 6 passed였고, review example의 기본 실행은 QA 없이 `awaiting_human_approval`, `--approve`는 local QA message만 포함한 `completed`였다. 전체 `uv run pytest tests/volume07 -q`는 71 passed였으며, `uv run ruff check src/ai_platform/agents tests/volume07`, `uv run mypy src/ai_platform/agents`, `validate_docs.py`, `validate_links.py`, `check_secrets.py`, `validate_code_blocks.py`도 통과했다. deterministic local Mock, bounded loop, explicit human approval만 사용했으며 live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 31: Chapter 07 고정 Mock script 항목 PRD 학습 계약
 
 - `07-fixed-script-entry-contracts.md`에 전체 Volume 07 regression 실행 단계와 `PENDING`/`APPROVED`/`REJECTED`의 독립 책임을 명시했다. fixed fixture의 구성 오류는 approval로 우회할 수 없고, `REJECTED`는 Agent 호출 전에 종료하며, 유효한 tuple fixture도 bounded loop와 explicit human approval을 변경하지 않는다.
