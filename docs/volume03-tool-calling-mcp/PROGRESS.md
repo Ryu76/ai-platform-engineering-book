@@ -945,3 +945,88 @@ client-neutral handoff은 actual client configuration의 완료 선언이 아닙
 Codex의 해당 공식 configuration schema/version을 별도 read-only fixture로 대조하고, credential/file
 permission/reload acknowledgement를 실제 client 실행 없이 검증할 safe adapter boundary가 남아 있습니다.
 그 뒤 전체 운영 DoD를 재평가해야 합니다.
+
+## 이번 슬라이스: client configuration acknowledgement를 exact handoff에 대조하기
+
+- `src/ai_platform/mcp/client_acknowledgement.py`
+  - `McpClientConfigurationApplication`은 기존 immutable client-neutral handoff을 direct construction
+    뒤에도 exact client/server/Tool tuple로 재검증하고, opaque one-line deployment generation과 묶습니다.
+  - `McpClientConfigurationAcknowledgement`는 separate client-specific adapter의 successful apply/reload
+    receipt를 위한 최소 snapshot이며, client/server/Tool tuple/generation이 application과 전부 일치할 때만
+    `verify_mcp_client_configuration_acknowledgement()`가 original handoff을 돌려줍니다.
+  - mismatch·mutable/wildcard visibility·forged handoff은 client I/O 전에 generic error로 중단하며 config
+    content, credential, path, adapter log 또는 partial visibility를 보관/반환하지 않습니다. Actual client
+    config schema/version, credential/file permission, atomic write/reload provenance, connection health는
+    별도 production adapter ownership입니다.
+- `src/ai_platform/mcp/__init__.py`
+  - configuration application, acknowledgement, error, verifier를 public export에 추가했습니다.
+- `examples/volume03/mcp_client_configuration_acknowledgement.py`
+  - fixed in-memory Hermes label, `safe_calculator` exact visibility, deployment generation receipt만 대조해
+    verified fields를 출력합니다. actual Hermes/Codex client, config file, secret, process, filesystem,
+    network, MCP server, Tool 또는 destructive action을 호출하지 않습니다.
+- `tests/volume03/test_mcp_client_acknowledgement.py`
+  - matching original handoff identity, client/server/Tool/generation mismatch, invalid/mutable/duplicate/
+    wildcard/newline receipt, forged handoff, invalid application/acknowledgement의 pre-trust rejection을
+    in-memory fixture로 검증합니다.
+- `docs/volume03-tool-calling-mcp/37-mcp-client-configuration-acknowledgement.md`
+  - receipt equality boundary, Hermes 공식 MCP guide, safe offline exercise 및 actual schema/credential/
+    reload health ownership 한계를 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른일곱 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: client configuration acknowledgement slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_client_configuration_acknowledgement.py
+client: hermes-agent
+server_name: safe-tools
+visible_tools: safe_calculator
+configuration_generation: volume03-demo-001
+
+$ uv run ruff format --check src/ai_platform/mcp/client_acknowledgement.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_configuration_acknowledgement.py tests/volume03/test_mcp_client_acknowledgement.py
+4 files already formatted
+
+$ uv run ruff check src/ai_platform/mcp/client_acknowledgement.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_configuration_acknowledgement.py tests/volume03/test_mcp_client_acknowledgement.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/client_acknowledgement.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 2 source files
+
+$ uv run pytest tests/volume03/test_mcp_client_acknowledgement.py -q
+12 passed in 0.19s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 36 source files
+
+$ uv run pytest -q
+349 passed in 1.63s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만 project
+environment에서 정상 완료했습니다. 이 slice의 example/test는 in-memory data만 사용했으며 actual
+Hermes/Codex client, config file, credential, process, MCP server, network, Tool 또는 destructive action을
+호출하지 않았습니다.
+
+## 다음 슬라이스
+
+client receipt equality도 actual configuration security/health의 완료 선언이 아닙니다. Volume 03 DoD를
+정확히 재평가하고, production에 남은 official client schema/version, authenticated receipt provenance,
+credential injection, file ownership/atomic rollback, reload/reconnect health와 durable operations를
+implementation boundary 밖으로 명시적으로 점검해야 합니다.
