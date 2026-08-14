@@ -1070,3 +1070,46 @@ PRD DoD 상태:
 - Volume 08의 Rule·Keyword·Embedding 기반 Semantic·LLM Router, threshold, fallback, 비용·지연 시간·capability 정책, escalation, decision log, 평가 dataset·accuracy, API, 미니 프로젝트, 체크리스트, Volume 09 인계와 허용 범위의 검증은 완료했습니다.
 - 공유 `docs/glossary.md`에 Volume 08 핵심 용어를 추가하는 PRD 항목은 현재 사용자 지시의 변경 허용 범위 밖입니다. 해당 파일은 수정하지 않았습니다.
 - 따라서 PRD DoD가 아직 완전하지 않아 `VOLUME08_COMPLETE=true`를 추가하거나 cron을 self-pause하지 않았습니다.
+
+## 2026-08-13 — 재개 검증: 공유 Glossary 반영 및 Volume 08 완료 선언
+
+완료한 범위:
+
+- 사용자 재개 지시에 따라 공유 `docs/glossary.md` 변경 범위를 허용하고, Volume 08의 의도 분류, 신뢰도, 임계값, 정책 기반 라우팅, fallback, escalation, 라우팅 결정 로그를 추가했습니다.
+- Rule·Keyword·Embedding 기반 Semantic·LLM Router, threshold, fallback/retry budget, cost·latency·capability policy, Agent·Tool·Model escalation, 원문 없는 결정 로그, 평가 dataset/accuracy, strict Router API, 미니 프로젝트, 체크리스트, Volume 09 인계를 다시 대조했습니다.
+- `router_mini_project.py`가 외부 API·LLM·embedding·네트워크 호출 없이 policy, rule, keyword, semantic, LLM, fallback, escalation, API의 고정 8개 경로를 canonical JSON audit report로 출력함을 재실행했습니다.
+
+검증 결과:
+
+```text
+uv run ruff format --check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+34 files already formatted
+
+uv run ruff check src/ai_platform/router examples/volume08 tests/unit/test_volume08_*.py
+All checks passed!
+
+uv run mypy src/ai_platform/router
+Success: no issues found in 13 source files
+
+uv run pytest tests/unit/test_volume08_*.py -q
+93 passed
+
+uv run python examples/volume08/router_mini_project.py
+고정 8개 경로의 strict JSON audit report 출력, 외부 호출 없음
+
+uv run pytest -q
+154 passed
+
+uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+uv run python scripts/validate_links.py
+링크 검증 통과
+uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+VOLUME08_COMPLETE=true
+
+> cron은 사용자의 기존 중지 정책을 유지합니다. 이 완료 선언은 cron을 재개하거나 새 cron을 생성하지 않습니다.
