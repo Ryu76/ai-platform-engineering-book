@@ -39,6 +39,7 @@
 28. [동시 Streaming 승인과 단일 오프라인 실행 기록](28-streaming-concurrent-approval-cas.md)
 29. [동시 Streaming 거절과 단일 종료 기록](29-streaming-concurrent-rejection-cas.md)
 30. [동시 Streaming 시작과 단일 승인 대기 기록](30-streaming-concurrent-start-cas.md)
+31. [재계산된 JSON Checkpoint도 승인 정책으로 검증하기](31-json-checkpoint-approval-policy-invariants.md)
 
 ## 예정 장
 
@@ -46,13 +47,17 @@
 
 현재 슬라이스는 `Path.resolve()`만으로 통합되지 않는 기존 hard link 별칭도 다룹니다. 원자적 `replace()`가 같은 inode의 별칭을 분리하기 전에 link count가 2 이상인 JSON Checkpoint를 fail-closed로 거부합니다. 또한 `schema_version`과 `checkpoints`의 결정론적 SHA-256 checksum을 기록하고, 유효한 JSON이라도 payload 또는 64자리 checksum 필드가 맞지 않으면 상태 복원·승인 재개 전에 거부합니다. 중복 JSON 키도 마지막 값만 조용히 채택하지 않고 모든 중첩 객체에서 거부해 파서·감사 도구 간 해석 모호성을 막습니다. 특히 중첩 `events` 객체의 중복 `sequence`도 checksum 또는 `WorkflowState`의 연속 순서 검증 전에 차단합니다. Streaming 재개는 승인·실행 각 전이를 `save_if_current()`으로 기록해 동시 승인 재전송 중 하나만 `approval | execute` update를 내보내며, 후발 요청은 update를 내보내기 전에 충돌로 끝납니다. 같은 CAS 경계는 동시 거절 재전송에도 적용되어 하나만 `REJECTED`와 `approval` update를 기록하고, 나머지는 update 없이 충돌하며 `execute` 경로는 열리지 않습니다. 또한 `stream_new()`는 첫 `plan` Checkpoint를 `save_if_absent()`로 기록하므로 같은 run ID의 동시 Streaming 시작 중 하나만 `plan | approval` update와 위험 작업의 승인 대기를 만들며, 후발 요청은 update 없이 충돌합니다. 이 checksum은 키 없는 우발 변경 탐지일 뿐 인증이나 다중 프로세스 원자성을 제공하지 않으며, 위험 ActionKind는 계속 별도 엄격한 Boolean 승인 전에는 실행되지 않습니다.
 
+## 현재 안전 슬라이스
+
+이번 슬라이스는 checksum이 다시 계산되어도 `JsonFileCheckpointer`가 ActionKind와 승인 상태의 의미적 불변식을 별도로 검증하도록 확장합니다. `DEPLOY`·`DELETE`·`SEND`의 `approval_required`는 JSON payload가 아니라 ActionKind로 결정되고, 위험 작업의 `READY`·`COMPLETED` 등 실행 이후 상태에는 `approval_granted=True`가 필요합니다. `REJECTED`는 위험 작업의 명시적 `False` 결정만 허용하며, 결과는 `COMPLETED`에만 허용합니다. 파일 안의 모든 State를 읽기 때 검증하므로 재계산된 checksum을 가진 부적합 payload도 복원·후속 저장 전에 fail-closed 됩니다. 이는 키 없는 checksum의 인증 한계를 보완하는 구조 검증일 뿐 승인자 인증, 서명 또는 실제 위험 실행 권한을 제공하지 않으며, 모든 실행은 계속 오프라인 시뮬레이션입니다.
+
 ## 이번 기반 결과물
 
 - `src/ai_platform/graph/state.py`: 불변 State와 Reducer 기반 감사 이벤트 병합, 결정론적 재시도 입력, Node별 상태 Streaming 업데이트
 - `src/ai_platform/graph/nodes.py`: Plan, Router, 전문 역할, 경로 검토, Approval, Execute, Error Node
 - `src/ai_platform/graph/workflow.py`: 승인 흐름, `StreamingWorkflow`의 Checkpoint 우선 상태 출력, `RoutedWorkflow`의 Conditional Edge 참조 흐름, `PlannerDeveloperReviewerWorkflow`의 고정 역할 순서, `SubgraphWorkflow`의 부모 승인 경계, `RetryWorkflow`의 제한된 재시도, 주입 가능한 Checkpointer 경계
 - `src/ai_platform/graph/api.py`: FastAPI route가 사용할 Pydantic 시작·승인 요청, 공개 응답 스냅샷, 재전송이 기존 Checkpoint를 덮어쓰지 못하게 하는 프레임워크 독립 오프라인 어댑터와 동시 승인 충돌 경계
-- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent`, 승인 Checkpoint를 비교·교체하는 `save_if_current`, 같은 프로세스의 동일 정규화 JSON 경로를 여는 인스턴스가 공유하는 Lock 계약, 우발적 payload 변경을 복원 전에 차단하는 결정론적 SHA-256 checksum
+- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent`, 승인 Checkpoint를 비교·교체하는 `save_if_current`, 같은 프로세스의 동일 정규화 JSON 경로를 여는 인스턴스가 공유하는 Lock 계약, 우발적 payload 변경을 복원 전에 차단하는 결정론적 SHA-256 checksum, 재계산 checksum도 우회하지 못하는 Action별 승인 상태 불변식
 
 - `examples/volume09/single_node_workflow.py`: 승인 중단 및 재개 데모
 - `examples/volume09/router_conditional_workflow.py`: 낮은 신뢰도 Router의 경로 검토와 실행 승인 데모
@@ -78,7 +83,8 @@
 - `examples/volume09/json_hard_link_guard_workflow.py`: 기존 hard link 별칭이 있는 JSON Checkpoint를 분리 저장 전에 명시적으로 거부하는 데모
 - `examples/volume09/json_checksum_guard_workflow.py`: 정상 JSON의 payload가 기록된 SHA-256 checksum과 다르면 상태 복원 전에 거부하는 데모
 - `examples/volume09/json_checksum_field_guard_workflow.py`: payload를 그대로 둔 채 교체된 checksum 필드도 상태 복원 전에 거부하는 데모
+- `examples/volume09/json_approval_policy_guard_workflow.py`: 위험 `DEPLOY`를 승인 없이 `READY`로 보이게 바꾸고 checksum을 재계산해도 상태 복원 전에 거부하는 데모
 - `examples/volume09/json_duplicate_key_guard_workflow.py`: 중첩 감사 이벤트의 중복 JSON 키가 있는 Checkpoint를 상태 복원 전에 거부하는 데모
-- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·Streaming 동시 시작·승인·거절 CAS·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작·상반 결정·payload·checksum 필드 불일치·최상위·중첩 중복 키 차단 계약 테스트
+- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·Streaming 동시 시작·승인·거절 CAS·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작·상반 결정·payload·checksum 필드 불일치·최상위·중첩 중복 키·재계산 checksum을 가진 위험 승인 정책 우회 차단 계약 테스트
 
 현재 프로젝트 의존성에는 `langgraph` 패키지가 선언되어 있지 않습니다. 이 Volume의 현재 슬라이스들은 LangGraph API 호출을 가장하지 않고, 해당 API가 모델링하는 상태·Node·Edge·interrupt 경계를 직접 구현한 결정론적 참조 모델입니다. 패키지 추가는 이 작업 범위 밖의 프로젝트 설정 변경이므로, 승인된 별도 변경 후 실제 LangGraph 어댑터 장에서 수행합니다.

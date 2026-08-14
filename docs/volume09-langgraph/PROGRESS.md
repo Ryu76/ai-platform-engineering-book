@@ -1110,3 +1110,23 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 최신 슬라이스 — 재계산된 JSON Checkpoint 승인 정책 불변식
+
+- `src/ai_platform/graph/checkpointer.py`
+  - JSON checksum과 구조 검증 뒤 모든 저장 State를 복원·검증하도록 확장했습니다. 위험 ActionKind의 `approval_required`는 ActionKind에서 결정하며, `WAITING_FOR_APPROVAL`·`READY`·`COMPLETED`·`REJECTED`의 승인 결정과 결과 상태가 맞지 않으면 저장·복원 전에 fail-closed 합니다.
+- `tests/unit/test_volume09_graph.py`
+  - `DEPLOY` Checkpoint를 승인 없이 `READY`로 보이게 바꾸고 SHA-256 checksum을 다시 계산해도 `load()`가 `action approval policy` 오류로 거부하는 회귀 계약을 추가했습니다.
+- `examples/volume09/json_approval_policy_guard_workflow.py`
+  - 임시 로컬 JSON만 사용해 위 변조와 재계산을 재현하고 명시적 거부 결과를 출력하는 결정론적 오프라인 데모를 추가했습니다.
+- `docs/volume09-langgraph/31-json-checkpoint-approval-policy-invariants.md`, `README.md`
+  - checksum의 인증 한계, State 의미 검증 순서, 위험 작업의 별도 승인 경계와 운영 전환 한계를 문서화했습니다.
+
+검증: 예제는 `approval_policy_bypass_rejected=checkpoint state violates the action approval policy`를 출력했습니다. 새 계약 테스트는 통과했고, Volume 09 테스트는 `54 passed`, 전체 테스트는 `115 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사, `compileall`, `git diff --check`도 통과했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. checksum 재계산은 승인 권한을 부여하지 않으며, 위험 ActionKind는 별도의 엄격한 Boolean 승인 전까지 `execute` Node로 이동하지 않습니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.

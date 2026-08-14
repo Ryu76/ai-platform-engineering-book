@@ -1,6 +1,7 @@
 """Volume 09 오프라인 상태형 Workflow의 안전 계약을 검사한다."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -523,6 +524,45 @@ def test_json_file_checkpoint_rejects_a_replaced_checksum_field(tmp_path: Path) 
 
     with pytest.raises(ValueError, match="checksum does not match"):
         checkpointer.load(run_id="checksum-field-guard-001")
+
+
+def test_json_file_checkpoint_rejects_a_rechecksummed_risky_approval_bypass(
+    tmp_path: Path,
+) -> None:
+    """유효 checksum을 다시 써도 위험 Action의 승인 정책을 우회한 State는 복원하지 않는다."""
+    checkpoint_path = tmp_path / "approval-policy-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    run_id = "approval-policy-guard-001"
+    checkpointer.save(
+        run_id=run_id,
+        state=WorkflowState.start(
+            task="학습용 배포를 준비한다", action=ActionKind.DEPLOY
+        ).record(
+            node="plan",
+            detail="오프라인 계획을 만듭니다.",
+            status=WorkflowStatus.PLANNED,
+        ),
+    )
+    payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    payload["checkpoints"][run_id]["status"] = "ready"
+    payload["checkpoints"][run_id]["approval_required"] = False
+    payload["checkpoints"][run_id]["approval_granted"] = True
+    canonical_payload = json.dumps(
+        {
+            "schema_version": payload["schema_version"],
+            "checkpoints": payload["checkpoints"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    payload["payload_sha256"] = hashlib.sha256(canonical_payload).hexdigest()
+    checkpoint_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="action approval policy"):
+        checkpointer.load(run_id=run_id)
 
 
 def test_json_file_checkpoint_rejects_duplicate_json_keys_before_state_restore(

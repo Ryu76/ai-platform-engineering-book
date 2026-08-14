@@ -12,6 +12,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from ai_platform.graph.state import (
+    RISKY_ACTIONS,
     ActionKind,
     RouteKind,
     WorkflowEvent,
@@ -250,6 +251,7 @@ class JsonFileCheckpointer:
             if not isinstance(stored_run_id, str):
                 raise ValueError("checkpoint run_id must be a string")
             _validate_run_id(stored_run_id)
+            _payload_to_state(checkpoints[stored_run_id])
         return checkpoints
 
 
@@ -261,7 +263,8 @@ def _validate_run_id(run_id: str) -> None:
 
 
 def _validate_public_state(state: WorkflowState) -> None:
-    """파일에 쓸 텍스트가 학습용 공개 데이터인지 보수적으로 확인한다."""
+    """파일에 쓸 State의 승인 정책과 공개 텍스트를 보수적으로 확인한다."""
+    _validate_checkpoint_state_invariants(state)
     texts = [state.task, state.retry_source]
     texts.extend(event.node for event in state.events)
     texts.extend(event.detail for event in state.events)
@@ -269,6 +272,41 @@ def _validate_public_state(state: WorkflowState) -> None:
         texts.append(state.result)
     for text in texts:
         _reject_suspected_secret(text, field="checkpoint state")
+
+
+def _validate_checkpoint_state_invariants(state: WorkflowState) -> None:
+    """복원 가능한 State가 Action별 승인 정책을 우회하지 않는지 확인한다.
+
+    Checksum은 키 없는 우발 변경 탐지일 뿐 인증 수단이 아니다. 따라서 checksum이
+    다시 계산된 JSON도 이 저장소가 실제로 만드는 상태 전이와 맞는지를 별도로
+    확인한다. 이 검사는 로컬 학습용 Checkpoint의 fail-closed 경계이며, 운영 환경의
+    승인자 인증·권한 부여 또는 변조 방지를 대체하지 않는다.
+    """
+    approval_required = state.action in RISKY_ACTIONS
+    if state.approval_required is not approval_required:
+        raise ValueError("checkpoint state violates the action approval policy")
+
+    if state.status is WorkflowStatus.WAITING_FOR_APPROVAL:
+        if not approval_required or state.approval_granted is not None:
+            raise ValueError("checkpoint waiting state violates the approval policy")
+    elif state.status is WorkflowStatus.REJECTED:
+        if not approval_required or state.approval_granted is not False:
+            raise ValueError("checkpoint rejection state violates the approval policy")
+    else:
+        expected_approval = True if approval_required and state.status in {
+            WorkflowStatus.READY,
+            WorkflowStatus.COMPLETED,
+            WorkflowStatus.ERROR,
+            WorkflowStatus.FAILED,
+        } else None
+        if state.approval_granted is not expected_approval:
+            raise ValueError("checkpoint state has an invalid approval decision")
+
+    if state.status is WorkflowStatus.COMPLETED:
+        if state.result is None or not state.result.strip():
+            raise ValueError("checkpoint completed state must contain a result")
+    elif state.result is not None:
+        raise ValueError("checkpoint non-completed state must not contain a result")
 
 
 def _reject_suspected_secret(value: str, *, field: str) -> None:
