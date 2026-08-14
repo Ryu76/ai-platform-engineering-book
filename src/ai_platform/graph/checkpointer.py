@@ -326,7 +326,8 @@ def _validate_risky_approval_audit_trail(state: WorkflowState) -> None:
     waiting_detail = f"{state.action.value} 작업은 사람 승인을 기다립니다."
     granted_detail = "사람 승인을 받았습니다. 실행 시뮬레이션으로 이동합니다."
     rejected_detail = "사람이 작업을 거절했습니다. 실행하지 않습니다."
-    event_details = tuple(event.detail for event in state.events if event.node == "approval")
+    approval_events = tuple(event for event in state.events if event.node == "approval")
+    event_details = tuple(event.detail for event in approval_events)
     expected_details_by_status = {
         WorkflowStatus.PENDING: (),
         WorkflowStatus.PLANNED: (),
@@ -345,6 +346,20 @@ def _validate_risky_approval_audit_trail(state: WorkflowState) -> None:
         event.node == "execute" for event in state.events
     ):
         raise ValueError("checkpoint rejected state must not contain an execute audit event")
+
+    execute_events = tuple(event for event in state.events if event.node == "execute")
+    if state.status is WorkflowStatus.COMPLETED and not execute_events:
+        raise ValueError("checkpoint completed risky state must contain an execute audit event")
+    if not execute_events:
+        return
+
+    granted_event = next(
+        (event for event in approval_events if event.detail == granted_detail), None
+    )
+    if granted_event is None or any(
+        event.sequence <= granted_event.sequence for event in execute_events
+    ):
+        raise ValueError("checkpoint execute audit event must follow explicit approval")
 
 
 def _reject_suspected_secret(value: str, *, field: str) -> None:

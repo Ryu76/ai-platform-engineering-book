@@ -704,6 +704,57 @@ def test_json_file_checkpoint_rejects_a_rechecksummed_rejection_with_an_execute_
         checkpointer.load(run_id=run_id)
 
 
+def test_json_file_checkpoint_rejects_a_rechecksummed_execute_event_before_approval(
+    tmp_path: Path,
+) -> None:
+    """위조 execute 감사 이벤트가 승인보다 앞선 위험 완료 State는 복원하지 않는다."""
+    checkpoint_path = tmp_path / "execute-before-approval-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    run_id = "execute-before-approval-guard-001"
+    waiting = DeterministicWorkflow(checkpointer=checkpointer).invoke(
+        run_id=run_id,
+        task="학습용 배포를 준비한다",
+        action=ActionKind.DEPLOY,
+    )
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+
+    payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    state = payload["checkpoints"][run_id]
+    state["status"] = "completed"
+    state["approval_granted"] = True
+    state["result"] = "오프라인 시뮬레이션 완료: deploy / 학습용 배포를 준비한다"
+    state["events"].extend(
+        [
+            {
+                "sequence": 3,
+                "node": "execute",
+                "detail": "외부 시스템을 변경하지 않는 결정론적 실행 결과를 만들었습니다.",
+            },
+            {
+                "sequence": 4,
+                "node": "approval",
+                "detail": "사람 승인을 받았습니다. 실행 시뮬레이션으로 이동합니다.",
+            },
+        ]
+    )
+    canonical_payload = json.dumps(
+        {
+            "schema_version": payload["schema_version"],
+            "checkpoints": payload["checkpoints"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    payload["payload_sha256"] = hashlib.sha256(canonical_payload).hexdigest()
+    checkpoint_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="execute audit event must follow explicit approval"):
+        checkpointer.load(run_id=run_id)
+
+
 def test_json_file_checkpoint_rejects_duplicate_json_keys_before_state_restore(
     tmp_path: Path,
 ) -> None:

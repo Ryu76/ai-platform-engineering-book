@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 현재 Phase: **Phase 10 — Volume 09 LangGraph**
-- 이번 슬라이스: 같은 Python 프로세스의 `MemoryCheckpointer`를 공유하는 8개의 동시 `approved=False` Streaming 재개가 하나의 `WAITING_FOR_APPROVAL` Checkpoint를 정확히 한 번만 소비함을 검증했습니다. 승자만 `REJECTED` Checkpoint와 단일 `approval` update를 기록하고, 나머지 7개는 `WorkflowRunConflictError`로 끝나며 어떤 update·감사 이벤트·`execute`도 추가하지 않습니다. 보장은 프로세스 내 Lock 범위에 한정되고, 위험 작업은 별도의 엄격한 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
-- 이번 검증: `streaming_concurrent_rejection_workflow.py`는 `rejected=1`, `conflicts=7`, `plan | approval | approval`를 출력했습니다. 새 동시 Streaming 거절 계약 테스트는 10회 반복 모두 통과했고, Volume 09 단위 테스트는 `52 passed`, 전체 테스트는 `113 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
+- 이번 슬라이스: 재계산된 JSON Checkpoint의 위험 `execute` 감사 이벤트가 명시적 승인보다 뒤에 있어야 함을 검증했습니다. 위험 `COMPLETED`에는 execute 이벤트가 하나 이상 필요하고, execute가 승인보다 이르면 `JsonFileCheckpointer`가 저장·복원 전에 fail-closed 합니다. 모든 그래프 실행은 오프라인·결정론적이며 위험 작업은 별도의 엄격한 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+- 이번 검증: `json_execute_after_approval_guard_workflow.py`는 `execute_before_approval_rejected=checkpoint execute audit event must follow explicit approval`을 출력했습니다. 새 회귀 계약, Volume 09 단위 테스트 `58 passed`, 전체 테스트 `119 passed`, Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`가 통과했습니다.
 - 완료 선언: 아직 하지 않음. FastAPI 패키지가 프로젝트 의존성에 없으므로 실제 서버 연동은 승인된 별도 프로젝트 설정 변경이 필요하며, Volume Definition of Done의 나머지 항목도 남아 있습니다.
 
 ## 이번에 완료한 파일
@@ -1185,6 +1185,26 @@ $ git diff --check
 검증: 예제는 `rejected_execute_audit_rejected=checkpoint rejected state must not contain an execute audit event`를 출력했습니다. 새 계약 테스트는 10회 반복 모두 통과했고, Volume 09 테스트는 `57 passed`, 전체 테스트는 `118 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사, `compileall`, `git diff --check`도 통과했습니다.
 
 실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 승인 대기와 별도의 엄격한 Boolean 승인 없이는 `execute` Node로 이동하지 않으며, 명시적 거절은 외부 부작용 없는 `REJECTED` 상태로 끝납니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 최신 슬라이스 — JSON Checkpoint execute 감사 이벤트의 명시적 승인 선행 검증
+
+- `src/ai_platform/graph/checkpointer.py`
+  - 위험 Action의 `approval` 이벤트와 `execute` 이벤트를 함께 검증하도록 강화했습니다. `COMPLETED` 위험 State에는 execute 이벤트가 하나 이상 있어야 하며, 모든 execute 이벤트는 명시적 승인 이벤트보다 뒤의 sequence를 가져야 합니다. 승인 이벤트가 없거나 execute가 먼저면 재계산 checksum이 맞아도 저장·복원 전에 fail-closed 합니다. 기존 `REJECTED`의 execute 전면 금지 계약은 유지합니다.
+- `tests/unit/test_volume09_graph.py`
+  - 정상 `DEPLOY` 승인 대기 JSON을 `COMPLETED`·승인·결과로 바꾸고 sequence 3의 execute 이벤트와 sequence 4의 승인 이벤트를 추가한 뒤 checksum을 재계산해도 `load()`가 `execute audit event must follow explicit approval` 오류로 거부하는 회귀 계약을 추가했습니다.
+- `examples/volume09/json_execute_after_approval_guard_workflow.py`
+  - 임시 로컬 JSON만 사용해 승인보다 이른 위조 execute 감사 이벤트와 재계산 SHA-256 checksum을 만들고 명시적 거부 결과를 출력하는 결정론적 오프라인 데모를 추가했습니다.
+- `docs/volume09-langgraph/35-json-checkpoint-execute-after-approval-guard.md`, `README.md`
+  - 승인 선행 execute 감사 순서 불변식, `COMPLETED`의 execute 존재 조건, checksum·감사 문자열의 인증 한계, 단일 프로세스 동시성 한계와 운영 전환 요구사항을 문서화했습니다.
+
+검증: 예제는 `execute_before_approval_rejected=checkpoint execute audit event must follow explicit approval`을 출력했습니다. 새 회귀 계약은 통과했고, Volume 09 테스트는 `58 passed`, 전체 테스트는 `119 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 별도의 엄격한 Boolean 승인 없이는 `WAITING_FOR_APPROVAL`에서 `execute` Node로 이동하지 않으며, 모든 완료 경로는 외부 부작용 없는 오프라인 시뮬레이션입니다.
 
 ## 완료 상태
 
