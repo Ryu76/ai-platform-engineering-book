@@ -695,9 +695,89 @@ project environment에서 정상 완료했습니다. example/tests는 fixed in-m
 사용했으며 actual process, OS group/Job Object, signal, pipe, shell, filesystem, network, external MCP
 server, Tool 또는 destructive action을 호출하지 않았습니다.
 
+## 이번 슬라이스: finite restart budget과 monotonic backoff를 fake seam으로 분리하기
+
+- `src/ai_platform/mcp/restart_policy.py`
+  - `McpStdioRestartSupervisor`는 allowlisted immutable launch plan의 0–3 replacement budget만
+    소유합니다. clean exit `0`은 restart하지 않고 bounded `1..255` non-zero exit만 `UNEXPECTED`로
+    분류합니다.
+  - `None`, bool, negative/oversized exit code는 unknown terminal state로 clock/sleeper/factory 전에
+    거부합니다. exhausted budget도 해당 seam을 전혀 호출하지 않습니다.
+  - successful replacement마다 0.25초부터 두 배가 되는 finite delay를 injected monotonic clock과
+    sleeper로 검증한 뒤 기존 shell-free child factory를 정확히 한 번 호출합니다. sleeper 뒤 clock이
+    deadline에 못 미치거나 뒤로 가면 new start하지 않습니다.
+  - clock/sleeper/start raw exception detail을 숨기며 start failure는 budget을 소비하거나 자동 재시도하지
+    않습니다. actual process monitoring/reaping, OS clock/sleep, group signal, pipe, thread, network,
+    Tool 또는 destructive action은 호출하지 않습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - exit classification, restart error/result/supervisor public API를 export했습니다.
+- `examples/volume03/mcp_stdio_restart_backoff_policy.py`
+  - fixed safe plan, memory-only fake child/factory/clock/sleeper와 fake nonzero exit 하나로 delay와 start
+    count를 출력합니다. actual Popen, OS time wait, process, shell, filesystem, network, MCP server, Tool
+    또는 destructive action을 수행하지 않습니다.
+- `tests/volume03/test_mcp_restart_policy.py`
+  - exponential finite delay, clean no-call, budget exhaustion, unknown exit pre-start rejection,
+    clock/sleeper failure detail hiding, early deadline 및 invalid plan을 fake seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/34-mcp-stdio-finite-restart-backoff.md`
+  - exit taxonomy, finite monotonic backoff ownership, safe offline exercise와 production crash-loop/durable
+    execution follow-up을 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른네 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: finite restart/backoff slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_stdio_restart_backoff_policy.py
+exit_classification: unexpected
+backoff_seconds: 0.25
+restart_count: 1
+offline_start_calls: 1
+
+$ uv run ruff format --check src/ai_platform/mcp/restart_policy.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_restart_backoff_policy.py tests/volume03/test_mcp_restart_policy.py
+4 files already formatted
+
+$ uv run ruff check src/ai_platform/mcp/restart_policy.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_restart_backoff_policy.py tests/volume03/test_mcp_restart_policy.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/restart_policy.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 2 source files
+
+$ uv run pytest tests/volume03/test_mcp_restart_policy.py -q
+12 passed in 0.19s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 33 source files
+
+$ uv run pytest -q
+314 passed in 1.63s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만,
+project environment에서 정상 완료했습니다. example/tests는 fixed in-memory plan·child·factory·clock·sleeper만
+사용했으며 actual process, OS clock/sleep, group signal, pipe, shell, filesystem, network, external MCP server,
+Tool 또는 destructive action을 호출하지 않았습니다.
+
 ## 다음 슬라이스
 
-actual OS API를 직접 호출하지 말고, allowlisted plan의 finite `restart_limit`을 exit-code 분류와
-monotonic backoff schedule로 먼저 모델링해야 합니다. unknown exit, budget exhaustion, invalid plan과
-clock/sleeper failure가 new start 호출 전에 안전히 멈추는지 fake seams에서 검증하세요. 그 뒤 durable
-approval/audit/idempotency와 Hermes/Codex integration을 각각 독립적인 fixture·검증 경계로 진행해야 합니다.
+actual durable store를 열지 말고, allowlisted Tool execution의 idempotency key와 typed approval/audit
+record의 exact request binding을 immutable in-memory fixture로 먼저 모델링해야 합니다. duplicate request,
+approval expiry/replay, audit append failure와 ambiguous Tool result가 execution 전에 또는 caller-owned
+reconciliation signal로 안전하게 멈추는지 fake seams에서 검증하세요. 그 뒤 Hermes/Codex integration을
+독립적인 fixture·검증 경계로 진행해야 합니다.

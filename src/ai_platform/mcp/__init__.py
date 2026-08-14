@@ -86,6 +86,12 @@ from ai_platform.mcp.requests import (
     parse_mcp_tool_call_request,
 )
 from ai_platform.mcp.resources import McpResourceCatalog, McpResourceError, McpStaticResource
+from ai_platform.mcp.restart_policy import (
+    McpStdioExitClassification,
+    McpStdioRestartError,
+    McpStdioRestartResult,
+    McpStdioRestartSupervisor,
+)
 from ai_platform.mcp.stdio import (
     MCP_PROTOCOL_VERSION,
     McpJsonRpcRequest,
@@ -122,6 +128,7 @@ __all__ = [
     "McpStdioChildFactory",
     "McpStdioChildProcess",
     "McpStdioDecodedOutputPair",
+    "McpStdioExitClassification",
     "McpStdioFairDrainError",
     "McpStdioGroupShutdownPhase",
     "McpStdioGroupShutdownSender",
@@ -159,6 +166,9 @@ __all__ = [
     "McpStdioReadyChannels",
     "McpStdioReadyDrainError",
     "McpStdioReadinessScheduler",
+    "McpStdioRestartError",
+    "McpStdioRestartResult",
+    "McpStdioRestartSupervisor",
     "McpStdioReadableBinaryStream",
     "McpStdioStreamCapture",
     "McpStdioStreamDrainError",
