@@ -222,7 +222,10 @@ class JsonFileCheckpointer:
         if not self._path.exists():
             return {}
         try:
-            raw_payload = json.loads(self._path.read_text(encoding="utf-8"))
+            raw_payload = json.loads(
+                self._path.read_text(encoding="utf-8"),
+                object_pairs_hook=_json_object_without_duplicate_keys,
+            )
         except (OSError, json.JSONDecodeError) as error:
             raise ValueError("checkpoint file is not valid JSON") from error
         if not isinstance(raw_payload, dict):
@@ -297,6 +300,23 @@ def _constant_time_digest_matches(actual: str, expected: str) -> bool:
     if not re.fullmatch(r"[0-9a-f]{64}", actual):
         return False
     return hmac.compare_digest(actual, expected)
+
+
+def _json_object_without_duplicate_keys(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    """중복 키가 있는 JSON 객체를 복원 전에 fail-closed로 거부한다.
+
+    기본 ``json.loads()``는 중복 키의 마지막 값만 남기므로, 서로 다른 JSON
+    구현이나 감사 도구가 다른 값을 해석할 수 있다. Checkpoint 포맷은 모든 중첩
+    객체에서 키가 한 번씩만 나타나는 엄격한 JSON 객체만 허용한다.
+    """
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("checkpoint file must not contain duplicate object keys")
+        result[key] = value
+    return result
 
 
 def _state_to_payload(state: WorkflowState) -> dict[str, object]:

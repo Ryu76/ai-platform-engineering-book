@@ -914,3 +914,56 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 최신 슬라이스 — JSON Checkpoint 중복 키 모호성 차단
+
+- `src/ai_platform/graph/checkpointer.py`
+  - `json.loads()`의 `object_pairs_hook`이 최상위·중첩 JSON 객체의 중복 키를 사전 축약 전에 fail-closed로 거부하도록 했습니다. 기본 parser의 마지막 키 채택 때문에 Checkpoint·감사 도구마다 해석이 달라지는 경로를 State 복원·checksum 검증·승인 재개 전에 차단합니다.
+- `tests/unit/test_volume09_graph.py`
+  - 유효한 Checkpoint의 최상위 `schema_version` 키를 중복해도 `JsonFileCheckpointer.load()`가 `WorkflowState` 복원 전에 명시적 오류로 거부하는 회귀 계약을 추가했습니다.
+- `examples/volume09/json_duplicate_key_guard_workflow.py`
+  - 임시 디렉터리에 만든 정상 Checkpoint에 중복 `schema_version` 키를 삽입하고 fail-closed 결과를 출력하는 결정론적 오프라인 데모를 추가했습니다.
+- `docs/volume09-langgraph/26-json-checkpoint-duplicate-key-guard.md`, `README.md`
+  - 중복 키의 parser·감사 모호성, checksum과의 순서, 운영 인증 한계, 오프라인 안전 경계를 문서화하고 출고 목록을 갱신했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 중복 키 검사와 별개로 엄격한 별도 Boolean 승인 전에는 계속 `WAITING_FOR_APPROVAL`에 머뭅니다.
+
+## 최신 검증 기록 — JSON Checkpoint 중복 키 모호성 차단 슬라이스
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run pytest tests/unit/test_volume09_graph.py::test_json_file_checkpoint_rejects_duplicate_json_keys_before_state_restore -q
+1 passed in 0.45s
+
+$ uv run python examples/volume09/json_duplicate_key_guard_workflow.py
+duplicate_key_rejected=checkpoint file must not contain duplicate object keys
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+49 passed in 1.03s
+
+$ uv run pytest -q
+110 passed in 4.64s
+
+$ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.

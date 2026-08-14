@@ -525,6 +525,28 @@ def test_json_file_checkpoint_rejects_a_replaced_checksum_field(tmp_path: Path) 
         checkpointer.load(run_id="checksum-field-guard-001")
 
 
+def test_json_file_checkpoint_rejects_duplicate_json_keys_before_state_restore(
+    tmp_path: Path,
+) -> None:
+    """마지막 중복 키를 조용히 채택하지 않고 모호한 JSON Checkpoint를 거부한다."""
+    checkpoint_path = tmp_path / "duplicate-key-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    checkpointer.save(
+        run_id="duplicate-key-guard-001",
+        state=WorkflowState.start(task="로컬 문서를 읽는다", action=ActionKind.READ),
+    )
+    valid_payload = checkpoint_path.read_text(encoding="utf-8")
+    duplicate_schema_version = valid_payload.replace(
+        '  "schema_version": 2\n}',
+        '  "schema_version": 2,\n  "schema_version": 2\n}',
+    )
+    assert duplicate_schema_version != valid_payload
+    checkpoint_path.write_text(duplicate_schema_version, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicate object keys"):
+        checkpointer.load(run_id="duplicate-key-guard-001")
+
+
 def test_json_file_checkpoint_rejects_an_existing_hard_link_alias(tmp_path: Path) -> None:
     """원자적 교체가 hard link 별칭을 분리하지 않도록 기존 다중 링크를 거부한다."""
     checkpoint_path = tmp_path / "checkpoints.json"
