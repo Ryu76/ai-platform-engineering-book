@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 33: Chapter 15 권 단위 학습 체크리스트 PRD 문서 계약
+
+- `15-volume-learning-checklist-glossary-and-router-handoff.md`를 PRD 학습 template의 14개 section(학습 목표, 필요성, 핵심 개념, 동작 구조, 환경, 단계별 실습, 코드 설명, 정상 실행 결과, 오류 해결, 응용, 실무 적용, 과제, 체크리스트, 요약)으로 정렬했다. 네 deterministic Mock workflow의 별도 `PENDING`/`APPROVED`/`REJECTED` gate, bounded loop, immutable audit snapshot과 Router handoff data/authority 경계를 명확히 했다.
+- `test_volume_learning_checklist_documentation.py`를 추가해 Chapter 15의 14 section, 네 workflow, deterministic Mock, bounded loop, explicit approval, mini-project/full regression 명령, `awaiting_human_approval`, live API·secret·tool 실행·deployment 없는 범위를 회귀 검증한다. Router는 status와 immutable audit만 받을 수 있고 `HumanApproval.APPROVED`, secret, tool handle, mutable script를 생성하거나 전달할 수 없다.
+- 새 documentation test는 `1 passed`였고, 기본 mini project는 네 `awaiting_human_approval`, 모든 explicit approval flag는 `completed`와 local-only handoff note를 실제 출력했다. `uv run pytest tests/volume07 -q`는 72 passed, `uv run ruff check src/ai_platform/agents tests/volume07`, `uv run mypy src/ai_platform/agents`, `validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 32: Chapter 09 역할 범위 검토 권한 PRD 학습 계약
 
 - `09-role-scoped-review-authority.md`의 사람 승인 설명을 `PENDING`의 safe pause, `APPROVED`의 gated local QA/handoff, `REJECTED`의 pre-call 종료로 명확히 했다. 어느 approval 값도 Reviewer-only `ReviewDecision` 권한이나 `AgentProtocolError` fail-closed protocol 검증을 우회하지 않는다.

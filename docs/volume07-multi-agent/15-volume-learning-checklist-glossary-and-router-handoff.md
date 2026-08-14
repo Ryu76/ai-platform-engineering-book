@@ -25,7 +25,7 @@
 
 Volume 07은 첫 두 항목만 local Mock으로 다룹니다. 세 번째 항목은 다음 단계에서 설계해야 하는 별도 운영 통제이며, enum 하나나 Agent message로 대체할 수 없습니다.
 
-## 3. 전체 구조와 다음 권 인계
+## 3. 핵심 개념과 다음 권 인계
 
 ```text
                   local request
@@ -60,7 +60,20 @@ Router는 장차 요청을 적절한 workflow로 보낼 수 있습니다. 하지
 
 Router로 넘길 수 있는 것은 구조화된 local request, workflow 종류, bounded status, audit snapshot입니다. Router가 넘겨받아서는 안 되는 것은 secret, unrestricted tool handle, mutable Mock script, 사람 승인자를 가장한 text입니다.
 
-## 4. 실습 환경과 실행 위치
+## 4. 동작 구조
+
+Volume 07의 네 workflow는 같은 approval 값을 공유하지 않습니다. 각 workflow는 검증된 local request와 immutable audit snapshot만 받고, 각자 configured positive bound 안에서만 deterministic Mock을 호출합니다.
+
+```text
+review:     Planner -> Researcher -> Developer <-> Reviewer -> human gate -> QA
+delegation: Coordinator -> manifest -> human gate -> bounded Worker attempts
+conflict:   bounded peer proposals -> exact consensus -> human gate -> local completion
+release:    Planner -> Developer <-> Reviewer -> human gate -> QA -> local DevOps note
+```
+
+`PENDING`은 현재 audit snapshot을 보존한 safe pause이고, `APPROVED`는 해당 workflow의 다음 bounded local stage만 엽니다. `REJECTED`는 모든 Agent call 전에 `human_rejected`로 끝납니다. Router handoff는 이 상태와 결과를 전달할 수 있지만 approval, secret, mutable script, tool handle을 전달하거나 생성할 수 없습니다.
+
+## 5. 실습 환경과 실행 위치
 
 이 장은 저장소 루트에서 실행합니다. Windows에서는 Git Bash 또는 WSL Bash를 사용합니다. 아래 명령은 Python package를 `uv`를 통해 실행하며 network, live API, secret, tool executor, deployment를 사용하지 않습니다.
 
@@ -85,9 +98,9 @@ uv run python examples/volume07/offline_multi_agent_mini_project.py \
 
 각 flag는 다른 stage의 gate를 열지 않습니다. 예를 들어 `--approve-review`만 전달하면 review QA만 실행할 수 있고, delegated Worker와 release QA/DevOps는 계속 `awaiting_human_approval`에 남아야 합니다.
 
-## 5. 단계별 권 단위 검증
+## 6. 단계별 권 단위 검증
 
-### 5.1 기본 pause 확인
+### 6.1 기본 pause 확인
 
 기본 명령의 핵심 출력은 아래와 같아야 합니다.
 
@@ -103,7 +116,7 @@ release_handoff_note=-
 
 여기서 conflict consensus는 사람이 검토할 **recommendation**입니다. `conflict_status`가 pause이므로 그 recommendation은 아직 workflow completion이 아닙니다.
 
-### 5.2 명시 승인 경로 확인
+### 6.2 명시 승인 경로 확인
 
 네 approval flag를 모두 전달했을 때 핵심 출력은 아래와 같아야 합니다.
 
@@ -119,7 +132,7 @@ release_handoff_note=Handoff: local release note ready; no deployment ran.
 
 `release_handoff_note`의 마지막 문장은 이 예제의 capability 경계를 보여 줍니다. DevOps Mock은 text note를 반환할 뿐 deployment client, subprocess, network client를 갖지 않습니다.
 
-### 5.3 Volume 07 regression test 실행
+### 6.3 Volume 07 regression test 실행
 
 ```bash
 # 실행 위치: 저장소 루트
@@ -136,7 +149,7 @@ uv run pytest tests/volume07 -q
 - Reviewer 이외 역할은 `ReviewDecision` authority를 주장할 수 없다.
 - offline mini project CLI의 기본 pause와 독립 approval flag 결과가 고정된다.
 
-## 6. 코드와 결과물 인계표
+## 7. 코드 설명과 결과물 인계표
 
 | 결과물 | 현재 책임 | Router로 넘길 수 있는 정보 | Router가 해서는 안 되는 일 |
 |---|---|---|---|
@@ -148,7 +161,11 @@ uv run pytest tests/volume07 -q
 
 다음 Volume의 설계 입력은 이 표처럼 data와 policy를 구분해야 합니다. 특히 `status=awaiting_human_approval`은 Router가 자동 재시도할 신호가 아니라, 사람 결정을 기다리는 stop condition입니다.
 
-## 7. Volume 07 용어집
+`examples/volume07/offline_multi_agent_mini_project.py`의 네 `build_*_workflow()` 함수는 각 workflow에 별도 deterministic Mock tuple과 approval enum을 전달합니다. 실제 orchestration contract는 `src/ai_platform/agents/workflow.py`, `delegation.py`, `conflict.py`, `release_handoff.py`에 있으며, 결과 status와 immutable audit message만 example의 출력으로 다시 공유합니다. 이 경로에는 Router implementation, live API client, secret lookup, tool executor, deployment call이 없습니다.
+
+Router Volume이 이 결과를 받으려면 새 request/result schema에 `workflow_kind`, validated objective, status, immutable audit snapshot을 넣어야 합니다. `HumanApproval.APPROVED`, actual tool object, secret, mutable Mock script는 data field로 직렬화하거나 전달하지 않습니다.
+
+### Volume 07 용어집
 
 | 용어 | 설명 |
 |---|---|
@@ -166,7 +183,13 @@ uv run pytest tests/volume07 -q
 | Local handoff | QA 이후 DevOps Mock이 만드는 text note입니다. release 또는 deployment가 아닙니다. |
 | Router handoff | 다음 Volume에서 정책 기반 선택을 위해 workflow request/result를 구조화해 넘기는 일입니다. approval 또는 capability 위임이 아닙니다. |
 
-## 8. 오류 해결
+## 8. 정상 실행 결과
+
+기본 mini project 실행은 네 workflow가 모두 `awaiting_human_approval`로 멈추고, `delegation_completed_task_ids=-`, `release_handoff_note=-`를 출력해야 합니다. 모든 stage-specific approval flag를 명시하면 네 status는 `completed`가 되고, delegation 결과는 `draft,verify`, release 결과는 `Handoff: local release note ready; no deployment ran.`입니다.
+
+이 `completed`는 deterministic local audit 결과입니다. live API, network Agent, secret, tool 실행, 파일 변경, deployment 또는 운영 release를 뜻하지 않습니다.
+
+## 9. 오류 해결
 
 | 증상 | 원인 | 확인 및 해결 |
 |---|---|---|
@@ -177,14 +200,14 @@ uv run pytest tests/volume07 -q
 | Router가 `APPROVED`를 만들도록 설계됨 | selection policy와 human approval authority를 혼동함 | Router 결과와 사람 승인 record를 별도 type과 storage boundary로 분리합니다. 이 offline slice에는 Router를 추가하지 않습니다. |
 | handoff note를 release로 해석함 | local audit output과 external action을 혼동함 | `completed`와 deployment를 분리합니다. deployment capability는 이 권에 존재하지 않습니다. |
 
-## 9. 응용 실습
+## 10. 응용 실습
 
 1. `offline_multi_agent_mini_project.py`를 복사하지 말고, 기존 builder의 `max_review_cycles`, `max_rounds`, `max_worker_attempts`가 모두 양수인지 찾아 call budget을 표로 작성합니다.
 2. Reviewer가 `REVISE`만 반환하는 tuple script를 구성하고, review/release에서 QA와 DevOps call history가 빈 list인지 test로 확인합니다.
 3. Conflict peer 두 개가 서로 다른 option을 반환하도록 수정한 local fixture를 만들고, `conflict_limit_reached`가 다수결 선택 없이 반환되는지 확인합니다.
 4. 다음 Volume에서 사용할 Router request schema를 설계합니다. `workflow_kind`, `objective`, `status`는 포함하되 `approval`, tool object, secret, mutable script는 포함하지 마십시오.
 
-## 10. 실무 적용
+## 11. 실무 적용
 
 운영 Multi-Agent 시스템에 Router나 tool을 더할 때도 이 권의 계약 순서를 유지합니다.
 
@@ -197,7 +220,7 @@ uv run pytest tests/volume07 -q
 > [!TIP]
 > Router의 fallback은 `PENDING`, protocol error, review limit을 무시하도록 만들면 안 됩니다. fallback target에도 독립적인 capability 및 approval policy가 있어야 합니다.
 
-## 11. 과제
+## 12. 과제
 
 ### 기본
 
@@ -214,7 +237,7 @@ uv run pytest tests/volume07 -q
 - Router가 workflow를 선택한 뒤 사람 승인 record를 참조하는 운영 설계를 작성합니다. record의 approval scope, approver identity, expiration, immutable audit location을 포함해야 합니다.
 - production tool을 별도 adapter로 설계하되, deterministic Mock package에는 import하지 않도록 dependency boundary를 제안합니다.
 
-## 12. 완료 체크리스트
+## 13. 완료 체크리스트
 
 - [ ] 기본 mini project 실행에서 네 workflow가 `awaiting_human_approval`로 멈췄다.
 - [ ] 네 explicit approval flag가 서로 독립된 stage만 열었음을 확인했다.
@@ -224,6 +247,6 @@ uv run pytest tests/volume07 -q
 - [ ] Router가 workflow selector이지 승인자나 tool executor가 아님을 설명할 수 있다.
 - [ ] Router Volume으로 넘길 request/result와 넘기면 안 되는 capability를 구분했다.
 
-## 13. 핵심 정리
+## 14. 핵심 정리
 
 Volume 07의 결과물은 여러 Agent를 무제한 연결하는 framework가 아닙니다. local deterministic Mock으로 role boundary와 message passing을 재현하고, 모든 loop를 bounded하게 만들며, 다음 stage는 명시적인 사람 승인 뒤에만 진행하는 workflow 계약입니다. 다음 Volume의 Router는 이 계약 위에서 선택 정책을 추가할 수 있지만, authority, approval, capability 경계를 대신할 수 없습니다.
