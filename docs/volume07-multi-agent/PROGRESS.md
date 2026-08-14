@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 27: Chapter 14 Agent 계약·상태·Capability PRD 학습 계약
+
+- `14-agent-contract-state-and-capability-boundaries.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 완성했다. 문서는 `AgentContext` immutable execution state, `AgentResponse` schema, Reviewer-only `ReviewDecision`, 장기 memory의 별도 writer/retention 책임, message와 tool capability의 분리, workflow별 bounded loop와 explicit `PENDING`/`APPROVED`/`REJECTED` human gate를 현재 구현에 맞춰 설명한다.
+- `test_agent_contract_state_documentation.py`를 추가해 Chapter 14의 14 section, `AgentContext`/`AgentResponse`/`DeterministicMockAgent`, approval enum, executable full regression 명령, `awaiting_human_approval`, local-only live API·secret·deployment 안전 범위를 회귀 검증한다.
+- `uv run pytest tests/volume07/test_agent_contract_state_documentation.py -q`는 1 passed였다. `uv run python examples/volume07/offline_multi_agent_mini_project.py`는 네 stage의 `awaiting_human_approval` 및 gated detail 없는 출력을, 네 `--approve-*` flag는 `completed`와 local-only handoff note를 실제 출력했다. 전체 `uv run pytest tests/volume07 -q`는 66 passed, `uv run ruff check src/ai_platform/agents tests/volume07`와 `uv run mypy src/ai_platform/agents`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-13 — Slice 26: Chapter 06 불변 deterministic Mock PRD 학습 계약
 
 - `06-immutable-mock-scripts.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 확장했다. 문서는 네 local `DeterministicMock*`의 non-empty immutable tuple script, script 소진의 fallback 없는 `AgentProtocolError`, workflow별 bounded loop와 별도 runtime policy를 현재 구현에 맞춰 설명한다.
