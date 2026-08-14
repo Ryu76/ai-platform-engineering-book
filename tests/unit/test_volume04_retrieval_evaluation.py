@@ -170,6 +170,10 @@ def test_threshold_rejects_non_finite_or_out_of_cosine_range_values(
             "reciprocal_rank must be positive when hit_at_k is true",
         ),
         (
+            lambda: RetrievalMetrics(0.0, 0.0, 1.0, False),
+            "reciprocal_rank must be at most 0.5 when hit_at_k is false",
+        ),
+        (
             lambda: RetrievalSummary(0.0, 0.0, 0.0, math.inf),
             "hit_rate_at_k must be a finite number",
         ),

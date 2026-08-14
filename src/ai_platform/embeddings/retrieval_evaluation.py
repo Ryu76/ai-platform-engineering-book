@@ -43,6 +43,10 @@ class RetrievalMetrics:
             raise RetrievalEvaluationError(
                 "reciprocal_rank must be positive when hit_at_k is true"
             )
+        if not self.hit_at_k and self.reciprocal_rank > 0.5:
+            raise RetrievalEvaluationError(
+                "reciprocal_rank must be at most 0.5 when hit_at_k is false"
+            )
 
 
 @dataclass(frozen=True, slots=True)
