@@ -42,6 +42,7 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
         encoding="utf-8"
     )
     service = (repository_root / "k8s/volume11/service.yaml").read_text(encoding="utf-8")
+    job = (repository_root / "k8s/volume11/batch/job.yaml").read_text(encoding="utf-8")
     batch = (repository_root / "k8s/volume11/batch/cronjob.yaml").read_text(encoding="utf-8")
     hpa = (repository_root / "k8s/volume11/autoscaling/hpa.yaml").read_text(encoding="utf-8")
     ingress = (repository_root / "k8s/volume11/ingress.yaml").read_text(encoding="utf-8")
@@ -89,6 +90,60 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             "resources:",
             "  - job.yaml",
             "  - cronjob.yaml",
+            "",
+        )
+    )
+    expected_job = "\n".join(
+        (
+            "# Local-only teaching manifest. The image is deliberately not pullable; "
+            "do not apply it.",
+            "apiVersion: batch/v1",
+            "kind: Job",
+            "metadata:",
+            "  name: ai-platform-maintenance-once",
+            "  namespace: ai-platform-example",
+            "  labels:",
+            "    app.kubernetes.io/name: ai-platform-maintenance",
+            "    app.kubernetes.io/part-of: ai-platform-example",
+            "    app.kubernetes.io/component: batch",
+            "spec:",
+            "  completions: 1",
+            "  parallelism: 1",
+            "  backoffLimit: 2",
+            "  activeDeadlineSeconds: 120",
+            "  ttlSecondsAfterFinished: 300",
+            "  template:",
+            "    metadata:",
+            "      labels:",
+            "        app.kubernetes.io/name: ai-platform-maintenance",
+            "        app.kubernetes.io/component: batch",
+            "    spec:",
+            "      restartPolicy: Never",
+            "      securityContext:",
+            "        seccompProfile:",
+            "          type: RuntimeDefault",
+            "      containers:",
+            "        - name: maintenance",
+            "          # Documentation-only placeholder. Do not replace outside an "
+            "approved environment.",
+            "          image: example.invalid/ai-platform-maintenance:0.1.0",
+            "          imagePullPolicy: IfNotPresent",
+            "          command: [\"python\", \"-c\", "
+            "\"print('documentation-only maintenance placeholder')\"]",
+            "          securityContext:",
+            "            allowPrivilegeEscalation: false",
+            "            capabilities:",
+            "              drop: [\"ALL\"]",
+            "            readOnlyRootFilesystem: true",
+            "            runAsNonRoot: true",
+            "            runAsUser: 10001",
+            "          resources:",
+            "            requests:",
+            "              cpu: 50m",
+            "              memory: 64Mi",
+            "            limits:",
+            "              cpu: 100m",
+            "              memory: 128Mi",
             "",
         )
     )
@@ -197,6 +252,7 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
         "batch_kustomization_is_the_canonical_local_two_resource_lesson_bundle": (
             batch_kustomization == expected_batch_kustomization
         ),
+        "job_is_the_canonical_local_placeholder_completion_boundary": job == expected_job,
         "deployment_references_example_configmap_in_its_declared_namespace": (
             "name: ai-platform-api-config\n  namespace: ai-platform-example" in configmap
             and "namespace: ai-platform-example" in deployment

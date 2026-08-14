@@ -36,6 +36,7 @@
 28. [Base Kustomization sibling resource: 정확한 local 파일명의 정적 경계](28-base-kustomization-sibling-resource-static-boundary.md)
 29. [Base Kustomization canonical block: 전체 source-text의 정적 경계](29-base-kustomization-canonical-block-static-boundary.md)
 30. [Batch Kustomization local bundle: 두 resource source-text의 정적 경계](30-batch-kustomization-local-bundle-static-boundary.md)
+31. [Job canonical placeholder completion boundary: 전체 source-text의 정적 경계](31-job-canonical-placeholder-completion-static-boundary.md)
 
 ## 현재 실습 경계
 
