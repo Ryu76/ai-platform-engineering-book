@@ -91,12 +91,19 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
 def dot_product(left: Sequence[float], right: Sequence[float]) -> float:
     """두 같은 차원 벡터의 dot product를 계산한다."""
     _require_same_nonempty_dimension(left, right)
-    # `fsum` retains a small finite residual when large positive and negative
-    # terms cancel. A regular running `sum` would round that residual away.
-    return fsum(
-        left_value * right_value
+    left_scale = max(abs(value) for value in left)
+    right_scale = max(abs(value) for value in right)
+    # Scale each finite input before multiplying. `fsum` then preserves a
+    # small residual when large positive and negative terms cancel, without
+    # producing intermediate +/-inf values that make fsum fail.
+    normalized_dot = fsum(
+        (left_value / left_scale) * (right_value / right_scale)
         for left_value, right_value in zip(left, right, strict=True)
     )
+    if normalized_dot == 0.0:
+        return 0.0
+    smaller_scale, larger_scale = sorted((left_scale, right_scale))
+    return (normalized_dot * smaller_scale) * larger_scale
 
 
 def euclidean_distance(left: Sequence[float], right: Sequence[float]) -> float:

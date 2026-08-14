@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME04_COMPLETE` 미설정
-- 현재 slice: 34 — dot product cancellation residual 보존
-- 검증: Volume 04 테스트 80 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
+- 현재 slice: 35 — dot product overflow cancellation 보존
+- 검증: Volume 04 테스트 81 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
 - 범위: 외부 API, 다운로드 모델, Docker, Qdrant를 실행하지 않았습니다.
 
 
@@ -901,3 +901,26 @@ git diff --check
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
 - Commit: `fix(volume04): stabilize dot product summation`
+
+## 2026-08-14 — Slice 35 완료: dot product overflow cancellation 보존
+
+### 추가한 결과물
+
+- `embedding_service.py`의 `dot_product`가 유한 input vector를 최대 절댓값으로 먼저 scale한 뒤 `math.fsum`으로 합산하도록 변경했습니다.
+  - `[1e308, 1e308] · [1e308, -1e308]`처럼 실제 내적은 `0.0`이지만 항별 곱셈이 `+/-inf`가 되는 입력도 `math.fsum` 오류 없이 계산합니다.
+  - 기존의 작은 cancellation residual 보존과 입력 차원·유한성 계약은 유지합니다.
+- `test_volume04_embedding_service.py`에 large finite term cancellation의 `0.0` 회귀 테스트를 추가했습니다.
+- 01장에 scale-first dot-product 경계와 대형 상쇄 예시를 기록했습니다.
+
+### 검증 결과
+
+- Volume 04 테스트 5개: **81 passed in 0.50s**.
+- `ruff check`: **All checks passed!**; `mypy src/ai_platform/embeddings`: **5 source files, no issues**.
+- 네 개의 결정적 local mock 예제를 실행했습니다: embedding/search top score `0.548`; retrieval `precision_at_1=1.0`, `recall_at_1=1.0`, `mrr=1.0`, `answerable=True`; lifecycle `deleted_count=1`, `reindexed_version=2`, `collection_size=3`, `top_1_recovered=True`.
+- `git diff --check`를 통과했습니다.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+- Commit: `fix(volume04): stabilize overflow cancellation`.

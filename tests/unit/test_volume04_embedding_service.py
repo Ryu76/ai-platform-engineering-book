@@ -52,6 +52,13 @@ def test_dot_product_preserves_a_small_residual_after_large_term_cancellation() 
     assert result == 1.0
 
 
+def test_dot_product_avoids_overflow_when_large_terms_cancel() -> None:
+    """유한한 상쇄 내적은 intermediate +/-inf 때문에 실패하면 안 된다."""
+    result = dot_product([1e308, 1e308], [1e308, -1e308])
+
+    assert result == 0.0
+
+
 def test_cosine_similarity_clamps_floating_point_roundoff_to_its_public_range() -> None:
     """동일한 정규화 vector의 반올림 오차가 1.0보다 큰 score가 되면 안 된다."""
     model = DeterministicEmbeddingModel(dimensions=256)
