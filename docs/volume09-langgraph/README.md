@@ -40,6 +40,7 @@
 29. [동시 Streaming 거절과 단일 종료 기록](29-streaming-concurrent-rejection-cas.md)
 30. [동시 Streaming 시작과 단일 승인 대기 기록](30-streaming-concurrent-start-cas.md)
 31. [재계산된 JSON Checkpoint도 승인 정책으로 검증하기](31-json-checkpoint-approval-policy-invariants.md)
+32. [재계산된 JSON Checkpoint의 승인 감사 순서 검증](32-json-checkpoint-approval-audit-trail.md)
 
 ## 예정 장
 
@@ -49,7 +50,7 @@
 
 ## 현재 안전 슬라이스
 
-이번 슬라이스는 checksum이 다시 계산되어도 `JsonFileCheckpointer`가 ActionKind와 승인 상태의 의미적 불변식을 별도로 검증하도록 확장합니다. `DEPLOY`·`DELETE`·`SEND`의 `approval_required`는 JSON payload가 아니라 ActionKind로 결정되고, 위험 작업의 `READY`·`COMPLETED` 등 실행 이후 상태에는 `approval_granted=True`가 필요합니다. `REJECTED`는 위험 작업의 명시적 `False` 결정만 허용하며, 결과는 `COMPLETED`에만 허용합니다. 파일 안의 모든 State를 읽기 때 검증하므로 재계산된 checksum을 가진 부적합 payload도 복원·후속 저장 전에 fail-closed 됩니다. 이는 키 없는 checksum의 인증 한계를 보완하는 구조 검증일 뿐 승인자 인증, 서명 또는 실제 위험 실행 권한을 제공하지 않으며, 모든 실행은 계속 오프라인 시뮬레이션입니다.
+이번 슬라이스는 checksum이 다시 계산되어도 `JsonFileCheckpointer`가 ActionKind·승인 상태의 의미적 불변식과 위험 승인 감사 순서를 별도로 검증하도록 확장합니다. `DEPLOY`·`DELETE`·`SEND`의 `approval_required`는 JSON payload가 아니라 ActionKind로 결정됩니다. 또한 위험 `READY`·`COMPLETED`·`ERROR`·`FAILED`에는 최초의 승인 대기 이벤트 뒤 명시적 승인 결정 이벤트가, `REJECTED`에는 대기 이벤트 뒤 명시적 거절 이벤트가 있어야 합니다. 따라서 `approval_granted=True`와 결과를 추가하고 checksum을 다시 계산해도 해당 감사 이력이 없으면 파일 안의 모든 State는 복원·후속 저장 전에 fail-closed 됩니다. 이는 키 없는 checksum과 일반 텍스트 감사 이벤트의 인증 한계를 보완하는 구조 검증일 뿐 승인자 인증, 서명 또는 실제 위험 실행 권한을 제공하지 않으며, 모든 실행은 계속 오프라인 시뮬레이션입니다.
 
 ## 이번 기반 결과물
 
@@ -57,7 +58,7 @@
 - `src/ai_platform/graph/nodes.py`: Plan, Router, 전문 역할, 경로 검토, Approval, Execute, Error Node
 - `src/ai_platform/graph/workflow.py`: 승인 흐름, `StreamingWorkflow`의 Checkpoint 우선 상태 출력, `RoutedWorkflow`의 Conditional Edge 참조 흐름, `PlannerDeveloperReviewerWorkflow`의 고정 역할 순서, `SubgraphWorkflow`의 부모 승인 경계, `RetryWorkflow`의 제한된 재시도, 주입 가능한 Checkpointer 경계
 - `src/ai_platform/graph/api.py`: FastAPI route가 사용할 Pydantic 시작·승인 요청, 공개 응답 스냅샷, 재전송이 기존 Checkpoint를 덮어쓰지 못하게 하는 프레임워크 독립 오프라인 어댑터와 동시 승인 충돌 경계
-- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent`, 승인 Checkpoint를 비교·교체하는 `save_if_current`, 같은 프로세스의 동일 정규화 JSON 경로를 여는 인스턴스가 공유하는 Lock 계약, 우발적 payload 변경을 복원 전에 차단하는 결정론적 SHA-256 checksum, 재계산 checksum도 우회하지 못하는 Action별 승인 상태 불변식
+- `src/ai_platform/graph/checkpointer.py`: 프로세스 내 메모리 Checkpointer와 공개 State만 원자적으로 저장하는 로컬 JSON Checkpointer, 신규 run ID의 첫 상태만 기록하는 `save_if_absent`, 승인 Checkpoint를 비교·교체하는 `save_if_current`, 같은 프로세스의 동일 정규화 JSON 경로를 여는 인스턴스가 공유하는 Lock 계약, 우발적 payload 변경을 복원 전에 차단하는 결정론적 SHA-256 checksum, 재계산 checksum도 우회하지 못하는 Action별 승인 상태·승인 대기/결정 감사 순서 불변식
 
 - `examples/volume09/single_node_workflow.py`: 승인 중단 및 재개 데모
 - `examples/volume09/router_conditional_workflow.py`: 낮은 신뢰도 Router의 경로 검토와 실행 승인 데모
@@ -84,7 +85,8 @@
 - `examples/volume09/json_checksum_guard_workflow.py`: 정상 JSON의 payload가 기록된 SHA-256 checksum과 다르면 상태 복원 전에 거부하는 데모
 - `examples/volume09/json_checksum_field_guard_workflow.py`: payload를 그대로 둔 채 교체된 checksum 필드도 상태 복원 전에 거부하는 데모
 - `examples/volume09/json_approval_policy_guard_workflow.py`: 위험 `DEPLOY`를 승인 없이 `READY`로 보이게 바꾸고 checksum을 재계산해도 상태 복원 전에 거부하는 데모
+- `examples/volume09/json_approval_audit_guard_workflow.py`: 위험 `DEPLOY`에 승인 Boolean·결과·재계산 checksum을 추가해도 승인 대기·결정 감사 이력이 없으면 상태 복원 전에 거부하는 데모
 - `examples/volume09/json_duplicate_key_guard_workflow.py`: 중첩 감사 이벤트의 중복 JSON 키가 있는 Checkpoint를 상태 복원 전에 거부하는 데모
-- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·Streaming 동시 시작·승인·거절 CAS·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작·상반 결정·payload·checksum 필드 불일치·최상위·중첩 중복 키·재계산 checksum을 가진 위험 승인 정책 우회 차단 계약 테스트
+- `tests/unit/test_volume09_graph.py`: 오프라인 안전·조건 분기·역할 순서·Subgraph 부모 승인·재시도 상한·영속 Checkpoint·상태 Streaming·Streaming 동시 시작·승인·거절 CAS·API 어댑터·동시 생성·메모리·JSON 단일/공유·정규화 경로 인스턴스 동시 승인·거절·시작·상반 결정·payload·checksum 필드 불일치·최상위·중첩 중복 키·재계산 checksum을 가진 위험 승인 정책 및 승인 감사 이력 우회 차단 계약 테스트
 
 현재 프로젝트 의존성에는 `langgraph` 패키지가 선언되어 있지 않습니다. 이 Volume의 현재 슬라이스들은 LangGraph API 호출을 가장하지 않고, 해당 API가 모델링하는 상태·Node·Edge·interrupt 경계를 직접 구현한 결정론적 참조 모델입니다. 패키지 추가는 이 작업 범위 밖의 프로젝트 설정 변경이므로, 승인된 별도 변경 후 실제 LangGraph 어댑터 장에서 수행합니다.

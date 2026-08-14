@@ -308,6 +308,46 @@ def _validate_checkpoint_state_invariants(state: WorkflowState) -> None:
     elif state.result is not None:
         raise ValueError("checkpoint non-completed state must not contain a result")
 
+    _validate_risky_approval_audit_trail(state)
+
+
+def _validate_risky_approval_audit_trail(state: WorkflowState) -> None:
+    """위험 Action의 승인 상태가 결정론적 승인 감사 순서와 맞는지 확인한다.
+
+    JSON의 Boolean 필드만 ``True``로 바꾸면 승인 기록 없이 실행 가능한 상태처럼
+    보일 수 있다. 이 로컬 참조 모델은 최초의 승인 대기 이벤트와 그 뒤의 명시적
+    승인 또는 거절 이벤트를 함께 요구한다. 키 없는 checksum과 일반 텍스트 감사
+    이벤트는 인증 수단이 아니므로, 운영 환경에서는 서명된 감사 기록과 권한 검증이
+    별도로 필요하다.
+    """
+    if state.action not in RISKY_ACTIONS:
+        return
+
+    waiting_detail = f"{state.action.value} 작업은 사람 승인을 기다립니다."
+    granted_detail = "사람 승인을 받았습니다. 실행 시뮬레이션으로 이동합니다."
+    rejected_detail = "사람이 작업을 거절했습니다. 실행하지 않습니다."
+    event_details = tuple(event.detail for event in state.events if event.node == "approval")
+    try:
+        waiting_index = event_details.index(waiting_detail)
+    except ValueError:
+        waiting_index = -1
+
+    if state.status is WorkflowStatus.WAITING_FOR_APPROVAL:
+        if waiting_index < 0 or any(
+            detail in {granted_detail, rejected_detail} for detail in event_details
+        ):
+            raise ValueError("checkpoint state has an invalid approval audit trail")
+        return
+
+    decision_detail = (
+        granted_detail if state.approval_granted is True else rejected_detail
+    )
+    if state.approval_granted is not None and (
+        waiting_index < 0
+        or decision_detail not in event_details[waiting_index + 1 :]
+    ):
+        raise ValueError("checkpoint state has an invalid approval audit trail")
+
 
 def _reject_suspected_secret(value: str, *, field: str) -> None:
     """일반적인 자격 증명 접두사·키 할당 표식을 거부한다."""

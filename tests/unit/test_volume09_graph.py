@@ -565,6 +565,46 @@ def test_json_file_checkpoint_rejects_a_rechecksummed_risky_approval_bypass(
         checkpointer.load(run_id=run_id)
 
 
+def test_json_file_checkpoint_rejects_a_rechecksummed_risky_approval_without_audit_trail(
+    tmp_path: Path,
+) -> None:
+    """승인 Boolean만 추가한 위험 완료 State는 승인 감사 기록 없이 복원하지 않는다."""
+    checkpoint_path = tmp_path / "approval-audit-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    run_id = "approval-audit-guard-001"
+    checkpointer.save(
+        run_id=run_id,
+        state=WorkflowState.start(
+            task="학습용 배포를 준비한다", action=ActionKind.DEPLOY
+        ).record(
+            node="plan",
+            detail="오프라인 계획을 만듭니다.",
+            status=WorkflowStatus.PLANNED,
+        ),
+    )
+    payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    state = payload["checkpoints"][run_id]
+    state["status"] = "completed"
+    state["approval_granted"] = True
+    state["result"] = "오프라인 시뮬레이션 완료: deploy / 학습용 배포를 준비한다"
+    canonical_payload = json.dumps(
+        {
+            "schema_version": payload["schema_version"],
+            "checkpoints": payload["checkpoints"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    payload["payload_sha256"] = hashlib.sha256(canonical_payload).hexdigest()
+    checkpoint_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="approval audit trail"):
+        checkpointer.load(run_id=run_id)
+
+
 def test_json_file_checkpoint_rejects_duplicate_json_keys_before_state_restore(
     tmp_path: Path,
 ) -> None:
