@@ -2,7 +2,7 @@
 
 ## 현재 상태
 
-- 현재 Phase: **MCP STDIO claimed input의 fake delivery owner 결과를 queue outcome으로 보수적으로 map하는 adapter model**
+- 현재 Phase: **MCP client configuration receipt freshness와 client-specific provenance verifier를 fake seam으로 분리하는 attestation model**
 - 완료 선언: 아직 하지 않음. actual OS pipe worker/cancellation·disconnect semantics, Windows/POSIX
   process-group/signal semantics, exit-code restart supervisor, durable audit/idempotency와 Hermes/Codex
   연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
@@ -1030,3 +1030,94 @@ client receipt equality도 actual configuration security/health의 완료 선언
 정확히 재평가하고, production에 남은 official client schema/version, authenticated receipt provenance,
 credential injection, file ownership/atomic rollback, reload/reconnect health와 durable operations를
 implementation boundary 밖으로 명시적으로 점검해야 합니다.
+
+## 이번 슬라이스: fresh configuration receipt와 client-specific provenance verifier를 분리하기
+
+- `src/ai_platform/mcp/client_attestation.py`
+  - `McpClientConfigurationAttestationRequest`는 exact configuration application을 deployment-owned
+    16–128 character single-line challenge와 묶고, `McpClientConfigurationAttestation`은 exact
+    acknowledgement와 challenge echo만 보관합니다.
+  - `verify_mcp_client_configuration_attestation()`은 challenge 및 existing client/server/exact Tool
+    tuple/generation acknowledgement를 verifier 호출 전에 대조합니다. trusted injected verifier의 exact
+    bool `True`일 때만 original immutable handoff을 반환하며, false/non-bool/exception detail이나 partial
+    handoff는 반환하지 않습니다.
+  - actual Hermes/Codex client, configuration file, credential/signature, subprocess, filesystem, network,
+    MCP server, Tool 또는 destructive action을 호출하지 않습니다. Challenge equality는 freshness correlation
+    model일 뿐 authenticated issuer proof, signature validation, reload/reconnect health proof가 아닙니다.
+- `src/ai_platform/mcp/client_acknowledgement.py`
+  - public verification 시 frozen dataclass를 우회해 mutation된 application/acknowledgement도 exact
+    visibility/generation contract로 다시 검사해 forged wildcard receipt가 handoff 반환 전에 막히게 했습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - attestation request, receipt, verifier, error와 verifier function을 public export에 추가했습니다.
+- `examples/volume03/mcp_client_configuration_attestation.py`
+  - fixed in-memory Hermes label, `safe_calculator` receipt/challenge와 `OfflineReceiptVerifier`만 대조하여
+    verified fields와 one verifier call을 출력합니다. actual client/config/credential/process/network/Tool은
+    호출하지 않습니다.
+- `tests/volume03/test_mcp_client_attestation.py`
+  - exact success/one call, challenge 및 acknowledgement mismatch의 pre-verifier rejection, false/non-bool,
+    hidden verifier exception, malformed challenge 및 invalid verifier를 fake seam으로 검증합니다.
+- `tests/volume03/test_mcp_client_acknowledgement.py`
+  - construction 뒤 frozen receipt mutation을 verification 시 다시 거부하는 regression을 추가했습니다.
+- `docs/volume03-tool-calling-mcp/38-mcp-client-configuration-attestation.md`
+  - freshness/provenance seam, safe offline exercise, exact-`True` contract와 actual authenticated receipt,
+    schema/version, credential/file/reload/reconnect health의 production ownership을 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른여덟 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: client configuration attestation slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_client_configuration_attestation.py
+client: hermes-agent
+server_name: safe-tools
+visible_tools: safe_calculator
+verifier_calls: 1
+
+$ uv run ruff format --check src/ai_platform/mcp/client_acknowledgement.py src/ai_platform/mcp/client_attestation.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_configuration_attestation.py tests/volume03/test_mcp_client_acknowledgement.py tests/volume03/test_mcp_client_attestation.py
+6 files already formatted
+
+$ uv run ruff check src/ai_platform/mcp/client_acknowledgement.py src/ai_platform/mcp/client_attestation.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_configuration_attestation.py tests/volume03/test_mcp_client_acknowledgement.py tests/volume03/test_mcp_client_attestation.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/client_acknowledgement.py src/ai_platform/mcp/client_attestation.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 3 source files
+
+$ uv run pytest tests/volume03/test_mcp_client_acknowledgement.py tests/volume03/test_mcp_client_attestation.py -q
+25 passed in 0.28s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 37 source files
+
+$ uv run pytest -q
+362 passed in 1.62s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만 project
+environment에서 정상 완료했습니다. Example/test는 fixed in-memory data와 fake verifier만 사용했으며 actual
+Hermes/Codex client, configuration file, credential/signature, process, filesystem, network, MCP server, Tool 또는
+destructive action을 호출하지 않았습니다.
+
+## 다음 슬라이스
+
+Volume 03 DoD를 정확히 재평가해야 합니다. 이 teaching repository의 fake seams가 authenticated receipt
+provenance, credential injection, config file ownership/atomic rollback, actual client schema/version compatibility,
+reload/reconnect health, OS-level pipe/process semantics, durable idempotency/audit/reconciliation을 구현하거나
+증명하지 않는다는 production boundary를 명시적으로 점검하세요. 남은 production concern을 fake model로 더
+세분화할지, current documented scope의 learning DoD를 충족하는지 결정해야 합니다.

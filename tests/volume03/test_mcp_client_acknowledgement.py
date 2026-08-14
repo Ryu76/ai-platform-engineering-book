@@ -104,3 +104,11 @@ def test_invalid_object_is_rejected_before_any_configuration_acknowledgement_is_
         McpClientConfigurationAcknowledgementError, match="acknowledgement is invalid"
     ):
         verify_mcp_client_configuration_acknowledgement(_application(), object())  # type: ignore[arg-type]
+
+
+def test_verification_rechecks_a_frozen_receipt_mutated_after_construction() -> None:
+    acknowledgement = _acknowledgement()
+    object.__setattr__(acknowledgement, "tool_names", ("safe_*",))
+
+    with pytest.raises(McpClientConfigurationAcknowledgementError, match="tool names are invalid"):
+        verify_mcp_client_configuration_acknowledgement(_application(), acknowledgement)

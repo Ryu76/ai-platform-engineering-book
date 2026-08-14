@@ -79,6 +79,8 @@ def verify_mcp_client_configuration_acknowledgement(
         raise McpClientConfigurationAcknowledgementError(
             "MCP client configuration acknowledgement is invalid"
         )
+    _validate_application_fields(application)
+    _validate_acknowledgement_fields(acknowledgement)
     if acknowledgement.configuration_generation != application.configuration_generation:
         raise McpClientConfigurationAcknowledgementError(
             "MCP client configuration acknowledgement does not match the application"
@@ -114,6 +116,26 @@ def _validate_handoff(handoff: object) -> None:
             "MCP client configuration handoff is invalid"
         )
     _validate_exact_tool_names(handoff.tool_names)
+
+
+def _validate_application_fields(application: McpClientConfigurationApplication) -> None:
+    """frozen dataclass를 우회해 변경한 application도 receipt trust 전에 다시 검사한다."""
+    _validate_handoff(application.handoff)
+    _validate_generation(application.configuration_generation)
+
+
+def _validate_acknowledgement_fields(
+    acknowledgement: McpClientConfigurationAcknowledgement,
+) -> None:
+    """frozen dataclass를 우회해 변경한 receipt도 partial handoff 반환 전에 다시 검사한다."""
+    _validate_handoff(
+        McpClientIntegrationHandoff(
+            client=acknowledgement.client,
+            server_name=acknowledgement.server_name,
+            tool_names=acknowledgement.tool_names,
+        )
+    )
+    _validate_generation(acknowledgement.configuration_generation)
 
 
 def _validate_exact_tool_names(tool_names: object) -> None:
