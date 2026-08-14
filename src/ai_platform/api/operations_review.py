@@ -35,6 +35,9 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     base_kustomization = (repository_root / "k8s/volume11/kustomization.yaml").read_text(
         encoding="utf-8"
     )
+    batch_kustomization = (repository_root / "k8s/volume11/batch/kustomization.yaml").read_text(
+        encoding="utf-8"
+    )
     compose = (repository_root / "docker/volume11/compose.dependencies.yaml").read_text(
         encoding="utf-8"
     )
@@ -74,6 +77,18 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             "  - deployment.yaml",
             "  - service.yaml",
             "  - ingress.yaml",
+            "",
+        )
+    )
+    expected_batch_kustomization = "\n".join(
+        (
+            "apiVersion: kustomize.config.k8s.io/v1beta1",
+            "kind: Kustomization",
+            "# Local render-only batch lesson. It is intentionally separate from "
+            "../kustomization.yaml.",
+            "resources:",
+            "  - job.yaml",
+            "  - cronjob.yaml",
             "",
         )
     )
@@ -178,6 +193,9 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
         ),
         "base_kustomization_is_the_canonical_example_resource_block": (
             base_kustomization == expected_base_kustomization
+        ),
+        "batch_kustomization_is_the_canonical_local_two_resource_lesson_bundle": (
+            batch_kustomization == expected_batch_kustomization
         ),
         "deployment_references_example_configmap_in_its_declared_namespace": (
             "name: ai-platform-api-config\n  namespace: ai-platform-example" in configmap

@@ -2,6 +2,41 @@
 
 > 상태: 진행 중. 이 권은 아직 PRD의 Volume Definition of Done을 충족하지 않았습니다. `VOLUME11_COMPLETE=true`는 설정하지 않습니다.
 
+## 2026-08-14 — Slice 30: Batch Kustomization local bundle의 정적 경계
+
+### 완료한 범위
+
+- [Batch Kustomization local bundle: 두 resource source-text의 정적 경계](30-batch-kustomization-local-bundle-static-boundary.md) 장을 추가했습니다.
+  - `k8s/volume11/batch/kustomization.yaml` 전체가 API/version header, base bundle과의 분리 comment, `job.yaml`, `cronjob.yaml` 두 sibling example entry만 가진다는 exact local source-text 계약을 분리했습니다.
+  - 이 계약은 YAML validity, Kustomize parse/resolution/render, filesystem target 존재·권한·symlink, Kubernetes API admission, Job/CronJob object 존재, scheduler·controller reconciliation, schedule 평가, Pod·image·command·data effect·network 또는 deployment 증거가 아님을 명시했습니다.
+- `src/ai_platform/api/operations_review.py`의 local artifact review에 `batch_kustomization_is_the_canonical_local_two_resource_lesson_bundle` check를 추가했습니다.
+  - check는 local UTF-8 batch Kustomization 전체를 예상 canonical 문자열과 비교합니다. 허용되지 않은 top-level field, 다른 resource block, comment, blank line, 들여쓰기 또는 순서 변경은 `false`가 됩니다.
+  - Docker daemon, Kubernetes API, network, container, filesystem 밖 path를 호출하지 않습니다.
+- `tests/integration/test_volume11_batch_kustomization_local_bundle.py`를 추가하고 mini-project expected artifact check 및 README를 갱신했습니다.
+  - test는 full-file equality, local review key와 source/parse/controller/runtime evidence 경계를 검증합니다.
+- 실제 Kustomize apply, Job/CronJob 생성·schedule 실행, image build/pull, container execution, Kubernetes API connection, controller reconciliation, rollout, rollback 또는 deployment를 실행하지 않았습니다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+|---|---|
+| `uv run python examples/volume11/local_operations_review_demo.py` | 통과 — 25개 local artifact check가 모두 `true`; 새 batch canonical bundle check는 source text-only이며 image build, container execution, dependency connectivity, telemetry backend, Kubernetes deployment는 `not_verified` |
+| `uv run pytest tests/integration/test_volume11_batch_kustomization_local_bundle.py tests/integration/test_volume11_mini_project.py -q` | 통과 — 9 passed |
+| `uv run pytest tests/unit/test_volume11_*.py tests/integration/test_volume11_*.py -q` | 통과 — Volume 11 scope 81 passed |
+| `uv run ruff check src/ai_platform/api/operations_review.py tests/integration/test_volume11_batch_kustomization_local_bundle.py tests/integration/test_volume11_mini_project.py` 및 `uv run mypy src/ai_platform/api` | 통과 — Ruff 통과, mypy 7 source files 문제 없음 |
+| `uv run python scripts/validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py` | 모두 통과 — 문서, 링크·코드 블록·비밀값 검사 통과 |
+| `docker compose -f docker/volume11/compose.health.yaml config --no-interpolate` 및 `docker compose -f docker/volume11/compose.dependencies.yaml config --no-interpolate` | 통과 — local Compose config parsing만 수행, image·container·network·volume을 만들지 않음 |
+| `kubectl kustomize k8s/volume11`, `k8s/volume11/batch`, `k8s/volume11/storage`, `k8s/volume11/autoscaling` | 통과 — local render만 수행, Kubernetes API·cluster·resource 생성 없음 |
+
+### 남은 범위
+
+- PRD Volume DoD는 아직 충족하지 않았습니다. PRD 필수 실습의 API Docker image 생성·Docker Compose 통합 실행·Kubernetes 로컬 환경 구성·Rolling Update·Rollback·최종 AI Platform 배포는 현재 작업 제한의 live cluster·deployment 금지 또는 아직 실행하지 않은 image/container/controller/network evidence와 충돌해 완료 선언할 수 없습니다.
+- 따라서 `VOLUME11_COMPLETE=true`를 설정하거나 self-pause 하지 않습니다. canonical batch source-text equality와 local render가 filesystem resolution, object creation, controller behavior, scheduled execution 또는 deployment evidence를 대체하지 않습니다.
+
+### 다음 Slice
+
+현재 작업 제한을 유지하는 동안에는 Volume 11 local-only artifact·test·placeholder boundary의 보수만 수행합니다. image build/Compose integration execution, Kubernetes local environment, controller/runtime enforcement, update/rollback, final deployment를 실제로 검증할 수 있도록 명시적 범위가 변경되기 전에는 completion flag를 추가하지 않습니다. 실제 remote repository, image, container, cluster, Secret, credential, alert, backend 또는 deployment는 하지 않습니다.
+
 ## 2026-08-14 — Slice 29: Base Kustomization canonical resource block의 정적 경계
 
 ### 완료한 범위
