@@ -864,3 +864,84 @@ actual Tool handler, database, filesystem, process, shell, network, external MCP
 Hermes/Codex integration은 real external service를 열지 않는 allowlisted configuration fixture와 typed
 request/audit binding으로 별도 모델링해야 합니다. 그 뒤 전체 Volume 03 DoD를 다시 점검하고, production
 integration의 credential·durable approval/audit/idempotency ownership은 explicitly out of scope로 검증하세요.
+
+## 이번 슬라이스: Hermes·Codex client에 exact Tool visibility handoff만 만들기
+
+- `src/ai_platform/mcp/client_handoff.py`
+  - `McpClientToolVisibilityPolicy`는 `hermes-agent`/`codex-cli` consumer label과 1–16개의 immutable
+    exact Tool name tuple만 받습니다. wildcard, newline, duplicate, empty/mutable list는 client config writer
+    전에 거부합니다.
+  - `prepare_mcp_client_integration_handoff()`은 trusted allowlisted launch plan과 static catalog에 policy의
+    모든 Tool이 존재할 때만 client/server/tool-name immutable snapshot을 반환합니다. missing Tool, catalog
+    failure, invalid input은 catalog metadata나 adapter detail을 반사하지 않습니다.
+  - actual Hermes/Codex configuration file write/reload, client launch/connect, subprocess, network, Tool
+    execution, approval, audit/idempotency는 이 in-memory handoff model의 책임이 아닙니다.
+- `src/ai_platform/mcp/__init__.py`
+  - client handoff error, kind, policy, result와 builder를 public export에 추가했습니다.
+- `examples/volume03/mcp_client_integration_handoff.py`
+  - `safe_calculator`/`safe_text_case` static definition, memory-only launch plan/catalog/policy만 조합하고
+    `safe_calculator` visibility snapshot을 출력합니다. actual client, MCP server, process, shell, filesystem,
+    network, Tool 또는 destructive action을 호출하지 않습니다.
+- `tests/volume03/test_mcp_client_handoff.py`
+  - Hermes/Codex labels의 exact handoff, invalid/mutable/duplicate/wildcard policy, catalog 밖 Tool의
+    metadata-hidden rejection, invalid plan/catalog의 client handoff 전 rejection을 검증합니다.
+- `docs/volume03-tool-calling-mcp/36-mcp-client-integration-handoff.md`
+  - client-neutral policy boundary와 Hermes 공식 MCP guide link, safe offline exercise, actual client-specific
+    config/reload/credential ownership 한계를 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른여섯 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: client integration handoff slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_client_integration_handoff.py
+client: hermes-agent
+server_name: safe-tools
+visible_tools: safe_calculator
+
+$ uv run ruff format --check src/ai_platform/mcp/client_handoff.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_integration_handoff.py tests/volume03/test_mcp_client_handoff.py
+4 files already formatted
+
+$ uv run ruff check src/ai_platform/mcp/client_handoff.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_integration_handoff.py tests/volume03/test_mcp_client_handoff.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/client_handoff.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 2 source files
+
+$ uv run pytest tests/volume03/test_mcp_client_handoff.py -q
+10 passed in 0.20s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 35 source files
+
+$ uv run pytest -q
+337 passed in 1.68s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만 project
+environment에서 정상 완료했습니다. 이 slice의 example/test는 in-memory data만 사용했으며 actual
+Hermes/Codex client, process, MCP server, network, Tool 또는 destructive action을 호출하지 않았습니다.
+
+## 다음 슬라이스
+
+client-neutral handoff은 actual client configuration의 완료 선언이 아닙니다. Hermes 공식 MCP 설정과
+Codex의 해당 공식 configuration schema/version을 별도 read-only fixture로 대조하고, credential/file
+permission/reload acknowledgement를 실제 client 실행 없이 검증할 safe adapter boundary가 남아 있습니다.
+그 뒤 전체 운영 DoD를 재평가해야 합니다.

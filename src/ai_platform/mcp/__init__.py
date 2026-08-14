@@ -1,6 +1,13 @@
 """Volume 03의 전송 계층 없는 교육용 MCP catalog·호출 요청 경계."""
 
 from ai_platform.mcp.catalog import McpCatalogError, McpServerCatalog, McpToolDefinition
+from ai_platform.mcp.client_handoff import (
+    McpClientHandoffError,
+    McpClientIntegrationHandoff,
+    McpClientKind,
+    McpClientToolVisibilityPolicy,
+    prepare_mcp_client_integration_handoff,
+)
 from ai_platform.mcp.dispatcher import McpDispatchError, dispatch_mcp_tool_call
 from ai_platform.mcp.fair_drain import (
     McpStdioFairDrainError,
@@ -124,6 +131,10 @@ from ai_platform.mcp.subprocess_factory import (
 __all__ = [
     "McpCallRequestError",
     "McpCatalogError",
+    "McpClientHandoffError",
+    "McpClientIntegrationHandoff",
+    "McpClientKind",
+    "McpClientToolVisibilityPolicy",
     "McpDispatchError",
     "McpStdioChildFactory",
     "McpStdioChildProcess",
@@ -202,6 +213,7 @@ __all__ = [
     "mcp_stdio_request_correlation_id",
     "parse_mcp_tool_call_request",
     "parse_stdio_jsonrpc_line",
+    "prepare_mcp_client_integration_handoff",
     "prepare_mcp_stdio_group_shutdown_target",
     "run_mcp_stdio_session",
     "send_mcp_stdio_group_shutdown_target",
