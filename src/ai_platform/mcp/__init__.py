@@ -57,6 +57,12 @@ from ai_platform.mcp.prompts import (
     McpPromptMessage,
     McpStaticPrompt,
 )
+from ai_platform.mcp.queued_delivery import (
+    McpStdioQueuedDeliveryError,
+    McpStdioQueuedDeliveryResult,
+    McpStdioQueuedInputDeliveryOwner,
+    deliver_next_mcp_stdio_queued_input,
+)
 from ai_platform.mcp.ready_drain import (
     McpStdioReadinessScheduler,
     McpStdioReadyChannels,
@@ -129,6 +135,9 @@ __all__ = [
     "McpStdioPopenInputOwner",
     "McpStdioPopenProcess",
     "McpStdioPopenStdinProcess",
+    "McpStdioQueuedDeliveryError",
+    "McpStdioQueuedDeliveryResult",
+    "McpStdioQueuedInputDeliveryOwner",
     "McpStdioReadyChannels",
     "McpStdioReadyDrainError",
     "McpStdioReadinessScheduler",
@@ -171,6 +180,7 @@ __all__ = [
     "dispatch_mcp_tool_call",
     "build_mcp_stdio_input_frame",
     "decode_and_redact_mcp_stdio_output",
+    "deliver_next_mcp_stdio_queued_input",
     "drain_mcp_stdio_binary_stream",
     "drain_mcp_stdio_ready_stream_pair",
     "drain_mcp_stdio_stream_pair_fairly",

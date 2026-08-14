@@ -2,7 +2,7 @@
 
 ## 현재 상태
 
-- 현재 Phase: **MCP STDIO bounded pending-input queue의 single-worker claim/result policy model**
+- 현재 Phase: **MCP STDIO claimed input의 fake delivery owner 결과를 queue outcome으로 보수적으로 map하는 adapter model**
 - 완료 선언: 아직 하지 않음. actual OS pipe worker/cancellation·disconnect semantics, Windows/POSIX
   process-group/signal semantics, exit-code restart supervisor, durable audit/idempotency와 Hermes/Codex
   연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
@@ -546,9 +546,77 @@ Tool 또는 destructive action을 호출하지 않았습니다.
 
 ## 다음 슬라이스
 
-actual OS pipe의 blocking write를 직접 해결하려 하지 말고, queue에서 claim한 item을 existing delivery
-gate/Popen owner에 전달하는 host-owned worker-result adapter를 fake seam으로 좁게 모델링해야 합니다.
-Worker outcome은 raw exception detail 없이 `NOT_DELIVERED` 또는 `AMBIGUOUS`로 보수적으로 map하고,
-disconnect의 in-flight ownership을 명시적으로 검증하세요. 이어 Windows/POSIX process group·signal,
-exit-code restart/backoff, durable approval/audit/idempotency, Hermes/Codex integration을 각각 독립적인
-fixture·검증 경계로 진행해야 합니다.
+Windows/POSIX actual signal API를 직접 호출하지 말고, allowlisted child launch plan에서 process-group
+isolation intent와 graceful/force shutdown target을 typed platform fixture로 먼저 모델링해야 합니다.
+Group leader/foreign process protection, unsupported platform/invalid plan의 no-signal behavior를 fake seam으로
+검증하세요. 이어 exit-code restart/backoff, durable approval/audit/idempotency, Hermes/Codex integration을
+각각 독립적인 fixture·검증 경계로 진행해야 합니다.
+
+## 이번 슬라이스: claimed queue input을 fake delivery owner에 한 번 전달해 보수적으로 resolve하기
+
+- `src/ai_platform/mcp/queued_delivery.py`
+  - `deliver_next_mcp_stdio_queued_input()`은 open queue에서 FIFO item 하나만 claim하여 trusted injected
+    delivery owner에 정확히 한 번 전달하고 terminal queue resolution을 반환합니다. empty queue는 owner I/O를
+    호출하지 않고 `None`을 반환합니다.
+  - matching local delivery receipt만 `DELIVERED`로 map합니다. typed non-partial delivery failure는
+    `NOT_DELIVERED`이며 partial failure, unknown exception, malformed/mismatched receipt은 raw adapter detail
+    없이 conservative `AMBIGUOUS`로 map해 existing queue의 caller-owned shutdown signal을 latch합니다.
+  - claim 뒤 disconnect는 in-flight item을 interrupt하지 않고 result를 한 번 resolve하게 남깁니다. worker,
+    thread, event loop, Popen, pipe, child signal/close/restart, retry, Tool 또는 external I/O는 소유하지 않습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - queued delivery protocol, result, error와 one-item delivery function을 public export에 추가했습니다.
+- `examples/volume03/mcp_stdio_queued_input_delivery.py`
+  - fixed `safe/test` frame과 memory-only receipt owner로 one delivery result만 출력합니다. actual subprocess,
+    pipe, shell, filesystem, network, MCP server, Tool 또는 destructive action은 수행하지 않습니다.
+- `tests/volume03/test_mcp_queued_delivery.py`
+  - one-call FIFO delivery, empty queue no-call, non-partial failure, partial/unknown/malformed ambiguity,
+    in-flight disconnect ownership, invalid owner pre-claim rejection과 receipt mismatch를 fake seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/32-mcp-stdio-queued-input-delivery.md`
+  - result mapping contract, shutdown/disconnect ownership, safe offline exercise와 actual worker boundary를
+    문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른두 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: queued input delivery slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_stdio_queued_input_delivery.py
+correlation_id: mcp-stdio:string:queued-delivery-demo-001
+outcome: delivered
+write_calls: 1
+state: open
+
+$ uv run ruff format --check src/ai_platform/mcp/queued_delivery.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_queued_input_delivery.py tests/volume03/test_mcp_queued_delivery.py
+4 files already formatted
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 31 source files
+
+$ uv run pytest tests/volume03/test_mcp_queued_delivery.py -q
+10 passed in 0.14s
+
+$ uv run pytest -q
+289 passed in 1.38s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만,
+project environment에서 정상 완료했습니다. example/tests는 in-memory frame·receipt·fake delivery owner만
+사용했으며 actual process, OS pipe, thread, shell, filesystem, network, external MCP server, Tool 또는
+destructive action을 호출하지 않았습니다.
