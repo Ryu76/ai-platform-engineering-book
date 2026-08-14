@@ -52,6 +52,18 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     dependencies = (repository_root / "src/ai_platform/api/dependencies.py").read_text(
         encoding="utf-8"
     )
+    base_resource_entries = tuple(
+        line.strip()[2:]
+        for line in base_kustomization.splitlines()
+        if line.startswith("  - ")
+    )
+    expected_base_resource_entries = (
+        "namespace.yaml",
+        "configmap.yaml",
+        "deployment.yaml",
+        "service.yaml",
+        "ingress.yaml",
+    )
     _before_startup, startup_marker, after_startup = deployment.partition("startupProbe:")
     startup_probe, _before_readiness, _after_readiness = after_startup.partition(
         "readinessProbe:"
@@ -146,6 +158,10 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
                 for resource in (configmap, deployment, service, ingress)
             )
             and "- namespace.yaml" in base_kustomization
+        ),
+        "base_kustomization_resource_entries_are_exact_local_example_filenames": (
+            base_resource_entries == expected_base_resource_entries
+            and all("/" not in entry and "\\" not in entry for entry in base_resource_entries)
         ),
         "deployment_references_example_configmap_in_its_declared_namespace": (
             "name: ai-platform-api-config\n  namespace: ai-platform-example" in configmap
