@@ -382,3 +382,93 @@ destructive action을 호출하지 않았습니다.
 actual Popen stdin ownership와 OS pipe backpressure는 별도 adapter로 분리해야 합니다. 그 뒤
 Windows/POSIX process group·signal, exit-code restart/backoff, durable approval/audit/idempotency,
 Hermes/Codex integration을 각각 독립적인 fixture·검증 경계로 진행합니다.
+
+## 이번 슬라이스: Popen stdin snapshot·liveness를 delivery gate에 좁게 결합하기
+
+- `src/ai_platform/mcp/popen_input.py`
+  - `McpStdioPopenInputOwner`는 trusted Popen-like process에서 binary stdin handle을 construction
+    시점에 정확히 한 번 snapshot합니다. open state의 live `poll() is None`일 때만 existing bounded
+    delivery gate에 immutable frame을 넘깁니다.
+  - cancelled/disconnected/shutdown-required request는 process poll과 writer I/O 전에 차단합니다.
+    typed string/integer ID semantics와 partial write failure의 caller-owned shutdown signal을 기존
+    gate contract 그대로 유지합니다.
+  - child exit는 stdin writer I/O 없이 `DISCONNECTED`로 전이하고 generic unavailable error로 끝납니다.
+    poll exception/malformed status도 raw detail을 숨기며 writer에 도달하지 않습니다. process stdin
+    replacement도 construction-time snapshot을 바꾸지 않습니다.
+  - actual Popen start, pipe close, child signal/shutdown, worker/thread/event loop, non-blocking I/O,
+    backpressure timeout, retry, stdout/stderr drain과 Tool 실행은 이 adapter의 책임이 아닙니다.
+- `src/ai_platform/mcp/input_delivery.py`
+  - `is_cancelled()` read-only query를 추가하여 Popen owner가 cancelled frame을 `poll()` 전에
+    writer-free로 reject하게 했습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - Popen stdin process protocol, owner, generic error를 public export에 추가했습니다.
+- `examples/volume03/mcp_stdio_popen_input_owner.py`
+  - fixed JSON-RPC `safe/test` frame, `OfflinePopen`, memory-only `OfflineBinaryWriter`만 사용하여
+    one-time poll, byte count, flush와 open state를 출력합니다. real Popen, OS pipe, shell,
+    filesystem, network, external MCP server, Tool 또는 destructive action을 수행하지 않습니다.
+- `tests/volume03/test_mcp_popen_input.py`
+  - live delivery, cancellation before poll/I/O, exited-child disconnect/no future poll, hidden poll
+    failure, partial write shutdown signal, immutable stdin snapshot, missing/invalid stdin pre-poll
+    rejection을 fake seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/30-mcp-stdio-popen-input-owner.md`
+  - captured handle ownership, liveness/error boundary, bounded write와 blocking OS-pipe backpressure의
+    차이, safe offline exercise와 production follow-up을 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: Popen stdin owner slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_stdio_popen_input_owner.py
+correlation_id: mcp-stdio:string:popen-input-demo-001
+frame_bytes: 67
+poll_calls: 1
+flush_calls: 1
+state: open
+
+$ uv run ruff format --check src/ai_platform/mcp/popen_input.py src/ai_platform/mcp/input_delivery.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_popen_input_owner.py tests/volume03/test_mcp_popen_input.py
+5 files already formatted
+
+$ uv run ruff check src/ai_platform/mcp/popen_input.py src/ai_platform/mcp/input_delivery.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_popen_input_owner.py tests/volume03/test_mcp_popen_input.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/popen_input.py src/ai_platform/mcp/input_delivery.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 3 source files
+
+$ uv run pytest tests/volume03/test_mcp_popen_input.py tests/volume03/test_mcp_input_delivery.py -q
+13 passed in 0.19s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 29 source files
+
+$ uv run pytest -q
+268 passed in 1.64s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만,
+project environment에서 정상 완료했습니다. example/tests는 in-memory fake만 사용했고 actual process,
+OS pipe, shell, filesystem, network, external MCP server, Tool 또는 destructive action을 호출하지 않았습니다.
+
+## 다음 슬라이스
+
+actual OS pipe의 backpressure를 direct synchronous `write()`로 해결하려 하지 말고, Windows/POSIX별
+blocking/cancellation semantics를 노출하지 않는 bounded queue·worker result policy를 fake seam부터
+분리해 모델링해야 합니다. 이어 Windows/POSIX process group·signal, exit-code restart/backoff, durable
+approval/audit/idempotency, Hermes/Codex integration을 각각 독립적인 fixture·검증 경계로 진행하세요.

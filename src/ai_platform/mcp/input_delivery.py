@@ -81,6 +81,11 @@ class McpStdioInputDeliveryGate:
         if self._state is McpStdioInputDeliveryState.OPEN:
             self._state = McpStdioInputDeliveryState.DISCONNECTED
 
+    def is_cancelled(self, request_id: str | int) -> bool:
+        """typed request ID가 아직 시작하지 않은 전송에서 취소됐는지 writer I/O 없이 확인한다."""
+        correlation_id = _correlation_id_or_raise(request_id)
+        return correlation_id in self._cancelled_correlation_ids
+
     def write(
         self,
         request_id: str | int,

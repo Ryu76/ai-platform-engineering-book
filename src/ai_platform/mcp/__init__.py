@@ -38,6 +38,11 @@ from ai_platform.mcp.output_decode import (
     McpStdioOutputRedactionPolicy,
     decode_and_redact_mcp_stdio_output,
 )
+from ai_platform.mcp.popen_input import (
+    McpStdioPopenInputError,
+    McpStdioPopenInputOwner,
+    McpStdioPopenStdinProcess,
+)
 from ai_platform.mcp.prompts import (
     McpPromptCatalog,
     McpPromptError,
@@ -107,7 +112,10 @@ __all__ = [
     "McpStdioOutputDecodeError",
     "McpStdioOutputRedactionPolicy",
     "McpStdioPopenFactory",
+    "McpStdioPopenInputError",
+    "McpStdioPopenInputOwner",
     "McpStdioPopenProcess",
+    "McpStdioPopenStdinProcess",
     "McpStdioReadyChannels",
     "McpStdioReadyDrainError",
     "McpStdioReadinessScheduler",
