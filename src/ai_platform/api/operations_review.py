@@ -38,6 +38,9 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     batch_kustomization = (repository_root / "k8s/volume11/batch/kustomization.yaml").read_text(
         encoding="utf-8"
     )
+    storage_kustomization = (
+        repository_root / "k8s/volume11/storage/kustomization.yaml"
+    ).read_text(encoding="utf-8")
     compose = (repository_root / "docker/volume11/compose.dependencies.yaml").read_text(
         encoding="utf-8"
     )
@@ -90,6 +93,17 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             "resources:",
             "  - job.yaml",
             "  - cronjob.yaml",
+            "",
+        )
+    )
+    expected_storage_kustomization = "\n".join(
+        (
+            "apiVersion: kustomize.config.k8s.io/v1beta1",
+            "kind: Kustomization",
+            "# Local render-only storage lesson. It is intentionally separate from "
+            "../kustomization.yaml.",
+            "resources:",
+            "  - pvc.yaml",
             "",
         )
     )
@@ -313,6 +327,9 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
         ),
         "batch_kustomization_is_the_canonical_local_two_resource_lesson_bundle": (
             batch_kustomization == expected_batch_kustomization
+        ),
+        "storage_kustomization_is_the_canonical_local_pvc_lesson_bundle": (
+            storage_kustomization == expected_storage_kustomization
         ),
         "job_is_the_canonical_local_placeholder_completion_boundary": job == expected_job,
         "cronjob_is_the_canonical_local_suspended_placeholder_schedule_boundary": (

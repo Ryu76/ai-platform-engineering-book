@@ -43,6 +43,7 @@ def test_local_operations_review_combines_probe_telemetry_and_render_only_bounda
         "base_kustomization_resource_entries_are_exact_local_example_filenames": True,
         "base_kustomization_is_the_canonical_example_resource_block": True,
         "batch_kustomization_is_the_canonical_local_two_resource_lesson_bundle": True,
+        "storage_kustomization_is_the_canonical_local_pvc_lesson_bundle": True,
         "job_is_the_canonical_local_placeholder_completion_boundary": True,
         "cronjob_is_the_canonical_local_suspended_placeholder_schedule_boundary": True,
         "deployment_references_example_configmap_in_its_declared_namespace": True,
