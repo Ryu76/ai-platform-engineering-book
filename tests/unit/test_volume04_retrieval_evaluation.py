@@ -166,6 +166,10 @@ def test_threshold_rejects_non_finite_or_out_of_cosine_range_values(
             "precision_at_k, recall_at_k, and hit_at_k must agree",
         ),
         (
+            lambda: RetrievalMetrics(1.0, 1.0, 0.0, True),
+            "reciprocal_rank must be positive when hit_at_k is true",
+        ),
+        (
             lambda: RetrievalSummary(0.0, 0.0, 0.0, math.inf),
             "hit_rate_at_k must be a finite number",
         ),

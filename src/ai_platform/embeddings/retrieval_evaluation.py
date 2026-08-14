@@ -39,6 +39,10 @@ class RetrievalMetrics:
             raise RetrievalEvaluationError(
                 "precision_at_k, recall_at_k, and hit_at_k must agree"
             )
+        if self.hit_at_k and self.reciprocal_rank == 0.0:
+            raise RetrievalEvaluationError(
+                "reciprocal_rank must be positive when hit_at_k is true"
+            )
 
 
 @dataclass(frozen=True, slots=True)

@@ -66,7 +66,7 @@ uv run pytest tests/unit/test_volume04_retrieval_evaluation.py -q
 
 검색 결과가 `k`보다 적어도 precision의 분모는 `k`입니다. 예를 들어 `k=3`인데 결과가 하나이고 그 하나가 관련 문서여도 precision@3은 `1/3`입니다. 후보 부족을 숨기지 않는 보수적인 정의입니다. 반면 reciprocal rank는 top-k로 자르지 않은 전체 순위에서 첫 관련 결과를 찾습니다. top-k 품질과 첫 정답의 위치를 별도로 볼 수 있습니다.
 
-`RetrievalMetrics`와 `RetrievalSummary`는 public immutable record이므로 수동으로 만들더라도 모든 수치가 bool이 아닌 유한한 `[0.0, 1.0]` 값인지 확인합니다. 따라서 잘못된 fixture의 `NaN`, 무한대, 범위 밖 비율이 평균으로 전파되지 않습니다. 또한 `precision_at_k`와 `recall_at_k`가 0보다 큰지 여부와 `hit_at_k`는 반드시 일치해야 합니다. 즉 top-k에 관련 결과가 없으면 둘 다 0이고 `hit_at_k=False`이며, 관련 결과가 있으면 둘 다 양수이고 `hit_at_k=True`입니다. `mean_retrieval_metrics`는 비어 있지 않은 `RetrievalMetrics` sequence만 받아 평균 precision, 평균 recall, MRR, hit rate로 요약합니다. 문자열·bytes·generator 같은 일회성 입력은 거부하므로 `len()` 실패나 소진된 iterator가 보고서로 섞이지 않습니다. `meets_score_threshold`는 score와 임계값 모두가 유한한 cosine 범위 `[-1.0, 1.0]` 안에 있을 때만 받고, `score >= minimum_score`일 때만 참을 반환합니다. 따라서 다른 metric의 거리나 잘못 변환된 `1.1` 같은 값을 cosine score로 오인해 gate를 통과시키지 않습니다.
+`RetrievalMetrics`와 `RetrievalSummary`는 public immutable record이므로 수동으로 만들더라도 모든 수치가 bool이 아닌 유한한 `[0.0, 1.0]` 값인지 확인합니다. 따라서 잘못된 fixture의 `NaN`, 무한대, 범위 밖 비율이 평균으로 전파되지 않습니다. 또한 `precision_at_k`와 `recall_at_k`가 0보다 큰지 여부와 `hit_at_k`는 반드시 일치해야 합니다. 즉 top-k에 관련 결과가 없으면 둘 다 0이고 `hit_at_k=False`이며, 관련 결과가 있으면 둘 다 양수이고 `hit_at_k=True`입니다. `hit_at_k=True`인 record는 첫 관련 결과가 top-k 안에 존재하므로 `reciprocal_rank`도 반드시 양수여야 합니다. 반대로 top-k 밖에서 처음 관련 결과를 찾는 경우에는 `hit_at_k=False`여도 양수 reciprocal rank가 허용됩니다. `mean_retrieval_metrics`는 비어 있지 않은 `RetrievalMetrics` sequence만 받아 평균 precision, 평균 recall, MRR, hit rate로 요약합니다. 문자열·bytes·generator 같은 일회성 입력은 거부하므로 `len()` 실패나 소진된 iterator가 보고서로 섞이지 않습니다. `meets_score_threshold`는 score와 임계값 모두가 유한한 cosine 범위 `[-1.0, 1.0]` 안에 있을 때만 받고, `score >= minimum_score`일 때만 참을 반환합니다. 따라서 다른 metric의 거리나 잘못 변환된 `1.1` 같은 값을 cosine score로 오인해 gate를 통과시키지 않습니다.
 
 ## 8. 정상 실행 결과와 해석
 
@@ -88,6 +88,7 @@ top_score=0.548; minimum_score=0.500; answerable=True
 | `relevant_ids must not be empty` | 평가할 정답 판단을 기록하지 않음 | 질의마다 검토한 관련 문서 ID를 최소 하나 지정합니다. 정답이 없는 질의는 별도 no-answer 평가 집합으로 관리합니다. |
 | `metrics must be a non-empty sequence ...` | 평균에 빈 목록 또는 generator를 전달함 | 먼저 질의별 `RetrievalMetrics`를 list 또는 tuple에 수집한 뒤 한 번에 전달합니다. |
 | `precision_at_k, recall_at_k, and hit_at_k must agree` | 수동 fixture에서 top-k 관련 결과의 비율과 hit flag가 모순됨 | 관련 결과가 없으면 precision·recall을 모두 `0.0`, `hit_at_k=False`로 설정하고, 있으면 두 비율을 양수, `hit_at_k=True`로 설정합니다. |
+| `reciprocal_rank must be positive when hit_at_k is true` | 수동 fixture가 top-k hit을 주장하면서 첫 관련 결과 순위를 `0.0`으로 기록함 | `hit_at_k=True`이면 실제 첫 관련 결과 rank `r`에 대해 `1/r`을 기록합니다. top-k 밖의 첫 관련 결과만 `hit_at_k=False`와 양수 reciprocal rank를 함께 가질 수 있습니다. |
 | `k must be a positive integer` | `0`, 음수 또는 불리언을 전달함 | 사용자 노출 개수에 맞는 양의 정수를 사용합니다. |
 | `score must be between ...` 또는 `minimum_score must be between ...` | cosine 범위 밖 score 또는 임계값을 사용함 | cosine 기반 store에서는 score와 임계값 모두 -1.0부터 1.0까지의 유한한 값을 사용합니다. 다른 metric 값은 adapter에서 의미와 방향을 명시적으로 변환한 뒤 평가합니다. |
 | 기대 문서가 1위가 아님 | 해시 mock은 의미를 학습하지 않음 | 공유 토큰을 점검하고, 실무에서는 별도 평가로 검증한 임베딩 모델과 corpus를 사용합니다. |

@@ -768,3 +768,25 @@ git diff --check
 
 - 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
 - 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
+
+## 2026-08-14 — Slice 29 완료: top-k hit와 reciprocal rank 의미 일관성 고정
+
+### 추가한 결과물
+
+- `retrieval_evaluation.py`의 public `RetrievalMetrics` 생성 계약을 강화했습니다.
+  - `hit_at_k=True`이면 첫 관련 결과가 반드시 존재하므로 `reciprocal_rank`가 `0.0`일 수 없습니다.
+  - top-k 밖에서 첫 관련 결과를 찾은 `hit_at_k=False`와 양수 reciprocal rank의 기존 의미는 유지합니다.
+- `test_volume04_retrieval_evaluation.py`에 top-k hit인데 `reciprocal_rank=0.0`인 수동 fixture 거부 회귀 테스트를 추가했습니다.
+- 03장 코드 설명과 오류 해결 표에 reciprocal rank/hit@k 관계와 올바른 fixture 작성 방법을 기록했습니다.
+
+### 검증 결과
+
+- Volume 04 테스트 5개: **75 passed in 0.45s**.
+- `ruff check`: **All checks passed!**; `mypy src/ai_platform/embeddings`: **5 source files, no issues**.
+- 네 개의 결정적 local mock 예제를 실행했습니다: embedding/search top score `0.548`; retrieval `precision_at_1=1.0`, `recall_at_1=1.0`, `mrr=1.0`, `answerable=True`; lifecycle `deleted_count=1`, `reindexed_version=2`, `collection_size=3`, `top_1_recovered=True`.
+- `git diff --check`를 통과했습니다.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
