@@ -2,7 +2,7 @@
 
 ## 현재 상태
 
-- 현재 Phase: **MCP client configuration receipt freshness와 client-specific provenance verifier를 fake seam으로 분리하는 attestation model**
+- 현재 Phase: **attested MCP client configuration 뒤 client-specific health evidence를 fake seam으로 분리하는 model**
 - 완료 선언: 아직 하지 않음. actual OS pipe worker/cancellation·disconnect semantics, Windows/POSIX
   process-group/signal semantics, exit-code restart supervisor, durable audit/idempotency와 Hermes/Codex
   연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
@@ -1121,3 +1121,86 @@ provenance, credential injection, config file ownership/atomic rollback, actual 
 reload/reconnect health, OS-level pipe/process semantics, durable idempotency/audit/reconciliation을 구현하거나
 증명하지 않는다는 production boundary를 명시적으로 점검하세요. 남은 production concern을 fake model로 더
 세분화할지, current documented scope의 learning DoD를 충족하는지 결정해야 합니다.
+
+## 이번 슬라이스: attested configuration 뒤 health evidence를 one-shot fake seam으로 분리하기
+
+- `src/ai_platform/mcp/client_health.py`
+  - `verify_mcp_client_configuration_health()`는 existing fresh provenance attestation을 먼저
+    검증하고, caller-owned `McpClientConfigurationHealthProbe`를 정확히 한 번 호출합니다.
+  - malformed request/attestation/verifier/probe 및 attestation mismatch/failure는 health probe 호출
+    전에 거부합니다. probe의 exact bool `True`만 original immutable handoff을 반환합니다.
+  - false/non-bool/exception은 raw adapter detail 또는 partial Tool visibility를 반환하지 않는 generic
+    error가 됩니다. actual Hermes/Codex client, config file, credential, reload/connect, network, MCP
+    server, Tool 또는 destructive action은 호출하지 않습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - health error, probe protocol, verification function을 public export에 추가했습니다.
+- `examples/volume03/mcp_client_configuration_health.py`
+  - fixed Hermes `safe_calculator` application/receipt/challenge와 in-memory verifier/probe만 대조해
+    one health-probe call을 출력합니다. actual client, config file, process, filesystem, network, Tool
+    또는 destructive action을 수행하지 않습니다.
+- `tests/volume03/test_mcp_client_health.py`
+  - success의 one-call-per-seam, attestation mismatch/failure의 probe-before-reject, false/non-bool
+    result, hidden probe exception 및 invalid probe의 no-call behavior를 fake seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/39-mcp-client-configuration-health.md`
+  - attestation/probe ordering, exact-`True` boundary, safe offline exercise 및 actual reload/reconnect/
+    server identity/transport health의 production ownership을 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른아홉 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: client configuration health slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_client_configuration_health.py
+client: hermes-agent
+server_name: safe-tools
+visible_tools: safe_calculator
+health_probe_calls: 1
+
+$ uv run ruff format --check src/ai_platform/mcp/client_health.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_configuration_health.py tests/volume03/test_mcp_client_health.py
+4 files already formatted
+
+$ uv run ruff check src/ai_platform/mcp/client_health.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_configuration_health.py tests/volume03/test_mcp_client_health.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/client_health.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 2 source files
+
+$ uv run pytest tests/volume03/test_mcp_client_health.py -q
+9 passed in 0.20s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 38 source files
+
+$ uv run pytest -q
+371 passed in 1.58s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만
+project environment에서 정상 완료했습니다. Example/test는 fixed in-memory data와 fake verifier/probe만
+사용했으며 actual Hermes/Codex client, configuration file, credential, process, filesystem, network, MCP
+server, Tool 또는 destructive action을 호출하지 않았습니다.
+
+## 다음 슬라이스
+
+이 health model의 exact `True`는 actual reload/reconnect 또는 server identity/transport health proof가
+아닙니다. Volume 03의 learning DoD와 production DoD를 명시적으로 분리해 재평가하세요. Production에는
+official client schema/version compatibility, authenticated credential/issuer/key rotation, config file ownership/
+atomic rollback, bounded reload/reconnect health adapter, OS-level pipe/process semantics, durable audit/idempotency/
+reconciliation과 operator observability가 여전히 별도 검증 경계로 남아 있습니다.

@@ -46,5 +46,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 36. [MCP client integration handoff: Hermes·Codex에 exact Tool visibility만 넘기기](36-mcp-client-integration-handoff.md) — actual client config·launch 없이 deployment-owned exact Tool allowlist를 static catalog에 대조해 immutable client-neutral handoff만 만드는 model
 37. [MCP client configuration acknowledgement: exact handoff receipt를 config adapter와 분리하기](37-mcp-client-configuration-acknowledgement.md) — actual client/config write 없이 client·server·exact Tool tuple·deployment generation이 같은 최소 receipt만 원래 immutable handoff에 대조하는 model
 38. [MCP client configuration attestation: fresh receipt와 provenance verifier를 분리하기](38-mcp-client-configuration-attestation.md) — actual client/config write 없이 fresh challenge echo와 exact acknowledgement를 먼저 대조하고 client-specific provenance verifier의 exact `True`만 original immutable handoff으로 승격하는 model
+39. [MCP client configuration health: attested receipt 뒤 health evidence를 분리하기](39-mcp-client-configuration-health.md) — actual client/config write 없이 fresh provenance attestation 뒤 client-specific health probe의 exact `True`만 original immutable handoff으로 승격하는 model
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.

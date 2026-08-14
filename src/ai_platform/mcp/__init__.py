@@ -21,6 +21,11 @@ from ai_platform.mcp.client_handoff import (
     McpClientToolVisibilityPolicy,
     prepare_mcp_client_integration_handoff,
 )
+from ai_platform.mcp.client_health import (
+    McpClientConfigurationHealthError,
+    McpClientConfigurationHealthProbe,
+    verify_mcp_client_configuration_health,
+)
 from ai_platform.mcp.dispatcher import McpDispatchError, dispatch_mcp_tool_call
 from ai_platform.mcp.fair_drain import (
     McpStdioFairDrainError,
@@ -151,6 +156,8 @@ __all__ = [
     "McpClientConfigurationAttestationError",
     "McpClientConfigurationAttestationRequest",
     "McpClientConfigurationAttestationVerifier",
+    "McpClientConfigurationHealthError",
+    "McpClientConfigurationHealthProbe",
     "McpClientHandoffError",
     "McpClientIntegrationHandoff",
     "McpClientKind",
@@ -235,6 +242,7 @@ __all__ = [
     "parse_stdio_jsonrpc_line",
     "verify_mcp_client_configuration_acknowledgement",
     "verify_mcp_client_configuration_attestation",
+    "verify_mcp_client_configuration_health",
     "prepare_mcp_client_integration_handoff",
     "prepare_mcp_stdio_group_shutdown_target",
     "run_mcp_stdio_session",
