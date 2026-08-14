@@ -2,7 +2,7 @@
 
 ## 현재 상태
 
-- 현재 Phase: **attested MCP client configuration 뒤 client-specific health evidence를 fake seam으로 분리하는 model**
+- 현재 Phase: **attested·healthy MCP client configuration 뒤 exact Tool capability receipt를 fake seam으로 분리하는 model**
 - 완료 선언: 아직 하지 않음. actual OS pipe worker/cancellation·disconnect semantics, Windows/POSIX
   process-group/signal semantics, exit-code restart supervisor, durable audit/idempotency와 Hermes/Codex
   연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
@@ -1197,10 +1197,82 @@ project environment에서 정상 완료했습니다. Example/test는 fixed in-me
 사용했으며 actual Hermes/Codex client, configuration file, credential, process, filesystem, network, MCP
 server, Tool 또는 destructive action을 호출하지 않았습니다.
 
+## 이번 슬라이스: healthy attestation 뒤 client-visible exact Tool snapshot을 대조하기
+
+- `src/ai_platform/mcp/client_capability.py`
+  - `verify_mcp_client_configuration_capability()`는 existing fresh provenance attestation과
+    one-shot health evidence를 먼저 검증한 뒤 caller-owned capability probe를 정확히 한 번 호출합니다.
+  - immutable `McpClientConfigurationCapabilityReceipt`의 1–16 unique exact Tool-name tuple이 original
+    handoff tuple과 순서까지 같을 때만 original handoff을 반환합니다. extra/missing/reordered tuple,
+    wildcard/malformed/forged receipt, probe exception에는 partial visibility나 raw adapter detail을
+    반환하지 않습니다.
+  - actual Hermes/Codex client, config file, credential, actual `tools/list`, reload/connect, process,
+    filesystem, network, MCP server, Tool 또는 destructive action을 호출하지 않습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - capability error, receipt, probe protocol과 verification function을 public export에 추가했습니다.
+- `examples/volume03/mcp_client_configuration_capability.py`
+  - fixed Hermes `safe_calculator` application/receipt/challenge와 in-memory verifier/health/capability
+    fake만 대조해 one capability-probe call을 출력합니다. actual client/config/process/network/Tool은
+    호출하지 않습니다.
+- `tests/volume03/test_mcp_client_capability.py`
+  - exact success/one call per seam, invalid attestation와 failed health의 downstream pre-call rejection,
+    extra/missing/malformed receipt, hidden probe exception, forged mutable receipt revalidation 및 invalid
+    probe의 no-call behavior를 fake seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/40-mcp-client-configuration-capability.md`
+  - attestation/health/capability ordering, exact tuple contract, safe offline exercise와 actual
+    tools-list/session/server identity/reconnect 및 production authorization ownership을 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 마흔 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: client configuration capability slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_client_configuration_capability.py
+client: hermes-agent
+server_name: safe-tools
+visible_tools: safe_calculator
+capability_probe_calls: 1
+
+$ uv run pytest tests/volume03/test_mcp_client_capability.py -q
+9 passed in 0.22s
+
+$ uv run ruff format --check src/ai_platform/mcp/client_capability.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_client_configuration_capability.py tests/volume03/test_mcp_client_capability.py
+4 files already formatted
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 39 source files
+
+$ uv run pytest -q
+380 passed in 1.73s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만 project
+environment에서 정상 완료했습니다. Example/test는 fixed in-memory data와 fake verifier/probe만 사용했으며 actual
+Hermes/Codex client, configuration file, credential, process, filesystem, network, MCP server, Tool 또는
+destructive action을 호출하지 않았습니다.
+
 ## 다음 슬라이스
 
-이 health model의 exact `True`는 actual reload/reconnect 또는 server identity/transport health proof가
-아닙니다. Volume 03의 learning DoD와 production DoD를 명시적으로 분리해 재평가하세요. Production에는
-official client schema/version compatibility, authenticated credential/issuer/key rotation, config file ownership/
-atomic rollback, bounded reload/reconnect health adapter, OS-level pipe/process semantics, durable audit/idempotency/
-reconciliation과 operator observability가 여전히 별도 검증 경계로 남아 있습니다.
+이 capability model의 exact tuple은 actual client `tools/list`, reload/reconnect, authenticated session 또는
+server identity/transport health proof가 아닙니다. Volume 03의 learning DoD와 production DoD를 명시적으로
+분리해 재평가하세요. Production에는 official client schema/version compatibility, authenticated credential/
+issuer/key rotation, config file ownership/atomic rollback, bounded reload/reconnect/capability adapter,
+OS-level pipe/process semantics, durable audit/idempotency/reconciliation과 operator observability가 여전히
+별도 검증 경계로 남아 있습니다.

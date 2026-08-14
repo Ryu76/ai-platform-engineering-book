@@ -14,6 +14,12 @@ from ai_platform.mcp.client_attestation import (
     McpClientConfigurationAttestationVerifier,
     verify_mcp_client_configuration_attestation,
 )
+from ai_platform.mcp.client_capability import (
+    McpClientConfigurationCapabilityError,
+    McpClientConfigurationCapabilityProbe,
+    McpClientConfigurationCapabilityReceipt,
+    verify_mcp_client_configuration_capability,
+)
 from ai_platform.mcp.client_handoff import (
     McpClientHandoffError,
     McpClientIntegrationHandoff,
@@ -156,6 +162,9 @@ __all__ = [
     "McpClientConfigurationAttestationError",
     "McpClientConfigurationAttestationRequest",
     "McpClientConfigurationAttestationVerifier",
+    "McpClientConfigurationCapabilityError",
+    "McpClientConfigurationCapabilityProbe",
+    "McpClientConfigurationCapabilityReceipt",
     "McpClientConfigurationHealthError",
     "McpClientConfigurationHealthProbe",
     "McpClientHandoffError",
@@ -242,6 +251,7 @@ __all__ = [
     "parse_stdio_jsonrpc_line",
     "verify_mcp_client_configuration_acknowledgement",
     "verify_mcp_client_configuration_attestation",
+    "verify_mcp_client_configuration_capability",
     "verify_mcp_client_configuration_health",
     "prepare_mcp_client_integration_handoff",
     "prepare_mcp_stdio_group_shutdown_target",
