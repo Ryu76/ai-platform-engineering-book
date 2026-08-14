@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 28: Chapter 08 실행 중 검토 결정 PRD 학습 계약
+
+- `08-runtime-review-decision-contract.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 적용, 과제, 체크리스트, 요약)으로 확장했다. 문서는 fixed deterministic Mock의 구성 단계 검증과 local untrusted `InvalidReviewAgent`의 실행 단계 `AgentResponse` schema 검증을 분리하고, enum-like 문자열 `"approve"` 및 Reviewer 외 role의 `ReviewDecision`이 audit trail과 다음 Agent 호출 전에 `AgentProtocolError`로 fail-closed됨을 현재 구현과 테스트에 맞춰 설명한다.
+- `test_runtime_review_decision_documentation.py`를 추가해 Chapter 08의 14 section, `AgentResponse`/`ReviewDecision`/`AgentProtocolError`/`InvalidReviewAgent`, `PENDING`/`APPROVED`/`REJECTED`, focused/full regression 명령, local-only live API·secret·deployment safety scope를 회귀 검증한다.
+- `uv run pytest tests/volume07/test_runtime_review_decision_contract.py tests/volume07/test_runtime_review_decision_documentation.py -q`는 6 passed였다. review와 release example의 기본 실행은 각각 `awaiting_human_approval`이며 QA/DevOps를 호출하지 않았고, `--approve`는 local `completed`만 출력했다. mini project의 기본 네 stage pause와 네 explicit approval flag의 local completion도 실제 실행으로 확인했다. `uv run pytest tests/volume07 -q`는 67 passed, `uv run ruff check src/ai_platform/agents tests/volume07`, `uv run mypy src/ai_platform/agents`, `validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 27: Chapter 14 Agent 계약·상태·Capability PRD 학습 계약
 
 - `14-agent-contract-state-and-capability-boundaries.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 경계, 과제, 체크리스트, 요약)으로 완성했다. 문서는 `AgentContext` immutable execution state, `AgentResponse` schema, Reviewer-only `ReviewDecision`, 장기 memory의 별도 writer/retention 책임, message와 tool capability의 분리, workflow별 bounded loop와 explicit `PENDING`/`APPROVED`/`REJECTED` human gate를 현재 구현에 맞춰 설명한다.
