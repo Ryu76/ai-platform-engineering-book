@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from hashlib import sha256
-from math import fsum, hypot, isfinite, sqrt
+from math import copysign, frexp, fsum, hypot, inf, isfinite, ldexp, sqrt
 from re import findall
 from typing import Protocol
 
@@ -91,24 +91,27 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
 def dot_product(left: Sequence[float], right: Sequence[float]) -> float:
     """두 같은 차원 벡터의 dot product를 계산한다."""
     _require_same_nonempty_dimension(left, right)
-    left_scale = max(abs(value) for value in left)
-    right_scale = max(abs(value) for value in right)
     # Unlike cosine similarity, a zero vector has a defined dot product.
-    # Return before scaling so an all-zero operand never causes division by
-    # zero in the numerically stable path below.
-    if left_scale == 0.0 or right_scale == 0.0:
-        return 0.0
-    # Scale each finite input before multiplying. `fsum` then preserves a
-    # small residual when large positive and negative terms cancel, without
-    # producing intermediate +/-inf values that make fsum fail.
-    normalized_dot = fsum(
-        (left_value / left_scale) * (right_value / right_scale)
+    # Decompose every non-zero term before multiplication. This avoids both
+    # overflowing products and losing finite cross-scale terms such as
+    # 1e308 * 1e-308 when each whole vector is scaled by its maximum value.
+    products = [
+        (left_mantissa * right_mantissa, left_exponent + right_exponent)
         for left_value, right_value in zip(left, right, strict=True)
-    )
-    if normalized_dot == 0.0:
+        if left_value != 0.0 and right_value != 0.0
+        for left_mantissa, left_exponent in (frexp(left_value),)
+        for right_mantissa, right_exponent in (frexp(right_value),)
+    ]
+    if not products:
         return 0.0
-    smaller_scale, larger_scale = sorted((left_scale, right_scale))
-    return (normalized_dot * smaller_scale) * larger_scale
+    maximum_exponent = max(exponent for _, exponent in products)
+    normalized_dot = fsum(
+        ldexp(mantissa, exponent - maximum_exponent) for mantissa, exponent in products
+    )
+    try:
+        return ldexp(normalized_dot, maximum_exponent)
+    except OverflowError:
+        return copysign(inf, normalized_dot)
 
 
 def euclidean_distance(left: Sequence[float], right: Sequence[float]) -> float:

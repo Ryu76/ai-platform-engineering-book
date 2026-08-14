@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME04_COMPLETE` 미설정
-- 현재 slice: 37 — zero vector dot product 경계 보존
-- 검증: Volume 04 테스트 83 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
+- 현재 slice: 38 — cross-scale dot product 유한 항 보존
+- 검증: Volume 04 테스트 84 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
 - 범위: 외부 API, 다운로드 모델, Docker, Qdrant를 실행하지 않았습니다.
 
 
@@ -978,5 +978,31 @@ git diff --check
 - 이번 tick은 외부 API, 모델 다운로드, Docker, Qdrant, database 또는 비밀값을 사용하지 않은 결정적 local mock 재검증입니다.
 - 실제 Qdrant service DoD(고정 버전 local-only Compose, schema 조회, payload filter·upsert·delete·reindex parity, cleanup/idempotency)는 cron의 허용 경로와 실행 제한 밖이어서 여전히 미검증입니다.
 - 따라서 `VOLUME04_COMPLETE=true`를 추가하지 않았고 cron pause도 실행하지 않았습니다.
+
+`uv`는 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고가 있었지만, uv가 프로젝트 환경으로 위 검증을 완료했습니다.
+
+## 2026-08-14 — Slice 38 완료: cross-scale dot product 유한 항 보존
+
+### 추가한 결과물
+
+- `embedding_service.py`의 `dot_product`를 component별 mantissa/exponent 합산으로 보강했습니다.
+  - 기존 vector-level maximum scale은 `[1e308, 1e-308] · [1e-308, 1e308]`처럼 각 항의 실제 곱은 유한하지만 전체 vector의 극단적 scale이 다른 입력에서 두 항을 `0.0`으로 잃었습니다.
+  - 이제 non-zero component 곱을 overflow 없이 공통 binary exponent에서 `math.fsum`으로 합산하므로 위 입력은 IEEE-754 표현값 `1.9999999999999998`(약 `2.0`)을 반환합니다.
+  - large-term cancellation, zero operand의 정의된 `0.0`, 실제 결과가 float 범위를 넘을 때의 signed infinity 의미를 유지합니다.
+- `test_volume04_embedding_service.py`에 cross-scale 유한 항의 `2.0` 근사값 회귀 테스트를 추가했습니다.
+- 01장 코드 설명에 component-level exponent scaling과 cross-scale 경계를 기록했습니다.
+
+### 검증 결과
+
+- Volume 04 전용 단위 테스트 5개: **84 passed in 0.30s**.
+- `ruff check src/ai_platform/embeddings examples/volume04` 및 Volume 04 테스트 대상: **All checks passed!**.
+- `mypy src/ai_platform/embeddings`: **5 source files, no issues found**.
+- 네 개의 결정적 local mock 예제를 모두 실행했습니다. embedding 검색은 API retry 문서를 `score=0.548`로 1위에 반환했고, payload-filter 검색은 `collection_size=3`, `retry-guide`, `topic=api`를 반환했습니다. 품질 예제는 `precision_at_1=1.0`, `recall_at_1=1.0`, `mrr=1.0`, `answerable=True`였으며 lifecycle 예제는 `deleted_count=1`, `reindexed_version=2`, `collection_size=3`, `top_1_recovered=True`였습니다.
+- focused runtime check에서 cross-scale dot product가 `1.9999999999999998`을 출력했고, `git diff --check`도 통과했습니다.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 cron의 허용 경로와 실행 제한 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.
 
 `uv`는 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고가 있었지만, uv가 프로젝트 환경으로 위 검증을 완료했습니다.

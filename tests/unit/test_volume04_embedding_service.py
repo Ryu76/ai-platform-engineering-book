@@ -59,6 +59,13 @@ def test_dot_product_avoids_overflow_when_large_terms_cancel() -> None:
     assert result == 0.0
 
 
+def test_dot_product_preserves_finite_cross_scale_terms() -> None:
+    """서로 반대 규모인 성분의 유한 곱도 vector-level scale에 사라지면 안 된다."""
+    result = dot_product([1e308, 1e-308], [1e-308, 1e308])
+
+    assert result == pytest.approx(2.0)
+
+
 @pytest.mark.parametrize(
     ("left", "right"),
     [([0.0, 0.0], [1.0, -2.0]), ([3.0, -4.0], [0.0, 0.0])],
