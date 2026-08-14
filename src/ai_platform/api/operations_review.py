@@ -139,6 +139,14 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
                 "transformers:",
             )
         ),
+        "base_kustomization_uses_explicit_example_resource_namespaces": (
+            "namespace:" not in base_kustomization
+            and all(
+                "namespace: ai-platform-example" in resource
+                for resource in (configmap, deployment, service, ingress)
+            )
+            and "- namespace.yaml" in base_kustomization
+        ),
         "deployment_references_example_configmap_in_its_declared_namespace": (
             "name: ai-platform-api-config\n  namespace: ai-platform-example" in configmap
             and "namespace: ai-platform-example" in deployment

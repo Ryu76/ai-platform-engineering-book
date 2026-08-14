@@ -32,6 +32,7 @@
 24. [ConfigMap readiness policy: 비밀 없는 환경 키의 정적 계약](24-configmap-readiness-policy-static-contract.md)
 25. [Base Kustomization: 예제 core resource 목록의 정적 계약](25-base-kustomization-core-resources-static-contract.md)
 26. [Base Kustomization local-only: 원격 참조·생성기 없는 정적 경계](26-base-kustomization-local-resource-only-static-boundary.md)
+27. [Base Kustomization explicit namespace: 변환 없는 scope 선언의 정적 경계](27-base-kustomization-explicit-namespace-static-boundary.md)
 
 ## 현재 실습 경계
 
