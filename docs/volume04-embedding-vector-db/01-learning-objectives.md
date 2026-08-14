@@ -79,7 +79,7 @@ uv run pytest tests/unit/test_volume04_embedding_service.py -q
 cosine(A, B) = dot(A, B) / (||A|| × ||B||)
 ```
 
-`dot_product`는 두 벡터의 같은 위치를 곱해 더하고, `euclidean_distance`는 위치별 차이의 제곱합에 제곱근을 적용합니다. `cosine_similarity`는 먼저 각 vector를 최대 절댓값으로 scale한 뒤 norm과 방향 score를 계산합니다. 따라서 `1e308`처럼 유한하지만 큰 component도 중간 제곱·dot product overflow 없이 비교합니다. 부동소수점 반올림으로 동일한 정규화 vector가 `1.0000000000000002`처럼 계산되더라도 결과를 닫힌 범위 `[-1.0, 1.0]`로 제한합니다. 구현은 빈 벡터, 문자열 container, bool·`NaN`·무한대를 포함한 비유한 수치, 차원 불일치, cosine의 zero vector를 예외로 거부합니다.
+`dot_product`는 두 벡터의 같은 위치를 곱해 더하고, `euclidean_distance`는 위치별 차이의 직선 거리를 계산합니다. Euclidean 구현은 `math.hypot`의 내부 scale을 사용하므로 `sqrt(sum(delta ** 2))`처럼 `1e308`의 유한 component를 먼저 제곱해 overflow하지 않습니다. `cosine_similarity`도 먼저 각 vector를 최대 절댓값으로 scale한 뒤 norm과 방향 score를 계산합니다. 따라서 `1e308`처럼 유한하지만 큰 component도 중간 제곱·dot product overflow 없이 비교합니다. 부동소수점 반올림으로 동일한 정규화 vector가 `1.0000000000000002`처럼 계산되더라도 결과를 닫힌 범위 `[-1.0, 1.0]`로 제한합니다. 구현은 빈 벡터, 문자열 container, bool·`NaN`·무한대를 포함한 비유한 수치, 차원 불일치, cosine의 zero vector를 예외로 거부합니다.
 
 ## 8. 정상 실행 결과
 

@@ -62,6 +62,14 @@ def test_cosine_similarity_avoids_overflow_for_large_finite_vectors() -> None:
     assert orthogonal == pytest.approx(0.0)
 
 
+def test_euclidean_distance_avoids_squared_intermediate_overflow() -> None:
+    """표현 가능한 큰 거리도 component 제곱의 overflow 때문에 무한대가 되면 안 된다."""
+    distance = euclidean_distance([1e308, 1e308], [0.0, 0.0])
+
+    assert distance == pytest.approx(math.hypot(1e308, 1e308))
+    assert math.isfinite(distance)
+
+
 @pytest.mark.parametrize("dimensions", [True, 7, 4097])
 def test_model_rejects_invalid_dimensions(dimensions: int | bool) -> None:
     """잘못된 차원은 데이터가 생성되기 전에 거부해야 한다."""

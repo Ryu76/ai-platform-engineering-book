@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from hashlib import sha256
-from math import fsum, isfinite, sqrt
+from math import fsum, hypot, isfinite, sqrt
 from re import findall
 from typing import Protocol
 
@@ -100,11 +100,11 @@ def dot_product(left: Sequence[float], right: Sequence[float]) -> float:
 def euclidean_distance(left: Sequence[float], right: Sequence[float]) -> float:
     """두 같은 차원 벡터 사이의 직선 거리를 계산한다."""
     _require_same_nonempty_dimension(left, right)
-    return sqrt(
-        sum(
-            (left_value - right_value) ** 2
-            for left_value, right_value in zip(left, right, strict=True)
-        )
+    # `hypot` rescales internally.  Unlike sqrt(sum(delta ** 2)), this keeps
+    # a finite distance such as hypot(1e308, 1e308) from overflowing while
+    # squaring an intermediate component.
+    return hypot(
+        *(left_value - right_value for left_value, right_value in zip(left, right, strict=True))
     )
 
 
