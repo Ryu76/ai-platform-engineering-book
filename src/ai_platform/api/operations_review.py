@@ -147,6 +147,68 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             "",
         )
     )
+    expected_cronjob = "\n".join(
+        (
+            "# Local-only teaching manifest. It is suspended and uses a deliberately "
+            "unpullable image; do not apply it.",
+            "apiVersion: batch/v1",
+            "kind: CronJob",
+            "metadata:",
+            "  name: ai-platform-maintenance-scheduled",
+            "  namespace: ai-platform-example",
+            "  labels:",
+            "    app.kubernetes.io/name: ai-platform-maintenance",
+            "    app.kubernetes.io/part-of: ai-platform-example",
+            "    app.kubernetes.io/component: scheduled-batch",
+            "spec:",
+            "  # Example cadence only. Suspend remains true until an approved operational "
+            "workflow exists.",
+            '  schedule: "0 3 * * *"',
+            "  suspend: true",
+            "  concurrencyPolicy: Forbid",
+            "  startingDeadlineSeconds: 300",
+            "  successfulJobsHistoryLimit: 1",
+            "  failedJobsHistoryLimit: 1",
+            "  jobTemplate:",
+            "    spec:",
+            "      backoffLimit: 1",
+            "      activeDeadlineSeconds: 120",
+            "      ttlSecondsAfterFinished: 300",
+            "      template:",
+            "        metadata:",
+            "          labels:",
+            "            app.kubernetes.io/name: ai-platform-maintenance",
+            "            app.kubernetes.io/component: scheduled-batch",
+            "        spec:",
+            "          restartPolicy: Never",
+            "          securityContext:",
+            "            seccompProfile:",
+            "              type: RuntimeDefault",
+            "          containers:",
+            "            - name: maintenance",
+            "              # Documentation-only placeholder. Do not replace outside an "
+            "approved environment.",
+            "              image: example.invalid/ai-platform-maintenance:0.1.0",
+            "              imagePullPolicy: IfNotPresent",
+            "              command: [\"python\", \"-c\", "
+            "\"print('documentation-only maintenance placeholder')\"]",
+            "              securityContext:",
+            "                allowPrivilegeEscalation: false",
+            "                capabilities:",
+            "                  drop: [\"ALL\"]",
+            "                readOnlyRootFilesystem: true",
+            "                runAsNonRoot: true",
+            "                runAsUser: 10001",
+            "              resources:",
+            "                requests:",
+            "                  cpu: 50m",
+            "                  memory: 64Mi",
+            "                limits:",
+            "                  cpu: 100m",
+            "                  memory: 128Mi",
+            "",
+        )
+    )
     _before_startup, startup_marker, after_startup = deployment.partition("startupProbe:")
     startup_probe, _before_readiness, _after_readiness = after_startup.partition(
         "readinessProbe:"
@@ -253,6 +315,9 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             batch_kustomization == expected_batch_kustomization
         ),
         "job_is_the_canonical_local_placeholder_completion_boundary": job == expected_job,
+        "cronjob_is_the_canonical_local_suspended_placeholder_schedule_boundary": (
+            batch == expected_cronjob
+        ),
         "deployment_references_example_configmap_in_its_declared_namespace": (
             "name: ai-platform-api-config\n  namespace: ai-platform-example" in configmap
             and "namespace: ai-platform-example" in deployment
