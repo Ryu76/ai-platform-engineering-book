@@ -620,3 +620,84 @@ $ uv run python scripts/check_secrets.py
 project environment에서 정상 완료했습니다. example/tests는 in-memory frame·receipt·fake delivery owner만
 사용했으며 actual process, OS pipe, thread, shell, filesystem, network, external MCP server, Tool 또는
 destructive action을 호출하지 않았습니다.
+
+## 이번 슬라이스: child-owned process-group shutdown target을 fake sender seam으로 분리하기
+
+- `src/ai_platform/mcp/process_group.py`
+  - `McpStdioIsolatedChildGroup`은 trusted platform adapter가 확인한 POSIX direct-child process
+    group 또는 Windows child-owned Job scope snapshot만 받습니다. POSIX는 child PID, group owner,
+    group ID가 모두 일치해야 하며 foreign/shared group을 sender 전에 거부합니다.
+  - `prepare_mcp_stdio_group_shutdown_target()`은 allowlisted launch plan, platform fixture,
+    typed graceful/force phase를 immutable target으로 바꿀 뿐 I/O를 수행하지 않습니다.
+  - `send_mcp_stdio_group_shutdown_target()`은 fully validated target 하나만 injected sender에 한 번
+    전달합니다. invalid plan/group/platform/phase/sender에는 no-send, sender failure에는 raw detail,
+    retry, escalation 없이 generic error로 끝납니다.
+  - subprocess, POSIX signal/process group, Windows Job Object, pipe, child reap/wait, restart,
+    Tool 또는 destructive action을 직접 호출하지 않습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - process-platform, fixture, target, phase, sender protocol, prepare/send public API를 export했습니다.
+- `examples/volume03/mcp_stdio_process_group_shutdown_target.py`
+  - fixed safe launch plan, child-owned POSIX fixture, memory-only sender로 graceful intent 한 번만
+    출력합니다. actual child, group, Job Object, signal, shell, filesystem, network, MCP server, Tool 또는
+    destructive action을 수행하지 않습니다.
+- `tests/volume03/test_mcp_process_group.py`
+  - POSIX/Windows typed target, foreign owner, POSIX leader mismatch, unsupported platform, invalid
+    plan/phase의 no-send behavior, invalid PID, hidden sender exception/no retry, immutable target과
+    platform-kind mismatch를 fake seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/33-mcp-stdio-process-group-shutdown-target.md`
+  - isolation ownership, one-shot graceful/force intent, fake offline exercise와 actual platform adapter의
+    production follow-up을 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른세 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: process-group shutdown target slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_stdio_process_group_shutdown_target.py
+server_name: safe-echo
+platform: posix
+target_kind: posix_process_group
+phase: graceful
+offline_sender_calls: 1
+
+$ uv run ruff format --check src/ai_platform/mcp/process_group.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_process_group_shutdown_target.py tests/volume03/test_mcp_process_group.py
+4 files already formatted
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 32 source files
+
+$ uv run pytest tests/volume03/test_mcp_process_group.py -q
+13 passed in 0.64s
+
+$ uv run pytest -q
+302 passed in 5.47s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만,
+project environment에서 정상 완료했습니다. example/tests는 fixed in-memory plan·fixture·sender만
+사용했으며 actual process, OS group/Job Object, signal, pipe, shell, filesystem, network, external MCP
+server, Tool 또는 destructive action을 호출하지 않았습니다.
+
+## 다음 슬라이스
+
+actual OS API를 직접 호출하지 말고, allowlisted plan의 finite `restart_limit`을 exit-code 분류와
+monotonic backoff schedule로 먼저 모델링해야 합니다. unknown exit, budget exhaustion, invalid plan과
+clock/sleeper failure가 new start 호출 전에 안전히 멈추는지 fake seams에서 검증하세요. 그 뒤 durable
+approval/audit/idempotency와 Hermes/Codex integration을 각각 독립적인 fixture·검증 경계로 진행해야 합니다.
