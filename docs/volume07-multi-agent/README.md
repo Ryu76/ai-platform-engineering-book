@@ -21,6 +21,7 @@ Planner, Researcher, Developer, Reviewer, QA 역할의 메시지·상태·도구
 13. [결정론적 Offline Multi-Agent 미니 프로젝트](13-offline-multi-agent-mini-project.md) — 네 workflow의 독립된 승인 gate와 local handoff
 14. [Agent 계약, 상태, Memory와 Tool 경계](14-agent-contract-state-and-capability-boundaries.md) — role·goal·state·capability·authority·bounded loop·human gate의 분리
 15. [Volume 07 학습 체크리스트, 용어집과 Router 인계](15-volume-learning-checklist-glossary-and-router-handoff.md) — 권 단위 재실행, 핵심 용어, 다음 Volume Router의 authority 경계
+16. [불변 Audit Snapshot과 역할 간 Message Passing](16-immutable-audit-snapshots.md) — per-call immutable context, 이전 역할 결과만 읽는 message passing, local approval 경계
 
 ## 진행 상태
 
