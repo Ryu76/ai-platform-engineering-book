@@ -1170,3 +1170,23 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 최신 슬라이스 — 거절 JSON Checkpoint의 execute 감사 이벤트 차단
+
+- `src/ai_platform/graph/checkpointer.py`
+  - 위험 `REJECTED` State가 정확한 `대기 -> 거절` approval 감사 순서를 가져도 `execute` 이벤트를 하나라도 포함하면 저장·복원 전에 fail-closed 하도록 강화했습니다. 거절은 실행 경로를 열지 않는 종료라는 상태 의미를 JSON 감사 로그에도 적용합니다.
+- `tests/unit/test_volume09_graph.py`
+  - 정상 `DEPLOY` 거절 Checkpoint에 연속 sequence의 `execute` 이벤트를 덧붙이고 SHA-256 checksum을 다시 계산한 변조가 `rejected state must not contain an execute` 오류로 거부되는 회귀 계약을 추가했습니다.
+- `examples/volume09/json_rejected_execute_audit_guard_workflow.py`
+  - 임시 로컬 JSON만 사용해 정상 거절 이력 뒤에 위조 execute 감사 이벤트와 재계산 checksum을 추가하고 명시적 거부 결과를 출력하는 결정론적 오프라인 데모를 추가했습니다.
+- `docs/volume09-langgraph/34-json-checkpoint-rejected-execute-audit-guard.md`, `README.md`
+  - 거절 State의 비실행 감사 불변식, checksum·일반 텍스트 감사의 인증 한계, 엄격한 Boolean 승인 경계와 운영 전환 요구사항을 문서화했습니다.
+
+검증: 예제는 `rejected_execute_audit_rejected=checkpoint rejected state must not contain an execute audit event`를 출력했습니다. 새 계약 테스트는 10회 반복 모두 통과했고, Volume 09 테스트는 `57 passed`, 전체 테스트는 `118 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사, `compileall`, `git diff --check`도 통과했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 승인 대기와 별도의 엄격한 Boolean 승인 없이는 `execute` Node로 이동하지 않으며, 명시적 거절은 외부 부작용 없는 `REJECTED` 상태로 끝납니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.

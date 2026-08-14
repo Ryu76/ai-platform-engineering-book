@@ -661,6 +661,49 @@ def test_json_file_checkpoint_rejects_a_rechecksummed_conflicting_approval_audit
         checkpointer.load(run_id=run_id)
 
 
+def test_json_file_checkpoint_rejects_a_rechecksummed_rejection_with_an_execute_event(
+    tmp_path: Path,
+) -> None:
+    """정상 거절 이력 뒤에 execute를 덧붙인 JSON은 checksum이 맞아도 복원하지 않는다."""
+    checkpoint_path = tmp_path / "rejected-execute-audit-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    run_id = "rejected-execute-audit-guard-001"
+    workflow = DeterministicWorkflow(checkpointer=checkpointer)
+    workflow.invoke(
+        run_id=run_id,
+        task="학습용 배포를 준비한다",
+        action=ActionKind.DEPLOY,
+    )
+    rejected = workflow.resume(run_id=run_id, approved=False)
+    assert rejected.status is WorkflowStatus.REJECTED
+
+    payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    state = payload["checkpoints"][run_id]
+    state["events"].append(
+        {
+            "sequence": 4,
+            "node": "execute",
+            "detail": "외부 시스템을 변경하지 않는 결정론적 실행 결과를 만들었습니다.",
+        }
+    )
+    canonical_payload = json.dumps(
+        {
+            "schema_version": payload["schema_version"],
+            "checkpoints": payload["checkpoints"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    payload["payload_sha256"] = hashlib.sha256(canonical_payload).hexdigest()
+    checkpoint_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="rejected state must not contain an execute"):
+        checkpointer.load(run_id=run_id)
+
+
 def test_json_file_checkpoint_rejects_duplicate_json_keys_before_state_restore(
     tmp_path: Path,
 ) -> None:

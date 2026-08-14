@@ -341,6 +341,10 @@ def _validate_risky_approval_audit_trail(state: WorkflowState) -> None:
     }
     if event_details != expected_details_by_status[state.status]:
         raise ValueError("checkpoint state has an invalid approval audit trail")
+    if state.status is WorkflowStatus.REJECTED and any(
+        event.node == "execute" for event in state.events
+    ):
+        raise ValueError("checkpoint rejected state must not contain an execute audit event")
 
 
 def _reject_suspected_secret(value: str, *, field: str) -> None:
