@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 37: 명시적 사람 승인 입력 경계 PRD 문서·회귀 계약
+
+- `test_explicit_human_approval_input_boundaries.py`를 추가해 review, delegation, conflict, release workflow가 raw `"approved"` 문자열 또는 다른 workflow의 approval enum을 받으면 `WorkflowConfigurationError`로 첫 local Agent 호출 전에 fail-closed하는지 고정했다. 각 deterministic Mock의 call history가 비어 있어 approval type이 audit, QA, Worker, peer, DevOps 실행이나 bounded loop 호출 예산을 우회하지 않음을 검증한다.
+- Chapter 17은 `HumanApproval`/`DelegationApproval`/`ConflictApproval`의 workflow별 범위, `PENDING` safe pause, `APPROVED`의 gated local 다음 단계, `REJECTED`의 pre-call 종료를 설명한다. 승인 enum은 identity·message·secret·tool capability·deployment 권한이 아니며, local deterministic Mock 및 immutable audit 경계와 분리됨을 명시했다.
+- Focused contracts는 `uv run pytest tests/volume07/test_explicit_human_approval_input_boundaries.py tests/volume07/test_explicit_human_approval_input_boundaries_documentation.py -q`로 5 passed였고, `uv run pytest tests/volume07 -q`는 84 passed였다. `uv run ruff check src/ai_platform/agents tests/volume07`와 `uv run mypy src/ai_platform/agents`도 통과했다. mini project 기본 실행은 네 `awaiting_human_approval`을, 네 explicit approval flag 실행은 local-only `completed`와 no-deployment handoff note를 실제 출력했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 36: Chapter 11 선언 deterministic Mock 역할 바인딩 PRD 문서 계약
 
 - `test_declared_mock_role_binding_documentation.py`를 추가해 Chapter 11의 14개 학습 section, `DeterministicMockAgent`/`DeterministicMockWorker`/`DeterministicMockConflictAgent`, `validate_declared_role`, `WorkflowConfigurationError`, focused/full regression 명령을 회귀 검증한다. 문서 contract는 local fixture role 배선과 production identity·tool authority를 분리한다.
