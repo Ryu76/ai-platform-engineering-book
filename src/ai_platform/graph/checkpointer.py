@@ -327,25 +327,19 @@ def _validate_risky_approval_audit_trail(state: WorkflowState) -> None:
     granted_detail = "사람 승인을 받았습니다. 실행 시뮬레이션으로 이동합니다."
     rejected_detail = "사람이 작업을 거절했습니다. 실행하지 않습니다."
     event_details = tuple(event.detail for event in state.events if event.node == "approval")
-    try:
-        waiting_index = event_details.index(waiting_detail)
-    except ValueError:
-        waiting_index = -1
-
-    if state.status is WorkflowStatus.WAITING_FOR_APPROVAL:
-        if waiting_index < 0 or any(
-            detail in {granted_detail, rejected_detail} for detail in event_details
-        ):
-            raise ValueError("checkpoint state has an invalid approval audit trail")
-        return
-
-    decision_detail = (
-        granted_detail if state.approval_granted is True else rejected_detail
-    )
-    if state.approval_granted is not None and (
-        waiting_index < 0
-        or decision_detail not in event_details[waiting_index + 1 :]
-    ):
+    expected_details_by_status = {
+        WorkflowStatus.PENDING: (),
+        WorkflowStatus.PLANNED: (),
+        WorkflowStatus.WAITING_FOR_ROUTE_REVIEW: (),
+        WorkflowStatus.REVIEW_REJECTED: (),
+        WorkflowStatus.WAITING_FOR_APPROVAL: (waiting_detail,),
+        WorkflowStatus.READY: (waiting_detail, granted_detail),
+        WorkflowStatus.COMPLETED: (waiting_detail, granted_detail),
+        WorkflowStatus.ERROR: (waiting_detail, granted_detail),
+        WorkflowStatus.FAILED: (waiting_detail, granted_detail),
+        WorkflowStatus.REJECTED: (waiting_detail, rejected_detail),
+    }
+    if event_details != expected_details_by_status[state.status]:
         raise ValueError("checkpoint state has an invalid approval audit trail")
 
 

@@ -605,6 +605,62 @@ def test_json_file_checkpoint_rejects_a_rechecksummed_risky_approval_without_aud
         checkpointer.load(run_id=run_id)
 
 
+def test_json_file_checkpoint_rejects_a_rechecksummed_conflicting_approval_audit_trail(
+    tmp_path: Path,
+) -> None:
+    """상반된 결정이 함께 있는 위험 완료 State는 checksum이 맞아도 복원하지 않는다."""
+    checkpoint_path = tmp_path / "conflicting-approval-audit-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    run_id = "conflicting-approval-audit-guard-001"
+    waiting = DeterministicWorkflow(checkpointer=checkpointer).invoke(
+        run_id=run_id,
+        task="학습용 배포를 준비한다",
+        action=ActionKind.DEPLOY,
+    )
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+
+    payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    state = payload["checkpoints"][run_id]
+    state["status"] = "completed"
+    state["approval_granted"] = True
+    state["result"] = "오프라인 시뮬레이션 완료: deploy / 학습용 배포를 준비한다"
+    state["events"].extend(
+        [
+            {
+                "sequence": 3,
+                "node": "approval",
+                "detail": "사람이 작업을 거절했습니다. 실행하지 않습니다.",
+            },
+            {
+                "sequence": 4,
+                "node": "approval",
+                "detail": "사람 승인을 받았습니다. 실행 시뮬레이션으로 이동합니다.",
+            },
+            {
+                "sequence": 5,
+                "node": "execute",
+                "detail": "외부 시스템을 변경하지 않는 결정론적 실행 결과를 만들었습니다.",
+            },
+        ]
+    )
+    canonical_payload = json.dumps(
+        {
+            "schema_version": payload["schema_version"],
+            "checkpoints": payload["checkpoints"],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    payload["payload_sha256"] = hashlib.sha256(canonical_payload).hexdigest()
+    checkpoint_path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="approval audit trail"):
+        checkpointer.load(run_id=run_id)
+
+
 def test_json_file_checkpoint_rejects_duplicate_json_keys_before_state_restore(
     tmp_path: Path,
 ) -> None:

@@ -1150,3 +1150,23 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 최신 슬라이스 — JSON Checkpoint 상반 승인 감사 결정 차단
+
+- `src/ai_platform/graph/checkpointer.py`
+  - 위험 Action의 `approval` 감사 이벤트를 단순 포함 여부가 아니라 현재 상태별 정확한 tuple로 검증하도록 강화했습니다. `WAITING_FOR_APPROVAL`은 대기 하나만, `READY`·`COMPLETED`·`ERROR`·`FAILED`는 `대기 -> 승인`, `REJECTED`는 `대기 -> 거절`만 허용하며, 중복·상반된 결정은 재계산 checksum이 맞아도 fail-closed 합니다.
+- `tests/unit/test_volume09_graph.py`
+  - 정상 `DEPLOY` 승인 대기 JSON에 거절·승인·execute 이벤트와 `COMPLETED`, 결과, 새 SHA-256 checksum을 추가한 변조가 `approval audit trail` 오류로 거부되는 회귀 계약을 추가했습니다.
+- `examples/volume09/json_approval_audit_guard_workflow.py`
+  - 임시 로컬 JSON만 사용해 위 상반 승인 이력을 재현하고 명시적 거부 결과를 출력하는 결정론적 오프라인 데모로 갱신했습니다.
+- `docs/volume09-langgraph/33-json-checkpoint-conflicting-approval-audit-guard.md`, `README.md`
+  - 상태별 정확한 승인 감사 전이, checksum·일반 텍스트 감사의 인증 한계, 별도 엄격한 Boolean 승인 경계와 운영 전환 요구사항을 문서화했습니다.
+
+검증: 예제는 `conflicting_approval_audit_rejected=checkpoint state has an invalid approval audit trail`을 출력했습니다. 새 계약 테스트는 `1 passed`, Volume 09 테스트는 `56 passed`, 전체 테스트는 `117 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사, `compileall`, `git diff --check`도 통과했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 승인 대기와 별도의 엄격한 Boolean 승인 없이는 `execute` Node로 이동하지 않으며, 모든 완료 경로는 외부 부작용 없는 오프라인 시뮬레이션입니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
