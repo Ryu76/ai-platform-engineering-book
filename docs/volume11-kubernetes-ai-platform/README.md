@@ -30,6 +30,7 @@
 22. [ConfigMap reference: Deployment 환경 주입의 정적 계약](22-configmap-reference-static-contract.md)
 23. [Ingress backend reference: Service HTTP 연결의 정적 계약](23-ingress-backend-reference-static-contract.md)
 24. [ConfigMap readiness policy: 비밀 없는 환경 키의 정적 계약](24-configmap-readiness-policy-static-contract.md)
+25. [Base Kustomization: 예제 core resource 목록의 정적 계약](25-base-kustomization-core-resources-static-contract.md)
 
 ## 현재 실습 경계
 

@@ -95,6 +95,25 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             )
             and "- namespace.yaml" in base_kustomization
         ),
+        "base_kustomization_declares_only_example_core_resources": all(
+            f"- {resource}" in base_kustomization
+            for resource in (
+                "namespace.yaml",
+                "configmap.yaml",
+                "deployment.yaml",
+                "service.yaml",
+                "ingress.yaml",
+            )
+        )
+        and all(
+            excluded not in base_kustomization
+            for excluded in (
+                "secret.example.yaml",
+                "batch/",
+                "storage/",
+                "autoscaling/",
+            )
+        ),
         "deployment_references_example_configmap_in_its_declared_namespace": (
             "name: ai-platform-api-config\n  namespace: ai-platform-example" in configmap
             and "namespace: ai-platform-example" in deployment
