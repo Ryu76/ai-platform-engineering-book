@@ -309,3 +309,76 @@ partial-frame ambiguity에 묶는 small injected policy seam을 모델링해야 
 새 frame을 쓰지 않고, in-flight partial frame failure와 caller-owned child shutdown request를 분리해
 검증하세요. 그 뒤 Windows/POSIX process groups, exit-code restart/backoff, durable approval/audit/
 idempotency, Hermes/Codex integration을 각각 별도 slice로 진행해야 합니다.
+
+## 이번 슬라이스: typed cancellation·disconnect와 partial-frame shutdown signal을 delivery gate로 분리하기
+
+- `src/ai_platform/mcp/input_delivery.py`
+  - `McpStdioInputDeliveryGate`는 typed JSON-RPC request ID의 아직 시작하지 않은 frame을 취소하고,
+    explicit disconnect 뒤 새 frame을 writer I/O 전에 막습니다. string ID와 integer ID는 기존
+    correlation contract에 따라 서로 다른 cancellation state입니다.
+  - bounded writer가 partial frame 가능성을 알리면 gate는 `SHUTDOWN_REQUIRED`로 전이하고 이후 모든
+    새 frame을 차단합니다. error의 `child_shutdown_requested=True`는 host가 별도의 shutdown boundary를
+    검토해야 한다는 signal이며, 이 module은 child/pipe/Popen을 직접 종료하지 않습니다.
+  - blind retry, Tool execution, durable idempotency, audit, network 및 actual process I/O는 이
+    policy seam의 책임이 아닙니다.
+- `src/ai_platform/mcp/__init__.py`
+  - delivery gate state, receipt, error를 public export에 추가했습니다.
+- `examples/volume03/mcp_stdio_input_delivery_gate.py`
+  - in-memory writer로 typed ID의 성공 frame 전달을 출력합니다. actual child process, OS pipe,
+    shell, filesystem, network, MCP server, Tool 또는 destructive action을 수행하지 않습니다.
+- `tests/volume03/test_mcp_input_delivery.py`
+  - cancel pre-I/O, string/integer ID 분리, disconnect pre-I/O, partial failure의 caller-owned shutdown
+    signal과 subsequent write block, invalid ID pre-I/O를 fake writer로 검증합니다.
+- `docs/volume03-tool-calling-mcp/29-mcp-stdio-input-delivery-gate.md`
+  - cancellation/disconnect/partial ambiguity ownership, safe offline exercise와 production limit을
+    문서화했습니다.
+
+## 검증 기록: input delivery gate slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_stdio_input_delivery_gate.py
+correlation_id: mcp-stdio:string:delivery-demo-001
+frame_bytes: 64
+flush_calls: 1
+state: open
+
+$ uv run ruff format --check src/ai_platform/mcp/input_delivery.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_input_delivery_gate.py tests/volume03/test_mcp_input_delivery.py
+4 files already formatted
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 28 source files
+
+$ uv run pytest tests/volume03/test_mcp_input_delivery.py -q
+5 passed in 0.24s
+
+$ uv run pytest -q
+260 passed in 2.07s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+`uv`는 Hermes 활성 가상환경과 프로젝트 `.venv` 경로 불일치 warning을 출력했지만, 모든 command는
+project environment에서 정상 완료했습니다. example/test는 fixed JSON-RPC object와 in-memory fake
+writer만 사용했고 actual process, OS pipe, shell, filesystem, network, external MCP server, Tool 또는
+destructive action을 호출하지 않았습니다.
+
+## 다음 슬라이스
+
+actual Popen stdin ownership와 OS pipe backpressure는 별도 adapter로 분리해야 합니다. 그 뒤
+Windows/POSIX process group·signal, exit-code restart/backoff, durable approval/audit/idempotency,
+Hermes/Codex integration을 각각 독립적인 fixture·검증 경계로 진행합니다.

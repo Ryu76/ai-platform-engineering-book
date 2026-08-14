@@ -18,6 +18,12 @@ from ai_platform.mcp.host import (
     shutdown_mcp_stdio_child,
     start_mcp_stdio_child,
 )
+from ai_platform.mcp.input_delivery import (
+    McpStdioInputDeliveryError,
+    McpStdioInputDeliveryGate,
+    McpStdioInputDeliveryReceipt,
+    McpStdioInputDeliveryState,
+)
 from ai_platform.mcp.input_write import (
     McpStdioInputFrame,
     McpStdioInputWriteError,
@@ -91,6 +97,10 @@ __all__ = [
     "McpStdioHostError",
     "McpStdioHostLaunchPlan",
     "McpStdioHostShutdownResult",
+    "McpStdioInputDeliveryError",
+    "McpStdioInputDeliveryGate",
+    "McpStdioInputDeliveryReceipt",
+    "McpStdioInputDeliveryState",
     "McpStdioInputFrame",
     "McpStdioInputWriteError",
     "McpStdioInputWriteReceipt",
