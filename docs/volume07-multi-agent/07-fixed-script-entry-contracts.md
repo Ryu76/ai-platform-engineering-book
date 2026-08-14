@@ -35,7 +35,7 @@
 실행 단계 정책 검사 ----> HumanApproval.APPROVED 후 영향 있는 다음 역할
 ```
 
-이 경계는 `PENDING`을 `APPROVED`로 바꾸지 않습니다. 유효한 script여도 QA, Worker, DevOps는 각 workflow의 명시적 사람 승인 규칙을 계속 따라야 합니다.
+이 경계는 `PENDING`을 `APPROVED`로 바꾸지 않습니다. 유효한 script여도 QA, Worker, DevOps는 각 workflow의 명시적 사람 승인 규칙을 계속 따라야 합니다. `REJECTED`는 Agent 호출 전에 종료하며, malformed fixture의 구성 오류를 approval 값으로 우회할 수도 없습니다.
 
 ## 5. 실습 환경
 
@@ -70,6 +70,17 @@ uv run pytest tests/volume07/test_immutable_mock_scripts.py -q
 ```
 
 명령은 고정 script 컨테이너와 항목 계약을 검사합니다.
+
+### 6.2 전체 Volume 07 regression 실행
+
+고정 fixture 계약이 deterministic Mock, bounded loop, explicit human approval의 나머지 local-only 계약과 함께 유지되는지 확인합니다.
+
+```bash
+# 실행 위치: 저장소 루트의 bash 또는 WSL 터미널
+uv run pytest tests/volume07 -q
+```
+
+이 명령은 live API, secret, tool 실행, deployment를 호출하지 않습니다. `PENDING`은 안전하게 pause하고, `APPROVED`만 각 workflow에서 이미 검증된 다음 local stage를 열며, `REJECTED`는 pre-call 종료를 유지합니다.
 
 ## 7. 코드 설명
 
@@ -130,6 +141,7 @@ allow-list와 최대 task 수는 coordinator Mock이 아니라 `ApprovalGatedDel
 - [ ] 네 결정론적 Mock의 항목 타입을 구분할 수 있다.
 - [ ] 빈 문자열, 잘못된 boolean, 중복 task ID가 생성자에서 중단되는 것을 확인했다.
 - [ ] `PENDING`이 승인으로 바뀌지 않는다는 것을 확인했다.
+- [ ] `APPROVED`가 fixture 구성 오류를 우회하지 않고, `REJECTED`가 Agent 호출 전에 종료됨을 확인했다.
 - [ ] Volume 07 오프라인 테스트를 통과시켰다.
 
 ## 14. 핵심 정리

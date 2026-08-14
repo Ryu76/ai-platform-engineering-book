@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 31: Chapter 07 고정 Mock script 항목 PRD 학습 계약
+
+- `07-fixed-script-entry-contracts.md`에 전체 Volume 07 regression 실행 단계와 `PENDING`/`APPROVED`/`REJECTED`의 독립 책임을 명시했다. fixed fixture의 구성 오류는 approval로 우회할 수 없고, `REJECTED`는 Agent 호출 전에 종료하며, 유효한 tuple fixture도 bounded loop와 explicit human approval을 변경하지 않는다.
+- `test_fixed_script_entry_contracts_documentation.py`를 추가해 Chapter 07의 14 section, 네 deterministic Mock과 `AgentResponse`/`DelegationPlan`/`WorkerResponse`/`ConflictProposal` 항목 계약, `WorkflowConfigurationError`, focused/full regression 명령, bounded loop 및 local-only live API·secret·tool 실행·deployment safety scope를 회귀 검증한다.
+- `uv run pytest tests/volume07/test_immutable_mock_scripts.py tests/volume07/test_fixed_script_entry_contracts_documentation.py -q`는 7 passed였다. review example의 기본 실행은 QA 없이 `awaiting_human_approval`이었고, `--approve`는 local QA message만 포함한 `completed`였다. 전체 `uv run pytest tests/volume07 -q`는 70 passed였으며, `uv run ruff check src/ai_platform/agents tests/volume07`, `uv run mypy src/ai_platform/agents`, `validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 30: Chapter 12 접근 불가 Agent 경계 PRD 학습 계약
 
 - `12-inaccessible-agent-boundaries.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 적용, 기본·응용·심화 과제, 체크리스트, 요약)으로 확장했다. `UnreadableActBoundary`와 `UnreadableProposeBoundary`의 local-only configuration failure를 보여 주고, callable discovery가 protocol method 실행·live API·secret 조회·tool 초기화·파일 변경·deployment를 수행하지 않는 경계를 명시했다.
