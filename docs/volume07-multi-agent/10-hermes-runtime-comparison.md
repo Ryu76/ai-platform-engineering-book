@@ -2,122 +2,227 @@
 
 ## 1. 학습 목표
 
-이 장에서는 Volume 07의 작은 직접 구현과 Hermes Agent runtime의 책임 경계를 비교합니다. 이 장을 마치면 Planner·Developer·Reviewer·QA·DevOps 역할, 메시지 전달, bounded loop, 명시적 사람 승인을 **학습용 local workflow**에서는 어떻게 고정하는지, 그리고 Hermes를 사용할 때 어떤 runtime 설정과 보안 경계를 별도로 확인해야 하는지 설명할 수 있습니다.
+이 장에서는 Volume 07의 결정론적 로컬 Multi-Agent workflow와 Hermes Agent runtime의 책임을 구분합니다. 이 장을 마치면 다음을 할 수 있어야 합니다.
 
-> 이 실습은 Hermes를 실행·설정·수정하지 않습니다. local deterministic Mock만 사용하며, live API, secret, 네트워크 Agent 호출, 도구 실행, 배포를 수행하지 않습니다.
+- `AgentContext`, `AgentResponse`, immutable audit message가 local workflow에서 맡는 역할을 설명할 수 있다.
+- `DeterministicMockAgent`와 고정 tuple script가 재현 가능한 학습 fixture인 이유를 설명할 수 있다.
+- role 이름, message text, `completed` 상태가 tool·network·deployment 권한이나 운영 승인을 뜻하지 않음을 구분할 수 있다.
+- bounded loop, fail-closed protocol 검증, 명시적 `PENDING`/`APPROVED`/`REJECTED` human approval을 runtime 선택과 분리할 수 있다.
+- Hermes를 실제로 설정하기 전 확인할 공식 문서와 최소 권한 검토 항목을 식별할 수 있다.
 
-## 2. 왜 비교하는가
+> [!WARNING]
+> 이 장의 실습은 Hermes를 실행·설정·수정하지 않습니다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 사용하지 않는 local deterministic Mock만 실행합니다. `completed`는 local workflow 결과일 뿐 운영 승인이나 외부 변경이 아닙니다.
 
-직접 구현한 workflow는 작아서 역할 순서와 종료 조건을 코드와 테스트에서 한눈에 볼 수 있습니다. 반면 Hermes Agent는 CLI, Gateway, batch runner, API server, Python library 같은 여러 진입점과 provider·prompt·tool subsystem을 가진 runtime입니다. runtime을 도입해도 다음 설계 책임은 자동으로 사라지지 않습니다.
+## 2. 왜 필요한가
 
-- 누가 어떤 역할과 결정을 맡는가
-- 어떤 메시지와 상태를 다음 역할에 넘기는가
-- 재시도와 반복을 어디에서 제한하는가
-- 어떤 단계가 사람 승인을 기다려야 하는가
-- memory와 tool이 읽거나 바꿀 수 있는 범위는 무엇인가
+작은 직접 구현은 Agent 역할 순서, 입력·출력 schema, 종료 조건을 코드와 test에서 확인하기 쉽습니다. 반면 Hermes Agent runtime은 prompt 구성, provider 선택, tool registry, session, memory처럼 더 넓은 실행 환경을 연결할 수 있습니다.
 
-따라서 이 교재는 runtime을 사용하기 전에 local Mock으로 안전 계약을 고정하고, Hermes 환경에서는 같은 계약을 설정·운영 절차·보안 정책으로 다시 점검하는 순서를 사용합니다.
+runtime을 도입해도 다음 설계 책임은 자동으로 해결되지 않습니다.
 
-## 3. 현재 Hermes 구조 요약
+1. 어떤 role이 어떤 판단을 할 수 있는가
+2. 어떤 output schema만 다음 role로 전달되는가
+3. retry와 반복이 어느 수치 상한에서 끝나는가
+4. 어떤 단계가 사람의 명시적 결정을 기다리는가
+5. memory와 tool이 읽거나 변경할 수 있는 범위는 무엇인가
 
-2026-08-11에 확인한 [Hermes Agent 공식 Architecture 문서](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)는 높은 수준에서 다음 흐름을 설명합니다.
+따라서 먼저 local Mock으로 안전 계약을 재현하고, Hermes를 도입할 때 같은 계약을 runtime 설정과 운영 정책에서 별도로 확인해야 합니다.
 
-```text
-CLI / Gateway / ACP / Batch Runner / API Server / Python Library
-                              |
-                            AIAgent
-          +-------------------+-------------------+
-          |                   |                   |
-    Prompt Builder     Provider Resolution    Tool Dispatch
-          |                   |                   |
-  context compression    model API mode      tool registry
-       and caching                            and toolsets
-```
+## 3. 핵심 개념
 
-이는 Volume 07의 local 역할 객체와 같은 단일 구조가 아닙니다. Hermes의 Agent runtime은 prompt 조립, provider 선택, tool dispatch를 포함합니다. 따라서 runtime의 결과가 Reviewer 메시지처럼 보여도 그것만으로 reviewer 권한, call budget, 또는 사람 승인 정책이 보장되지는 않습니다.
+**직접 구현 workflow**는 `src/ai_platform/agents/`의 작은 orchestration code입니다. `AgentContext`는 한 호출의 task, iteration, immutable messages를 전달합니다. `AgentResponse`는 검증된 content와 Reviewer 전용 `ReviewDecision`을 전달합니다. Mock은 fixed tuple script만 소비하며 script가 소진되면 fallback 없이 `AgentProtocolError`로 멈춥니다.
 
-공식 문서의 세부 기능과 명령은 변경될 수 있으므로 Hermes를 실제로 구성할 때는 다음 최신 문서를 우선 확인합니다.
+**Hermes Agent runtime**은 Agent 실행을 위한 별도 runtime입니다. prompt, provider, tool, session, persistent memory 같은 기능의 실제 동작과 설정은 릴리스에 따라 달라질 수 있습니다. 실제 적용 전에는 다음 공식 문서를 최신 기준으로 확인해야 합니다.
 
-- [Architecture](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)
-- [Configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
-- [Tools & Toolsets](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)
-- [Persistent Memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)
-- [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
+- [Hermes Agent Architecture](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)
+- [Hermes Agent Configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)
+- [Hermes Agent Tools and Toolsets](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)
+- [Hermes Agent Persistent Memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)
+- [Hermes Agent Security](https://hermes-agent.nousresearch.com/docs/user-guide/security)
 
-## 4. 직접 구현과 runtime의 책임 비교
+**authority와 capability**는 다릅니다. `reviewer`라는 role label은 review decision의 schema authority를 나타낼 뿐, terminal·browser·deployment capability를 주지 않습니다. 반대로 toolset이 있다고 해서 업무상 release approval을 얻는 것도 아닙니다.
 
-| 관심사 | Volume 07 직접 구현 | Hermes runtime에서 별도로 확인할 것 |
-|---|---|---|
-| 역할 | Workflow 생성자에 `planner`, `researcher`, `developer`, `reviewer`, `qa`, `devops` 경계를 명시한다. | Agent identity, prompt, skill, access policy가 의도한 역할과 일치하는지 확인한다. 역할 이름만으로 권한을 추정하지 않는다. |
-| 메시지 전달 | `AgentContext.messages`의 immutable tuple만 다음 호출에 전달한다. | prompt 조립, context file, session context가 어떤 입력을 포함하는지 확인한다. |
-| state / memory | 실행 중 audit trail만 사용하며 장기 memory를 쓰지 않는다. | Hermes memory는 profile별로 session 사이에 유지될 수 있으므로 scope와 writer를 명시한다. |
-| tool | Mock에는 network client·tool executor·fallback이 없다. | toolset은 platform별로 활성/비활성할 수 있다. 필요한 최소 tool만 허용하고 위험한 명령 승인 정책을 확인한다. |
-| 반복·재시도 | `max_review_cycles`, `max_worker_attempts`, `max_rounds`가 양의 정수 상한이다. | runtime, skill, cron, 외부 workflow 어느 계층이 반복을 만들 수 있는지 식별하고 독립적인 상한과 종료 조건을 둔다. |
-| 사람 승인 | `PENDING`은 영향 있는 다음 역할 전에 멈추며, enum의 명시적 `APPROVED`만 다음 단계를 허용한다. | Hermes의 command approval은 위험한 명령에 대한 보안 경계다. 업무 검토·release 승인 정책과 혼동하지 말고 별도 approval record와 절차를 둔다. |
-| 실패 처리 | 잘못된 response, script 소진, 권한 위반은 `AgentProtocolError`로 다음 역할 전에 중단한다. | provider, tool, session 오류 시 재시도·fallback이 의도치 않은 권한 상승이나 외부 실행으로 이어지지 않는지 점검한다. |
+**human approval**도 두 층으로 나뉩니다. Volume 07의 enum은 학습용 local gate입니다. 운영 환경에서는 approver identity, 대상과 scope, timestamp, expiration, immutable audit record를 별도 승인 시스템에서 확인해야 합니다.
 
-## 5. Memory와 Tool을 분리해서 생각하기
-
-### 5.1 Memory
-
-이 권의 Mock workflow는 `AgentContext`와 결과 객체 안의 현재 실행 audit trail만 읽습니다. `DeterministicMockAgent`는 이전 실행을 기억하지 않으며, fixed script 이외의 응답을 만들지 않습니다. 이 선택은 테스트가 실행 순서에 따라 변하지 않게 합니다.
-
-Hermes의 공식 Persistent Memory 문서는 profile 범위의 memory가 session 시작 시 system prompt에 snapshot으로 들어가며, 여러 writer가 하나의 Hermes home을 공유하지 않도록 안내합니다. production 설계에서는 다음을 먼저 결정합니다.
-
-1. 역할별로 memory가 정말 필요한지 결정한다.
-2. 필요하다면 profile 또는 external provider의 소유자와 writer를 하나로 제한한다.
-3. 민감한 값, 승인 결정, release 권한을 일반 memory 문장에 저장하지 않는다.
-4. workflow의 현재 audit와 장기 사용자 선호를 서로 다른 데이터 모델로 유지한다.
-
-### 5.2 Tool
-
-`src/ai_platform/agents/`의 Volume 07 구현은 파일 변경, terminal, browser, deployment, 외부 API를 Agent capability로 제공하지 않습니다. DevOps 역할도 local handoff note 문자열만 만듭니다.
-
-Hermes 공식 Tools & Toolsets 문서는 web, terminal/files, browser, media, memory, delegation, scheduled task 등을 포함하는 tool registry를 설명합니다. 실제 runtime에 역할을 연결할 때는 다음의 allow-list를 먼저 작성합니다.
+## 4. 동작 구조
 
 ```text
-Reviewer: read-only evidence inspection only
-QA:       deterministic local verification only
-DevOps:   handoff-note preparation only
+local request
+    |
+    v
++-----------------------------------------------+
+| Volume 07 direct implementation               |
+| AgentContext -> deterministic role boundary   |
+| AgentResponse -> schema/role validation       |
+| bounded loop -> immutable audit messages      |
++-----------------------------------------------+
+    |                    |                  |
+    |                    |                  +--> protocol/limit failure
+    |                    |                        (fail closed)
+    |                    +--> awaiting_human_approval
+    |                              |
+    |                              v
+    |                    explicit local human decision
+    v
+completed (local result only)
+
+Hermes runtime, when separately adopted
+    |
+    +--> prompt / provider / session / memory / tool policy
+              each requires its own least-privilege and approval review
 ```
 
-그 뒤에만 각 역할에 필요한 최소 toolset을 매핑합니다. tool을 비활성화했다고 해서 업무 승인까지 해결되는 것은 아니며, tool 허용과 사람 승인 모두 필요합니다.
+위 구조에서 local message는 data입니다. message text가 Hermes tool handle, API key, mutable script, deployment 권한을 전달하지는 않습니다. Hermes runtime을 사용하더라도 workflow의 stop condition과 human gate는 명시적으로 유지해야 합니다.
 
-## 6. 안전한 비교 실습
+## 5. 실습 환경
 
-저장소 루트에서 아래 명령은 Volume 07 코드만 실행합니다. Hermes profile, `~/.hermes/`, API key, network endpoint를 읽거나 바꾸지 않습니다.
+이 장의 명령은 저장소 루트에서 Git Bash 또는 WSL Bash로 실행합니다. Windows 경로의 예시는 `E:\python\ai-platform-engineering-book-volume-07`이고 Git Bash에서는 `/e/python/ai-platform-engineering-book-volume-07`입니다.
+
+필요한 것은 이 저장소의 Python 환경과 `uv`뿐입니다. Hermes profile, `~/.hermes/`, provider credential, API key는 읽거나 변경하지 않습니다.
 
 ```bash
-# 실행 위치: 저장소 루트의 bash 또는 WSL 터미널
-uv run python examples/volume07/offline_review_workflow.py
-uv run python examples/volume07/offline_approved_delegation.py
-uv run python examples/volume07/offline_conflict_resolution.py
-uv run python examples/volume07/offline_release_handoff.py
+# 실행 위치: Git Bash 또는 WSL Bash, 저장소 루트
+cd /e/python/ai-platform-engineering-book-volume-07
+uv run python examples/volume07/offline_multi_agent_mini_project.py
+```
+
+명령은 네 local workflow를 구성하고 approval flag 없이 실행합니다. 따라서 gated QA, Worker, DevOps는 호출되지 않습니다.
+
+## 6. 단계별 실습
+
+### 6.1 기본 pause를 실행한다
+
+```bash
+# 실행 위치: 저장소 루트
+uv run python examples/volume07/offline_multi_agent_mini_project.py
+```
+
+이 명령의 목적은 review, delegation, conflict, release가 각자의 `PENDING` gate에서 멈추는지 확인하는 것입니다. Hermes command, live API, network endpoint는 호출하지 않습니다.
+
+### 6.2 local approval 경로를 분리해 실행한다
+
+```bash
+# 실행 위치: 저장소 루트
+uv run python examples/volume07/offline_multi_agent_mini_project.py \
+  --approve-review \
+  --approve-delegation \
+  --approve-conflict \
+  --approve-release
+```
+
+각 flag는 해당 stage의 학습용 local gate만 엽니다. 이 명령은 local QA message, bounded Worker result, exact consensus completion, local handoff note만 만들며 deployment를 실행하지 않습니다.
+
+### 6.3 workflow contract와 문서 contract를 검증한다
+
+```bash
+# 실행 위치: 저장소 루트
+uv run pytest tests/volume07/test_offline_multi_agent_mini_project.py \
+  tests/volume07/test_hermes_runtime_comparison_documentation.py -q
 uv run pytest tests/volume07 -q
 ```
 
-각 예제의 기본 출력은 `awaiting_human_approval`에서 멈춰야 합니다. Reviewer 승인, coordinator manifest, 또는 conflict consensus가 있어도 기본 실행은 QA, Worker, DevOps 또는 completion을 묵시적으로 허용하지 않습니다.
+첫 명령은 CLI의 independent approval flags와 이 장의 PRD section을 빠르게 검증합니다. 두 번째 명령은 Volume 07의 deterministic Mock, bounded loop, role authority, approval-gate regression을 함께 확인합니다.
 
-실습 뒤에는 다음 질문에 답해 봅니다.
+### 6.4 Hermes 적용 검토를 문서로만 준비한다
 
-1. local workflow에서 Reviewer가 `APPROVE`를 반환해도 왜 QA가 실행되지 않는가?
-2. Hermes의 위험 명령 승인과 업무상의 release 승인 기록은 왜 같은 것이 아닌가?
-3. persistent memory가 켜진 runtime에서 deterministic test fixture가 변하지 않도록 하려면 무엇을 분리해야 하는가?
-4. DevOps 역할에 toolset을 추가하려면 사람 승인 전에 어떤 allow-list와 종료 조건을 정해야 하는가?
+실제 Hermes runtime을 이 실습에서 실행하지 마십시오. 운영 적용이 필요한 별도 작업에서 공식 문서를 기준으로 role identity, provider, memory scope, tool allow-list, timeout/retry bound, human approval record를 검토합니다. 이 단계는 설정 변경이나 tool 실행이 아니라 설계 검토입니다.
 
-## 7. 운영 적용 전 점검표
+## 7. 코드 설명
 
-실제 Hermes 기반 구성을 시작하기 전 다음 항목을 문서화하고 검토합니다.
+`examples/volume07/offline_multi_agent_mini_project.py`의 builder 함수는 네 workflow에 non-empty immutable tuple script를 주입합니다. `build_review_workflow()`와 `build_release_workflow()`는 `HumanApproval`을, `build_delegation_workflow()`는 `DelegationApproval`을, `build_conflict_workflow()`는 `ConflictApproval`을 각각 사용합니다. enum을 공유 text로 대체하지 않기 때문에 stage 간 approval authority가 섞이지 않습니다.
 
-- [ ] 각 역할의 identity, goal, 입력 schema, 출력 schema를 지정했다.
-- [ ] Reviewer 결정 권한과 QA 결과 보고 권한을 분리했다.
-- [ ] 모든 반복과 retry에 수치 상한과 terminal state를 지정했다.
-- [ ] toolset을 역할별 최소 권한 allow-list로 제한했다.
-- [ ] 업무 approval record와 Hermes command approval을 별도 정책으로 모델링했다.
-- [ ] memory의 profile scope, writer, retention, 민감정보 금지 규칙을 정했다.
-- [ ] provider, tool, session 실패가 다음 역할 또는 외부 작업으로 자동 확장되지 않음을 테스트했다.
-- [ ] 최신 Hermes 공식 문서로 configuration과 security 설정을 다시 확인했다.
+`BoundedReviewWorkflow`와 `ApprovalGatedReleaseHandoffWorkflow`는 `max_review_cycles`만큼만 Developer/Reviewer pair를 호출합니다. Reviewer 외 role이 review decision을 반환하거나 response schema가 틀리면 audit trail에 추가하기 전에 `AgentProtocolError`로 중단합니다.
 
-## 8. 핵심 정리
+`ApprovalGatedDelegationWorkflow`는 Coordinator manifest를 먼저 검증하고 `PENDING`에서는 Worker를 호출하지 않습니다. `APPROVED` 뒤에도 task 수와 `max_worker_attempts`가 call budget을 제한합니다. `BoundedConflictResolutionWorkflow`는 모든 option의 exact equality만 consensus recommendation으로 받아들이고, 다수결이나 fallback으로 winner를 고르지 않습니다.
 
-Hermes Agent는 prompt, provider, tool, memory, session을 조합하는 runtime이고, Volume 07의 deterministic Mock은 그 이전에 역할 경계와 안전 계약을 학습하기 위한 최소 모델입니다. 두 접근은 경쟁하지 않습니다. 먼저 local 코드에서 메시지 전달, bounded loop, fail-closed, explicit human approval을 검증하고, runtime을 도입할 때는 memory·tool·provider·security 경계에 동일한 원칙을 적용해야 합니다.
+이 local code는 Hermes adapter가 아닙니다. `DeterministicMock*`에는 provider client, persistent memory writer, tool executor, subprocess, network, deployment capability가 없습니다. Hermes runtime을 연결한다면 별도의 adapter와 separate policy review가 필요합니다.
+
+## 8. 정상 실행 결과
+
+기본 실행의 핵심 출력은 다음과 같습니다.
+
+```text
+review_status=awaiting_human_approval
+delegation_status=awaiting_human_approval
+delegation_completed_task_ids=-
+conflict_status=awaiting_human_approval
+conflict_consensus_option=offline tutorial
+release_status=awaiting_human_approval
+release_handoff_note=-
+```
+
+네 approval flag를 모두 명시한 local 학습 경로의 핵심 출력은 다음과 같습니다.
+
+```text
+review_status=completed
+delegation_status=completed
+delegation_completed_task_ids=draft,verify
+conflict_status=completed
+conflict_consensus_option=offline tutorial
+release_status=completed
+release_handoff_note=Handoff: local release note ready; no deployment ran.
+```
+
+여기서 `completed`와 handoff note는 deterministic local result입니다. Hermes provider 호출, tool 실행, 파일 변경, deployment가 발생했다는 증거가 아닙니다.
+
+## 9. 오류 해결
+
+| 증상 | 원인 | 확인 및 해결 |
+|---|---|---|
+| 기본 실행이 `completed`가 아님 | approval flag 없이 실행했음 | 정상입니다. `PENDING`은 QA, Worker, DevOps 전에 pause해야 합니다. local completion을 확인할 때만 해당 `--approve-*` flag를 명시합니다. |
+| `WorkflowConfigurationError` | role boundary, declared role, fixed tuple script 또는 positive bound가 구성 계약을 위반함 | role label, callable signature, tuple container, non-empty field, positive integer를 확인합니다. Agent를 호출해 우회하지 않습니다. |
+| `AgentProtocolError` | runtime response schema가 틀리거나 script가 소진됨 | content, `ReviewDecision`, fixed script call budget을 수정합니다. 다음 role이나 fallback을 호출하지 않아야 합니다. |
+| Hermes tool approval을 release approval로 해석함 | command security boundary와 업무 승인 record를 혼동함 | tool permission, business approval, deployment authorization을 서로 다른 policy와 record로 설계합니다. |
+| memory 때문에 test 결과가 달라짐 | persistent state와 deterministic fixture를 섞음 | Volume 07 test에는 persistent memory를 연결하지 않습니다. 운영 memory는 scope, writer, retention을 별도 정의합니다. |
+
+## 10. 응용 실습
+
+1. `--approve-review` 하나만 실행하고 review만 `completed`이며 delegation, conflict, release는 `awaiting_human_approval`인지 확인합니다.
+2. Reviewer가 두 번 `REVISE`를 반환하는 local tuple fixture를 만들고, configured review bound 뒤 QA와 DevOps가 호출되지 않는 test를 작성합니다.
+3. Hermes 적용 전 검토표를 작성합니다. role마다 input/output schema, tool allow-list, timeout, retry limit, stop condition, human approval scope를 한 행에 기록합니다.
+4. `completed` local result를 external release permission으로 변환하지 못하도록, approval record에 필요한 identity·scope·expiration field를 별도 data model로 설계합니다.
+
+## 11. 실무 적용
+
+실제 Hermes 기반 workflow에는 다음 순서를 적용합니다.
+
+1. role identity, goal, input/output schema, authority를 정의한다.
+2. local deterministic test로 bounded loop와 fail-closed path를 먼저 고정한다.
+3. provider와 toolset을 role별 최소 권한 allow-list로 연결한다.
+4. provider, tool, session 실패가 implicit retry, fallback, privilege escalation으로 이어지지 않도록 independent upper bound를 둔다.
+5. 업무 approval을 authenticated approver, scope, timestamp, expiration, immutable audit record로 검증한다.
+6. secret을 prompt, message, memory, audit log에 기록하지 않는다.
+
+> [!TIP]
+> Runtime 설정은 구현 세부 사항이고, workflow authority는 설계 계약입니다. Hermes의 feature를 켠 뒤에도 Reviewer가 아닌 role의 review decision, Router의 자동 approval, `PENDING` 상태의 automatic resume은 계속 금지해야 합니다.
+
+## 12. 과제
+
+### 기본
+
+- `AgentContext.messages`가 immutable tuple인 이유와 message text가 capability가 아닌 이유를 설명합니다.
+- 네 workflow에서 `PENDING`일 때 호출되지 않는 gated role을 표로 정리합니다.
+
+### 응용
+
+- `APPROVED` enum과 운영 approval record가 다른 이유를 approver identity, scope, expiration 관점에서 작성합니다.
+- `max_review_cycles`, `max_worker_attempts`, `max_rounds`의 최대 Agent 호출 횟수를 각 workflow별로 계산해 기록합니다.
+
+### 심화
+
+- Hermes runtime adapter를 별도 package로 설계합니다. deterministic Mock module에 provider client나 tool executor를 import하지 않는 dependency rule을 포함합니다.
+- tool-enabled DevOps role의 최소 권한 allow-list와 별도 human approval workflow를 설계합니다. 이 과제에서는 실제 tool, API, deployment를 실행하지 않습니다.
+
+## 13. 완료 체크리스트
+
+- [ ] local mini project 기본 실행에서 네 stage가 `awaiting_human_approval`임을 확인했다.
+- [ ] stage별 `APPROVED`가 다른 stage의 QA, Worker, DevOps를 열지 않음을 확인했다.
+- [ ] fixed tuple script와 bounded loop가 deterministic test fixture를 만드는 이유를 설명할 수 있다.
+- [ ] role label과 message text가 tool capability 또는 운영 authority가 아님을 설명할 수 있다.
+- [ ] Hermes runtime 적용 전에 최신 공식 Architecture, Configuration, Tools, Memory, Security 문서를 확인할 위치를 안다.
+- [ ] human approval enum과 authenticated 운영 approval record를 분리했다.
+- [ ] `uv run pytest tests/volume07 -q`를 실행해 Volume 07 regression을 통과했다.
+- [ ] live API, secret, network Agent, tool 실행, 파일 변경, deployment를 이 실습에 추가하지 않았다.
+
+## 14. 핵심 정리
+
+Volume 07의 직접 구현은 Hermes runtime을 대체하려는 것이 아닙니다. role boundary, immutable message passing, deterministic Mock, bounded loop, fail-closed validation, explicit human approval을 학습하고 test하는 최소 모델입니다. Hermes를 실제로 사용할 때는 prompt, provider, memory, tool, session의 더 넓은 capability를 별도 정책으로 검토해야 합니다. 어떤 runtime을 사용하더라도 `PENDING`을 자동 승인으로 바꾸지 않고, local `completed`를 external action으로 해석하지 않으며, 권한과 approval을 명시적으로 검증해야 합니다.

@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 29: Chapter 10 Hermes runtime 비교 PRD 학습 계약
+
+- `10-hermes-runtime-comparison.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 적용, 과제, 체크리스트, 요약)으로 확장했다. local `AgentContext`/`AgentResponse`/`DeterministicMockAgent`와 Hermes runtime의 prompt·provider·memory·tool policy 책임을 분리하고, role label·message·local `completed`가 capability 또는 운영 승인이 아님을 명시했다.
+- `test_hermes_runtime_comparison_documentation.py`를 추가해 Chapter 10의 14 section, immutable deterministic Mock, `PENDING`/`APPROVED`/`REJECTED`, focused/full regression 명령, Hermes Architecture·Configuration·Tools·Persistent Memory·Security 공식 문서 참조, live API·secret·deployment 없는 local-only 범위를 회귀 검증한다.
+- `uv run pytest tests/volume07/test_offline_multi_agent_mini_project.py tests/volume07/test_hermes_runtime_comparison_documentation.py -q`는 7 passed였고, Chapter 10 focused documentation test는 1 passed였다. mini project의 기본 실행은 네 `awaiting_human_approval`을, 네 explicit approval flag는 local-only `completed`와 no-deployment handoff note를 실제 출력했다. `uv run pytest tests/volume07 -q`는 68 passed, `uv run ruff check src/ai_platform/agents tests/volume07`, `uv run mypy src/ai_platform/agents`, `validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`도 통과했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 28: Chapter 08 실행 중 검토 결정 PRD 학습 계약
 
 - `08-runtime-review-decision-contract.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 적용, 과제, 체크리스트, 요약)으로 확장했다. 문서는 fixed deterministic Mock의 구성 단계 검증과 local untrusted `InvalidReviewAgent`의 실행 단계 `AgentResponse` schema 검증을 분리하고, enum-like 문자열 `"approve"` 및 Reviewer 외 role의 `ReviewDecision`이 audit trail과 다음 Agent 호출 전에 `AgentProtocolError`로 fail-closed됨을 현재 구현과 테스트에 맞춰 설명한다.
