@@ -1,5 +1,11 @@
 # Volume 07 작성 진행 로그
 
+## 2026-08-14 — Slice 30: Chapter 12 접근 불가 Agent 경계 PRD 학습 계약
+
+- `12-inaccessible-agent-boundaries.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 적용, 기본·응용·심화 과제, 체크리스트, 요약)으로 확장했다. `UnreadableActBoundary`와 `UnreadableProposeBoundary`의 local-only configuration failure를 보여 주고, callable discovery가 protocol method 실행·live API·secret 조회·tool 초기화·파일 변경·deployment를 수행하지 않는 경계를 명시했다.
+- `test_inaccessible_agent_boundaries_documentation.py`를 추가해 Chapter 12의 14 section, `validate_callable_boundary`, 두 unreadable local test double, `WorkflowConfigurationError`, `PENDING`/`APPROVED`/`REJECTED`, focused/full regression 명령, bounded loop와 local-only safety scope를 회귀 검증한다. approval enum은 boundary configuration 오류를 우회하거나 capability를 전달하지 않는다.
+- `uv run pytest tests/volume07/test_inaccessible_agent_boundaries.py tests/volume07/test_inaccessible_agent_boundaries_documentation.py -q`는 5 passed였다. 전체 `uv run pytest tests/volume07 -q`는 69 passed였고, `uv run ruff check src/ai_platform/agents tests/volume07`, `uv run mypy src/ai_platform/agents`, `validate_docs.py`, `validate_links.py`, `validate_code_blocks.py`, `check_secrets.py`도 통과했다. mini project의 기본 실행은 네 `awaiting_human_approval`을, 네 explicit approval flag는 local-only `completed`와 no-deployment handoff note를 실제 출력했다. live API, secret, network Agent, tool 실행, 파일 변경, deployment를 추가하거나 사용하지 않았다.
+
 ## 2026-08-14 — Slice 29: Chapter 10 Hermes runtime 비교 PRD 학습 계약
 
 - `10-hermes-runtime-comparison.md`를 PRD Chapter template의 14개 section(학습 목표, 필요성, 핵심 개념, ASCII 구조, 환경, 실행 위치가 있는 단계별 실습, 코드 설명, 정상 출력, 오류 해결, 응용, 실무 적용, 과제, 체크리스트, 요약)으로 확장했다. local `AgentContext`/`AgentResponse`/`DeterministicMockAgent`와 Hermes runtime의 prompt·provider·memory·tool policy 책임을 분리하고, role label·message·local `completed`가 capability 또는 운영 승인이 아님을 명시했다.

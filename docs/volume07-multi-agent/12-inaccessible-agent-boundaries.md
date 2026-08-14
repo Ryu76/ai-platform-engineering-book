@@ -60,7 +60,15 @@ class UnreadableActBoundary:
     @property
     def act(self) -> object:
         raise RuntimeError("local test boundary accessor failed")
+
+
+class UnreadableProposeBoundary:
+    @property
+    def propose(self) -> object:
+        raise RuntimeError("local test boundary accessor failed")
 ```
+
+두 local test double 모두 protocol method를 **호출하지 않습니다**. 첫 class는 review/release의 `act(context)` 경계를, 두 번째 class는 delegation/conflict의 `propose(context)` 경계를 구성 단계에서 실패하게 합니다.
 
 테스트는 다음 네 구성을 고정합니다.
 
@@ -119,14 +127,46 @@ if not callable(method):
 2. non-callable `act` property와 accessor 예외의 오류 메시지가 구분되는지 확인합니다.
 3. adapter factory가 protocol method를 단순 method로 노출하도록 고쳐 property 기반 discovery를 피합니다.
 
-## 11. 완료 체크리스트
+## 11. 실무 적용
+
+운영 adapter는 `act` 또는 `propose` 속성을 읽는 동안 network 연결, secret 조회, tool 초기화, 파일 변경을 해서는 안 됩니다. workflow 구성은 **발견과 검증**만 수행하고, 실제 capability 획득과 외부 작업은 별도 실행 경계로 미룹니다. 그러면 구성 오류를 live API 호출이나 deployment 전에 재현할 수 있습니다.
+
+구체적인 운영 설계에서는 다음 책임을 분리합니다.
+
+1. adapter factory는 side-effect 없는 callable protocol method를 노출합니다.
+2. workflow는 callable signature, role, input/output schema, bounded loop를 검증합니다.
+3. 승인 서비스는 `PENDING`/`APPROVED`/`REJECTED` 결정의 승인자, scope, 시각, 만료를 별도 immutable record로 검증합니다.
+4. tool executor는 approval text가 아니라 allow-list와 최소 권한 policy를 다시 검사합니다.
+
+> [!WARNING]
+> `WorkflowConfigurationError`가 없다는 사실은 adapter가 안전하다는 증명도, 사람 승인이 유효하다는 증명도 아닙니다. 이는 local workflow가 호출할 수 있는 형태의 boundary를 발견했다는 뜻뿐입니다.
+
+## 12. 과제
+
+### 기본
+
+- `act` property가 `RuntimeError`를 내는 local boundary를 만들고, `WorkflowConfigurationError`의 `__cause__`가 원래 예외인지 확인합니다.
+- non-callable `propose` attribute와 accessor 예외가 서로 다른 안정적인 오류 메시지를 내는 test를 작성합니다.
+
+### 응용
+
+- `role` property가 예외를 내는 local adapter가 첫 Agent call 전에 fail-closed하는지 확인합니다.
+- `validate_callable_boundary()`가 context-compatible signature를 검사하지만 protocol method 자체는 호출하지 않는 이유를 설명합니다.
+
+### 심화
+
+- production adapter factory의 구성 단계와 실행 단계의 dependency graph를 그립니다. configuration 단계에는 live API client, secret, tool executor, deployment client를 넣지 마십시오.
+- 사람 승인 record와 agent boundary configuration을 서로 다른 immutable schema로 설계합니다. `APPROVED` 값 하나가 capability object를 전달하지 못하게 해야 합니다.
+
+## 13. 완료 체크리스트
 
 - [ ] protocol method의 attribute access도 구성 단계임을 설명할 수 있다.
 - [ ] inaccessible `act`/`propose` 경계가 Agent 호출 전에 중단됨을 확인했다.
 - [ ] accessor 예외와 non-callable protocol 오류의 차이를 이해한다.
-- [ ] 이 검사가 사람 승인·identity·tool 권한을 대체하지 않음을 설명할 수 있다.
-- [ ] Volume 07 offline 테스트를 통과시켰다.
+- [ ] `PENDING`, `APPROVED`, `REJECTED`가 잘못된 boundary configuration을 우회하지 못함을 설명할 수 있다.
+- [ ] adapter discovery가 live API, secret, tool 실행, 파일 변경, deployment를 수행하지 않아야 함을 확인했다.
+- [ ] `tests/volume07/test_inaccessible_agent_boundaries.py`와 Volume 07 offline test를 통과시켰다.
 
-## 12. 핵심 정리
+## 14. 핵심 정리
 
-Agent protocol의 method를 읽는 일도 boundary configuration의 일부입니다. 읽기 실패를 안정적인 `WorkflowConfigurationError`로 fail-closed하면 bounded loop, deterministic Mock, runtime schema 검증, 명시적 사람 승인보다 앞서 local wiring 오류를 차단할 수 있습니다.
+Agent protocol의 method를 읽는 일도 boundary configuration의 일부입니다. 읽기 실패를 안정적인 `WorkflowConfigurationError`로 fail-closed하면 bounded loop, deterministic Mock, runtime schema 검증, 명시적 사람 승인보다 앞서 local wiring 오류를 차단할 수 있습니다. 이 구성 경계는 실행 권한이나 운영 승인을 만들지 않으며, `PENDING`/`APPROVED`/`REJECTED` 사람 결정과 tool capability는 별도 정책으로 유지해야 합니다.
