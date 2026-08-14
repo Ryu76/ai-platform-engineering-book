@@ -39,6 +39,7 @@
 31. [Job canonical placeholder completion boundary: 전체 source-text의 정적 경계](31-job-canonical-placeholder-completion-static-boundary.md)
 32. [CronJob canonical suspended placeholder: 전체 source-text의 정적 경계](32-cronjob-canonical-suspended-placeholder-static-boundary.md)
 33. [Storage Kustomization local bundle: PVC source-text의 정적 경계](33-storage-kustomization-local-pvc-bundle-static-boundary.md)
+34. [Autoscaling Kustomization local bundle: HPA source-text의 정적 경계](34-autoscaling-kustomization-local-hpa-bundle-static-boundary.md)
 
 ## 현재 실습 경계
 

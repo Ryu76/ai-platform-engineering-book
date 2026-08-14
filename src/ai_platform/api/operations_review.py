@@ -41,6 +41,9 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
     storage_kustomization = (
         repository_root / "k8s/volume11/storage/kustomization.yaml"
     ).read_text(encoding="utf-8")
+    autoscaling_kustomization = (
+        repository_root / "k8s/volume11/autoscaling/kustomization.yaml"
+    ).read_text(encoding="utf-8")
     compose = (repository_root / "docker/volume11/compose.dependencies.yaml").read_text(
         encoding="utf-8"
     )
@@ -104,6 +107,15 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
             "../kustomization.yaml.",
             "resources:",
             "  - pvc.yaml",
+            "",
+        )
+    )
+    expected_autoscaling_kustomization = "\n".join(
+        (
+            "apiVersion: kustomize.config.k8s.io/v1beta1",
+            "kind: Kustomization",
+            "resources:",
+            "  - hpa.yaml",
             "",
         )
     )
@@ -330,6 +342,9 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
         ),
         "storage_kustomization_is_the_canonical_local_pvc_lesson_bundle": (
             storage_kustomization == expected_storage_kustomization
+        ),
+        "autoscaling_kustomization_is_the_canonical_local_hpa_lesson_bundle": (
+            autoscaling_kustomization == expected_autoscaling_kustomization
         ),
         "job_is_the_canonical_local_placeholder_completion_boundary": job == expected_job,
         "cronjob_is_the_canonical_local_suspended_placeholder_schedule_boundary": (
