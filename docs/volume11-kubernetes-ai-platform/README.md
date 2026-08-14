@@ -34,6 +34,7 @@
 26. [Base Kustomization local-only: 원격 참조·생성기 없는 정적 경계](26-base-kustomization-local-resource-only-static-boundary.md)
 27. [Base Kustomization explicit namespace: 변환 없는 scope 선언의 정적 경계](27-base-kustomization-explicit-namespace-static-boundary.md)
 28. [Base Kustomization sibling resource: 정확한 local 파일명의 정적 경계](28-base-kustomization-sibling-resource-static-boundary.md)
+29. [Base Kustomization canonical block: 전체 source-text의 정적 경계](29-base-kustomization-canonical-block-static-boundary.md)
 
 ## 현재 실습 경계
 
