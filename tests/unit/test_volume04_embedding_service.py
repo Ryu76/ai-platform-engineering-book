@@ -45,6 +45,13 @@ def test_vector_operations_return_expected_values() -> None:
     assert euclidean_distance(left, right) == pytest.approx(math.sqrt(2))
 
 
+def test_dot_product_preserves_a_small_residual_after_large_term_cancellation() -> None:
+    """보상 합산은 큰 양·음 항 사이의 작은 유한 내적을 버리면 안 된다."""
+    result = dot_product([1e16, 1.0, -1e16], [1.0, 1.0, 1.0])
+
+    assert result == 1.0
+
+
 def test_cosine_similarity_clamps_floating_point_roundoff_to_its_public_range() -> None:
     """동일한 정규화 vector의 반올림 오차가 1.0보다 큰 score가 되면 안 된다."""
     model = DeterministicEmbeddingModel(dimensions=256)

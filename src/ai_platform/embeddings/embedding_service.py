@@ -91,7 +91,9 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
 def dot_product(left: Sequence[float], right: Sequence[float]) -> float:
     """두 같은 차원 벡터의 dot product를 계산한다."""
     _require_same_nonempty_dimension(left, right)
-    return sum(
+    # `fsum` retains a small finite residual when large positive and negative
+    # terms cancel. A regular running `sum` would round that residual away.
+    return fsum(
         left_value * right_value
         for left_value, right_value in zip(left, right, strict=True)
     )
