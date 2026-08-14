@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from hashlib import sha256
-from math import isfinite, sqrt
+from math import fsum, isfinite, sqrt
 from re import findall
 from typing import Protocol
 
@@ -72,13 +72,19 @@ class DeterministicEmbeddingModel:
 def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     """두 벡터의 방향 유사도를 -1.0부터 1.0 범위로 계산한다."""
     _require_same_nonempty_dimension(left, right)
-    left_norm = sqrt(sum(value * value for value in left))
-    right_norm = sqrt(sum(value * value for value in right))
-    if left_norm == 0 or right_norm == 0:
+    left_scale = max(abs(value) for value in left)
+    right_scale = max(abs(value) for value in right)
+    if left_scale == 0 or right_scale == 0:
         raise VectorDimensionError("cosine similarity is undefined for a zero vector")
+    left_norm = sqrt(fsum((value / left_scale) ** 2 for value in left))
+    right_norm = sqrt(fsum((value / right_scale) ** 2 for value in right))
     # Floating-point roundoff can make identical normalized vectors evaluate to
-    # 1.0000000000000002. Preserve the public cosine-score contract exactly.
-    raw_score = dot_product(left, right) / (left_norm * right_norm)
+    # 1.0000000000000002. Scaling first also prevents finite large components
+    # from overflowing an intermediate dot product or squared norm.
+    raw_score = fsum(
+        (left_value / left_scale / left_norm) * (right_value / right_scale / right_norm)
+        for left_value, right_value in zip(left, right, strict=True)
+    )
     return max(-1.0, min(1.0, raw_score))
 
 

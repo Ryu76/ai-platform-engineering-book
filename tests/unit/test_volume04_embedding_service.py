@@ -53,6 +53,15 @@ def test_cosine_similarity_clamps_floating_point_roundoff_to_its_public_range() 
     assert cosine_similarity(vector, vector) == 1.0
 
 
+def test_cosine_similarity_avoids_overflow_for_large_finite_vectors() -> None:
+    """유한한 큰 component도 중간 제곱·dot overflow 없이 방향으로 비교해야 한다."""
+    aligned = cosine_similarity([1e308, 1e308], [1e308, 1e308])
+    orthogonal = cosine_similarity([1e308, 1e308], [1e308, -1e308])
+
+    assert aligned == pytest.approx(1.0)
+    assert orthogonal == pytest.approx(0.0)
+
+
 @pytest.mark.parametrize("dimensions", [True, 7, 4097])
 def test_model_rejects_invalid_dimensions(dimensions: int | bool) -> None:
     """잘못된 차원은 데이터가 생성되기 전에 거부해야 한다."""
