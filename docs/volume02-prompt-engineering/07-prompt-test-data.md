@@ -40,9 +40,9 @@ Prompt 본문과 검토 입력을 한 파일에 섞으면, 버전별 결과가 �
 저장소 루트의 Git Bash, WSL 또는 Linux 터미널에서 실행합니다.
 
 ```bash
-uv sync --all-groups
-uv run python examples/volume02/prompt_test_data_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/prompt_test_data_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 정상 출력에는 세 개의 교육용 fixture와 비교에 전달될 ID가 표시됩니다.

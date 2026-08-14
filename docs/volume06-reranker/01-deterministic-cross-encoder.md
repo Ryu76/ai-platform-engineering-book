@@ -32,8 +32,8 @@ Retriever는 많은 문서에서 후보를 빠르게 찾는 대신 질문의 모
 저장소 루트에서 실행합니다. 이 예제는 고정된 후보 문자열만 사용하며 네트워크, API 키, 모델 다운로드, GPU를 사용하지 않습니다.
 
 ```bash
-uv run python examples/volume06/rerank_fixture.py
-uv run pytest tests/unit/test_volume06_reranker.py -q
+python examples/volume06/rerank_fixture.py
+pytest tests/unit/test_volume06_reranker.py -q
 ```
 
 ## 6. 단계별 실습

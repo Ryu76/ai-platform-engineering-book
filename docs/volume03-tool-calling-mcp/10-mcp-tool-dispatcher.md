@@ -48,9 +48,9 @@ parser 단계에서 거부된 raw request는 신뢰할 수 있는 Tool 요청이
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv sync --all-groups
-uv run python examples/volume03/mcp_tool_dispatcher.py
-uv run pytest tests/volume03/test_mcp_dispatcher.py -q
+conda env update --file environment.yml --prune
+python examples/volume03/mcp_tool_dispatcher.py
+pytest tests/volume03/test_mcp_dispatcher.py -q
 ```
 
 예제 출력은 다음과 같습니다.

@@ -52,9 +52,9 @@ Prompt를 수정한 뒤 일부 예시만 눈으로 확인하면 형식 회귀나
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv sync --all-groups
-uv run python examples/volume02/prompt_mini_project_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/prompt_mini_project_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 첫 명령은 의존성을 준비합니다. 둘째 명령은 고정 교육용 문자열을 비교할 뿐 API 키를 읽거나 외부 시스템에 연결하지 않습니다. 셋째 명령은 성공·실패·잘못된 입력 경계를 확인합니다.

@@ -55,7 +55,7 @@ run_chat_loop()
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 프로젝트와 검사 도구를 준비합니다. Windows에서 WSL을 쓰는 경우 Windows 경로가 아니라 WSL에 복제한 저장소 경로에서 실행합니다.
@@ -66,7 +66,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-printf 'AI Platform이란 무엇인가요?\n/exit\n' | uv run python examples/volume01/chat_cli.py --offline-demo
+printf 'AI Platform이란 무엇인가요?\n/exit\n' | python examples/volume01/chat_cli.py --offline-demo
 ```
 
 `printf`는 질문과 종료 명령을 차례대로 표준 입력에 전달합니다. `--offline-demo`가 있으므로 `.env`, API 키, 네트워크가 필요 없습니다. 출력의 데모 응답에는 방금 입력한 질문이 표시되고, 마지막에는 `대화를 마칩니다.`가 표시되어야 합니다.
@@ -75,7 +75,7 @@ printf 'AI Platform이란 무엇인가요?\n/exit\n' | uv run python examples/vo
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/integration/test_volume01_chat_cli.py -q
+pytest tests/integration/test_volume01_chat_cli.py -q
 ```
 
 테스트는 별도 Python 프로세스가 종료 코드 0으로 끝나는지, 시작 안내·오프라인 데모 응답·로컬 종료 안내가 모두 있는지 확인합니다. 테스트는 `--offline-demo`만 호출하므로 외부 API 요청과 비용이 없습니다.
@@ -91,7 +91,7 @@ bash scripts/run_all_tests.sh
 
 ## 7. 코드 설명
 
-통합 테스트는 `sys.executable`을 사용합니다. 따라서 테스트를 실행한 `uv` 가상환경과 같은 Python으로 CLI를 실행합니다. `subprocess.run()`에는 질문과 `/exit`만 `input`으로 전달하고, `capture_output=True`로 프로그램의 표준 출력을 검사합니다.
+통합 테스트는 `sys.executable`을 사용합니다. 따라서 테스트를 실행한 활성 Conda 환경과 같은 Python으로 CLI를 실행합니다. `subprocess.run()`에는 질문과 `/exit`만 `input`으로 전달하고, `capture_output=True`로 프로그램의 표준 출력을 검사합니다.
 
 ```python
 result = subprocess.run(
@@ -130,7 +130,7 @@ AI 업무 처리 플랫폼 챗봇입니다. 종료하려면 /exit 또는 /quit�
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 가상환경을 준비하지 않았거나 저장소 밖에서 실행했습니다. | 저장소 루트에서 `uv sync --all-groups` 후 `uv run ...` 명령을 사용합니다. |
+| `No module named ai_platform` | 가상환경을 준비하지 않았거나 저장소 밖에서 실행했습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 후 활성 Conda 환경의 명령 명령을 사용합니다. |
 | 테스트가 시간 초과됨 | `/exit`이 전달되지 않았거나 CLI 루프가 종료 명령을 처리하지 못했습니다. | 입력 문자열에 줄바꿈 포함 `/exit\n`이 있는지, `run_chat_loop()`의 종료 분기가 유지되는지 확인합니다. |
 | 라이브 제공자 오류가 표시됨 | `--offline-demo`를 빼고 실행했습니다. | API 키 없는 학습과 검증에는 항상 `--offline-demo`를 붙입니다. |
 | 출력이 예시와 한 줄씩 다름 | 파이프 입력은 대화형 터미널과 프롬프트 표시 방식이 다릅니다. | 문장 전체의 줄 위치가 아니라 시작 안내, 데모 응답, 종료 안내가 모두 있는지 확인합니다. |

@@ -1,5 +1,10 @@
 # Volume 07. Multi-Agent 설계
 
+> **공식 실습 환경:** 저장소 루트의 Anaconda PowerShell Prompt에서 `conda activate ai-platform-engineering-book`를 먼저 실행합니다. Python 예제·테스트·검사는 `uv`, `.venv`, 시스템 Python을 섞지 않고 이 Conda 환경에서만 실행합니다. 전체 절차는 [Anaconda 환경 설정](../setup/anaconda.md)을 참고합니다.
+
+
+
+
 ## 목표
 
 Planner, Researcher, Developer, Reviewer, QA 역할의 메시지·상태·도구·종료 조건을 구현합니다. 모든 실습은 결정론적 Mock을 우선 사용하고, 반복은 유한하게 제한하며, 영향 있는 다음 단계 전에 명시적 사람 승인을 둡니다.

@@ -61,7 +61,7 @@ def test_volume11_entry_chapter_links_to_existing_artifacts_and_offline_verifica
     ):
         assert relative_path in chapter
     expected_command = (
-        "uv run pytest tests/unit/test_volume11_health.py "
+        "pytest tests/unit/test_volume11_health.py "
         "tests/integration/test_volume11_health_artifacts.py -q"
     )
     assert expected_command in chapter

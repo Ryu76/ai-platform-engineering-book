@@ -60,10 +60,10 @@ Instruction · Context · Output Format · Constraints
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-이 명령은 프로젝트 가상환경과 `pytest`, `ruff`, `mypy`를 준비합니다. Windows Git Bash에서 저장소가 다른 드라이브에 있으면 그 저장소 경로로 이동한 뒤 같은 `uv` 명령을 실행합니다. `.env`나 API 키는 필요하지 않습니다.
+이 명령은 프로젝트 가상환경과 `pytest`, `ruff`, `mypy`를 준비합니다. Windows Git Bash에서 저장소가 다른 드라이브에 있으면 그 저장소 경로로 이동한 뒤 같은 Conda 환경 명령을 실행합니다. `.env`나 API 키는 필요하지 않습니다.
 
 ## 6. 단계별 실습
 
@@ -71,7 +71,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv run python examples/volume02/prompt_template_demo.py
+python examples/volume02/prompt_template_demo.py
 ```
 
 이 명령은 고객 문의 문자열 하나를 템플릿에 넣어 출력합니다. 네트워크 연결, 모델, API 키를 사용하지 않으므로 CI와 학습의 기본 확인 경로로 사용할 수 있습니다. 출력에서 다섯 개 대괄호 섹션과 `<user_input>` 경계를 확인합니다.
@@ -80,7 +80,7 @@ uv run python examples/volume02/prompt_template_demo.py
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv run pytest tests/unit/test_prompts.py -q
+pytest tests/unit/test_prompts.py -q
 ```
 
 테스트는 섹션의 고정된 순서, Injection처럼 보이는 문자열도 입력 데이터 영역에 남는지, 빈 구성 요소·빈 제약·빈 입력·4,000자 초과 입력을 거부하는지를 확인합니다. 이 테스트는 LLM API를 호출하지 않습니다.
@@ -112,7 +112,7 @@ JSON 객체: {"category": "...", "reason": "..."}
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 저장소 루트 밖에서 실행했거나 `uv run`을 생략했을 수 있습니다. | 저장소 루트에서 `uv sync --all-groups`를 실행한 뒤 `uv run python ...`을 사용합니다. |
+| `No module named ai_platform` | 저장소 루트 밖에서 실행했거나 Conda 환경을 활성화하지 않았을 수 있습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune`를 실행한 뒤 `python ...`을 사용합니다. |
 | `instruction must be a non-empty string` | 서비스 설정의 지시문이 비어 있거나 공백뿐입니다. | 업무를 나타내는 짧고 명확한 지시문을 설정합니다. 사용자 입력으로 대신하지 마세요. |
 | `constraints must be a tuple ...` | 제약을 리스트나 단일 문자열로 전달했습니다. | `("추측하지 마세요.",)`처럼 튜플로 전달합니다. 원소가 하나일 때도 끝의 쉼표가 필요합니다. |
 | `user_input must be at most 4000 characters` | 입력이 예제의 로컬 한도를 넘었습니다. | 원문을 임의로 버리지 말고, 호출 전에 분할·요약·승인 정책을 설계합니다. |
@@ -142,7 +142,7 @@ Prompt에는 비밀값과 불필요한 개인정보를 넣지 않습니다. 로�
 - [ ] 사용자 입력을 서비스 규칙이 아닌 신뢰되지 않은 데이터로 처리했다.
 - [ ] `PromptSections`가 빈 구성 요소와 비어 있는 제약을 거부함을 확인했다.
 - [ ] 오프라인 데모를 실행하고 다섯 개 섹션의 순서를 확인했다.
-- [ ] `uv run pytest tests/unit/test_prompts.py -q`를 API 키·네트워크 없이 통과시켰다.
+- [ ] `pytest tests/unit/test_prompts.py -q`를 API 키·네트워크 없이 통과시켰다.
 - [ ] 태그만으로 Prompt Injection을 완전히 방어할 수 없음을 설명할 수 있다.
 - [ ] 다음 장의 Zero-shot·Few-shot과 구조화된 출력이 이 템플릿을 확장한다는 점을 이해했다.
 

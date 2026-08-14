@@ -30,9 +30,9 @@ def test_volume02_exercises_preserve_all_assignment_levels_and_offline_boundarie
     assert "- **기본:**" in content
     assert "- **응용:**" in content
     assert "- **심화:**" in content
-    assert "uv run python examples/volume02/prompt_template_demo.py" in content
-    assert "uv run python examples/volume02/prompt_mini_project_demo.py" in content
-    assert "uv run pytest tests/unit/test_prompts.py -q" in content
+    assert "python examples/volume02/prompt_template_demo.py" in content
+    assert "python examples/volume02/prompt_mini_project_demo.py" in content
+    assert "pytest tests/unit/test_prompts.py -q" in content
     assert "실제 API·키·네트워크·Tool 실행 없이" in content
     assert "자동 배포 승인이 아님" in content
 
@@ -55,7 +55,7 @@ def test_volume02_checklist_preserves_offline_replay_and_tool_calling_handoff() 
     assert "Instruction, Context, Input Data, Output Format, Constraint" in content
     assert "Chain of Thought" in content
     assert "Prompt Injection 위험 신호 평가는 보조 신호" in content
-    assert "uv run python examples/volume02/prompt_mini_project_demo.py" in content
+    assert "python examples/volume02/prompt_mini_project_demo.py" in content
     assert "bash scripts/run_all_tests.sh" in content
     assert "API 키, 네트워크, 라이브 LLM, Tool 실행 없이" in content
     assert "[Volume 03. Tool Calling & MCP](../volume03-tool-calling-mcp/README.md)" in content

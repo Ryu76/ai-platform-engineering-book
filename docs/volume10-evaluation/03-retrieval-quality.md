@@ -68,10 +68,10 @@
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-환경 변수, API 키, 모델 서버, 벡터 데이터베이스는 필요하지 않습니다. Windows Git Bash에서도 저장소 루트에서 같은 `uv` 명령을 실행할 수 있습니다.
+환경 변수, API 키, 모델 서버, 벡터 데이터베이스는 필요하지 않습니다. Windows Git Bash에서도 저장소 루트에서 같은 Conda 환경 명령을 실행할 수 있습니다.
 
 ## 6. 단계별 실습
 
@@ -79,7 +79,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/retrieval_quality.py
+python examples/volume10/retrieval_quality.py
 ```
 
 전체 평균은 네 개 `answer` 사례를 평가합니다. `abstain`인 `office-parking`은 이 검색 Recall 분모에 포함되지 않습니다.
@@ -88,7 +88,7 @@ uv run python examples/volume10/retrieval_quality.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/retrieval_failure_analysis.py
+python examples/volume10/retrieval_failure_analysis.py
 ```
 
 `expense-receipt`는 정답이 회수됐지만 `first_rank=2`입니다. `benefits-enrollment`는 `retrieved=none`, `first_rank=none`이므로 Top-3 전체에서 정답을 놓친 사례입니다. 반대로 `incident-response`는 두 정답을 모두 회수해 Precision@3이 0.666667입니다.
@@ -97,7 +97,7 @@ uv run python examples/volume10/retrieval_failure_analysis.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation/test_retrieval_metrics.py -q
+pytest tests/evaluation/test_retrieval_metrics.py -q
 ```
 
 테스트는 평균값뿐 아니라 사례 출력 순서, 2위 정답, 두 정답 회수, 완전 누락을 고정합니다. 문자열 하나를 문서 ID 목록으로 잘못 넘기는 입력도 거부하므로 문자 단위로 잘못 계산되는 일을 막습니다.
@@ -167,8 +167,8 @@ benefits-enrollment: retrieved=none; first_rank=none; Recall@3=0.000000; Precisi
 - [ ] `first_rank=none`과 2위 이후 정답의 차이를 구분할 수 있다.
 - [ ] 복수 정답 사례에서 Recall과 NDCG의 역할을 설명할 수 있다.
 - [ ] `k`를 바꾸면 비교 조건과 지연·토큰·비용도 바뀐다는 점을 이해했다.
-- [ ] `uv run python examples/volume10/retrieval_failure_analysis.py`를 실행했다.
-- [ ] `uv run pytest tests/evaluation/test_retrieval_metrics.py -q`를 통과시켰다.
+- [ ] `python examples/volume10/retrieval_failure_analysis.py`를 실행했다.
+- [ ] `pytest tests/evaluation/test_retrieval_metrics.py -q`를 통과시켰다.
 - [ ] API 키, 고객 데이터, 외부 서비스 없이 고정 실패 분석을 재현했다.
 - [ ] 다음 장의 답변 정확도·환각·인용 평가로 검색 결과를 연결할 준비가 되었다.
 

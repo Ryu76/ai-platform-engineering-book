@@ -41,8 +41,8 @@ KeywordRouteDecision.as_log_record()
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/keyword_router.py
-uv run pytest tests/unit/test_volume08_keyword_router.py -q
+python examples/volume08/keyword_router.py
+pytest tests/unit/test_volume08_keyword_router.py -q
 ```
 
 예제의 `order_tracking` rule은 `order`, `tracking` keyword와 confidence `0.90`을 사용합니다. Router의 최소 confidence는 `0.80`입니다. `order-support-agent`만 `lookup_order`와 `respond_support` capability를 모두 제공하고, 요청의 비용·지연 시간·허용 대상 제한도 통과하므로 선택됩니다.
@@ -108,7 +108,7 @@ confidence와 threshold는 모두 `Decimal`의 유한한 `0` 이상 `1` 이하 �
 - [ ] token 일치와 부분 문자열 일치의 차이를 설명할 수 있다.
 - [ ] intent가 capability·허용 대상·예산·latency 정책을 우회하면 안 되는 이유를 설명할 수 있다.
 - [ ] threshold 미달 시 `NoConfidentKeywordRouteError`로 안전 실패하는 것을 확인했다.
-- [ ] `uv run pytest tests/unit/test_volume08_keyword_router.py -q`를 외부 호출 없이 실행했다.
+- [ ] `pytest tests/unit/test_volume08_keyword_router.py -q`를 외부 호출 없이 실행했다.
 - [ ] 결정 로그에 사용자 원문과 비밀값을 넣지 않았다.
 
 ## 9. 핵심 정리

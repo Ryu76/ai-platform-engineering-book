@@ -97,8 +97,8 @@ RouterAPIResponse(status_code, JSON body)
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/router_api.py
-uv run pytest tests/unit/test_volume08_router_api.py -q
+python examples/volume08/router_api.py
+pytest tests/unit/test_volume08_router_api.py -q
 ```
 
 첫 명령은 실제 서버를 열지 않고 고정 JSON body를 처리합니다. 정상 출력은 다음과 같습니다.

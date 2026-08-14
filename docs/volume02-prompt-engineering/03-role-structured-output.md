@@ -68,9 +68,9 @@
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv sync --all-groups
-uv run python examples/volume02/structured_output_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/structured_output_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 첫 명령은 Pydantic과 개발 검사 도구를 준비합니다. 둘째 명령은 네트워크, API 키, 모델 호출 없이 Prompt와 검증된 샘플을 출력합니다. 셋째 명령은 JSON 계약을 테스트합니다.
@@ -81,7 +81,7 @@ uv run pytest tests/unit/test_prompts.py -q
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv run python examples/volume02/structured_output_demo.py
+python examples/volume02/structured_output_demo.py
 ```
 
 출력에서 `[ROLE]`이 `[INSTRUCTION]`보다 앞에 있고, 사용자 문의가 마지막 `<user_input>`에 있는지 확인합니다. `[OUTPUT FORMAT]`과 `[CONSTRAINTS]`에는 JSON 객체·허용 분류·Markdown 금지가 표시됩니다.
@@ -155,7 +155,7 @@ JSON의 공백은 Pydantic 버전에 따라 달라질 수 있지만, `category`�
 - [ ] JSON 출력 요구가 유효한 JSON을 보장하지 않음을 설명할 수 있다.
 - [ ] 허용 분류·필수 필드·근거 길이·추가 키를 스키마로 검증했다.
 - [ ] 유효하지 않은 응답이 `StructuredOutputError`로 중단됨을 확인했다.
-- [ ] 오프라인 데모와 `uv run pytest tests/unit/test_prompts.py -q`를 실행했다.
+- [ ] 오프라인 데모와 `pytest tests/unit/test_prompts.py -q`를 실행했다.
 - [ ] JSON 검증이 Tool 권한·개인정보·Prompt Injection 방어를 대체하지 않음을 설명할 수 있다.
 - [ ] 다음 장에서 내부 추론을 노출하지 않는 구조적 추론 설계를 다룬다는 점을 이해했다.
 

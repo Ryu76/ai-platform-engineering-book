@@ -956,7 +956,7 @@ Docker / Kubernetes
 - VSCode WSL Extension
 - Git
 - Python 3.12 이상
-- `uv` 또는 `venv`
+- Anaconda Distribution과 `conda` (Python 3.12 교재 전용 환경)
 - Docker
 - Docker Compose
 - kubectl
@@ -1017,6 +1017,7 @@ ai-platform-engineering-book/
 ├── CONTRIBUTING.md
 ├── CHANGELOG.md
 ├── pyproject.toml
+├── environment.yml
 ├── .gitignore
 ├── .env.example
 ├── Makefile

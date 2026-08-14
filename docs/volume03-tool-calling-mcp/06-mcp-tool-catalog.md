@@ -33,9 +33,9 @@ MCP tools/list 모양의 name / description / inputSchema snapshot
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv sync --all-groups
-uv run python examples/volume03/mcp_tool_catalog.py
-uv run pytest tests/volume03/test_mcp_catalog.py -q
+conda env update --file environment.yml --prune
+python examples/volume03/mcp_tool_catalog.py
+pytest tests/volume03/test_mcp_catalog.py -q
 ```
 
 예제는 순수 함수인 `safe_calculator`, `safe_text_case` 두 개를 명시적으로 등록한 뒤 이름과 설명만 출력합니다. 실제 Tool을 호출하지 않고, 파일·셸·환경 변수·네트워크·외부 MCP Server에 접근하지 않습니다.

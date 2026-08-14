@@ -69,10 +69,10 @@ LLM API · Vector DB · 네트워크 ─── 이 장의 기본 경로에서 �
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-`uv sync --all-groups`는 프로젝트 가상환경과 pytest·ruff·mypy를 준비합니다. Windows Git Bash에서도 저장소 루트로 이동한 뒤 같은 `uv` 명령을 실행할 수 있습니다. 이 실습에는 환경 변수나 API 키가 필요하지 않습니다.
+`conda env update --file environment.yml --prune`는 프로젝트 가상환경과 pytest·ruff·mypy를 준비합니다. Windows Git Bash에서도 저장소 루트로 이동한 뒤 같은 Conda 환경 명령을 실행할 수 있습니다. 이 실습에는 환경 변수나 API 키가 필요하지 않습니다.
 
 ## 6. 단계별 실습
 
@@ -80,7 +80,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/retrieval_quality.py
+python examples/volume10/retrieval_quality.py
 ```
 
 이 명령은 `FIXED_RETRIEVAL_CASES`와 `FIXED_RETRIEVAL_RESULTS_AT_3`만 사용합니다. 문서 임베딩, 검색 서버, LLM 호출을 수행하지 않습니다. 따라서 로컬과 CI에서 동일한 기준선을 확인하는 데 사용합니다.
@@ -89,7 +89,7 @@ uv run python examples/volume10/retrieval_quality.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation/test_retrieval_metrics.py -q
+pytest tests/evaluation/test_retrieval_metrics.py -q
 ```
 
 테스트는 고정 데이터의 점수뿐 아니라 0 이하 `k`, 사례 누락, 중복 문서 ID를 거부하는지를 확인합니다. 실패를 조용히 무시하면 일부 질의만 측정한 평균이 보고될 수 있으므로 입력 계약도 품질 측정의 일부입니다.
@@ -127,7 +127,7 @@ NDCG@3: 0.657732
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 저장소 루트 밖에서 시스템 Python을 실행했을 수 있습니다. | 저장소 루트에서 `uv sync --all-groups` 후 `uv run python ...`을 사용합니다. |
+| `No module named ai_platform` | 저장소 루트 밖에서 시스템 Python을 실행했을 수 있습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 후 `python ...`을 사용합니다. |
 | `k must be a positive integer` | `k=0`, 음수, 불리언, 문자열을 전달했을 수 있습니다. | 상위 결과 수를 나타내는 양의 정수만 사용합니다. |
 | `missing=` 또는 `unexpected=` 오류 | 골든 사례와 결과 사전의 `case_id`가 일치하지 않습니다. | 데이터셋과 결과에 같은 사례 ID가 정확히 한 번씩 있는지 확인합니다. |
 | `must be unique` 오류 | 하나의 순위 목록에 같은 문서 ID가 반복됩니다. | Retriever 출력의 중복 제거 규칙을 확인하고 원본 순위를 수정합니다. |
@@ -160,8 +160,8 @@ NDCG@3: 0.657732
 - [ ] 오프라인 평가가 같은 입력에서 같은 결과를 내야 하는 이유를 설명할 수 있다.
 - [ ] Recall@k, Precision@k, Hit Rate@k, MRR, NDCG@k를 해석할 수 있다.
 - [ ] `k`와 골든 데이터셋 버전을 함께 기록해야 함을 이해했다.
-- [ ] `uv run python examples/volume10/retrieval_quality.py`를 실행했다.
-- [ ] `uv run pytest tests/evaluation/test_retrieval_metrics.py -q`를 통과시켰다.
+- [ ] `python examples/volume10/retrieval_quality.py`를 실행했다.
+- [ ] `pytest tests/evaluation/test_retrieval_metrics.py -q`를 통과시켰다.
 - [ ] 누락 사례·중복 순위가 평가 실패여야 하는 이유를 설명할 수 있다.
 - [ ] API 키, 고객 데이터, 외부 서비스 없이 이 장의 기준선을 재현했다.
 - [ ] 다음 장에서 데이터셋의 대표성과 버전 관리를 확장할 준비가 되었다.

@@ -53,7 +53,7 @@ ChatCompleter.complete(...)
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 가상환경과 검사 도구를 준비합니다. 아래 6.1과 6.2는 API 키·계정·외부 네트워크를 사용하지 않습니다.
@@ -64,7 +64,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume01/chat_cli.py --offline-demo
+python examples/volume01/chat_cli.py --offline-demo
 ```
 
 `사용자>` 프롬프트가 나오면 `RAG는 무엇인가요?`를 입력하고, 다음 줄에 `/exit`을 입력합니다. `--offline-demo`는 마지막 사용자 입력을 표시하는 결정론적 응답기이므로 API 키와 네트워크가 필요 없습니다.
@@ -73,7 +73,7 @@ uv run python examples/volume01/chat_cli.py --offline-demo
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_chat.py -q
+pytest tests/unit/test_chat.py -q
 ```
 
 테스트는 성공 이력 저장, 가장 오래된 턴 제거, 빈 입력, EOF, 시간 초과·네트워크 오류의 비밀값 없는 안내, `/exit`과 `/quit` 종료를 확인합니다. 실제 `input()`, 실제 API, 실제 대기 시간을 사용하지 않습니다.
@@ -110,7 +110,7 @@ cp .env.example .env
 set -a
 . ./.env
 set +a
-uv run python examples/volume01/chat_cli.py
+python examples/volume01/chat_cli.py
 ```
 
 `--offline-demo` 없이 실행하면 환경 설정을 읽고 한 질문마다 명시적으로 `LlmClient.complete()`를 호출합니다. `.env`를 Git에 추가하지 않습니다. `LLM_BASE_URL`을 변경하는 경우에도 신뢰할 수 있는 제공자 주소만 사용합니다.

@@ -42,8 +42,8 @@ router = PolicyFallbackRouter(
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/policy_fallback_router.py
-uv run pytest tests/unit/test_volume08_policy_fallback_router.py -q
+python examples/volume08/policy_fallback_router.py
+pytest tests/unit/test_volume08_policy_fallback_router.py -q
 ```
 
 예제는 비정상 primary와 정상 fallback Agent를 사용합니다. 요청의 허용 대상은 fallback Agent 하나로 고정되고 `retry_budget=1`입니다. 외부 서비스·환경 변수·API 키·네트워크를 사용하지 않습니다.
@@ -90,7 +90,7 @@ uv run pytest tests/unit/test_volume08_policy_fallback_router.py -q
 - [ ] retry budget이 primary 뒤의 fallback 시도 횟수라는 점을 확인했다.
 - [ ] budget 소진 시 임의 대상 선택 대신 `FallbackRouteExhaustedError`로 실패함을 확인했다.
 - [ ] 성공·실패 로그에 사용자 원문과 비밀값을 넣지 않았다.
-- [ ] `uv run pytest tests/unit/test_volume08_policy_fallback_router.py -q`를 외부 호출 없이 실행했다.
+- [ ] `pytest tests/unit/test_volume08_policy_fallback_router.py -q`를 외부 호출 없이 실행했다.
 
 ## 9. 핵심 정리
 

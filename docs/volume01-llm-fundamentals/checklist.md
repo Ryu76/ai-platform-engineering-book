@@ -30,18 +30,18 @@ LLM Client ──► Streaming · 오류 처리 · 사용량
 
 ### 3.2 환경과 보안
 
-- [ ] 저장소 루트에서 `uv sync --all-groups`를 실행했다.
+- [ ] 저장소 루트에서 `conda env update --file environment.yml --prune`를 실행했다.
 - [ ] `.env.example`만 공유하고 `.env`와 실제 API 키를 Git에 넣지 않는 이유를 설명할 수 있다.
 - [ ] 라이브 호출은 입력을 선택한 제공자에 전송하고 비용을 만들 수 있음을 이해한다.
 - [ ] 테스트와 과제에 회사 문서, 개인정보, 실제 키를 넣지 않았다.
 
 ### 3.3 실행과 검증
 
-- [ ] `printf 'Token이란 무엇인가요?\n/exit\n' | uv run python examples/volume01/chat_cli.py --offline-demo`를 실행했다.
+- [ ] `printf 'Token이란 무엇인가요?\n/exit\n' | python examples/volume01/chat_cli.py --offline-demo`를 실행했다.
 - [ ] `--offline-demo`가 API 키와 네트워크 없이 결정론적으로 실행됨을 확인했다.
-- [ ] `uv run pytest tests/unit/test_llm_client.py -q`로 Mock 기반 Client 계약을 확인했다.
-- [ ] `uv run pytest tests/unit/test_chat.py -q`로 빈 입력·안전한 오류·이력 경계를 확인했다.
-- [ ] `uv run pytest tests/integration/test_volume01_chat_cli.py -q`로 별도 프로세스 CLI를 확인했다.
+- [ ] `pytest tests/unit/test_llm_client.py -q`로 Mock 기반 Client 계약을 확인했다.
+- [ ] `pytest tests/unit/test_chat.py -q`로 빈 입력·안전한 오류·이력 경계를 확인했다.
+- [ ] `pytest tests/integration/test_volume01_chat_cli.py -q`로 별도 프로세스 CLI를 확인했다.
 - [ ] `bash scripts/run_all_tests.sh`를 실행하고 실패가 없음을 확인했다.
 
 ## 4. 제작 검수 결과와 근거

@@ -71,10 +71,10 @@ System 정책 + 대화 이력 + User 요청 + RAG 문서 + Tool 결과
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-`uv sync --all-groups`는 프로젝트 가상환경과 검사 도구를 준비합니다. 이 장의 기본 실습에는 `.env`, API 키, 인터넷 연결이 필요하지 않습니다.
+`conda env update --file environment.yml --prune`는 프로젝트 가상환경과 검사 도구를 준비합니다. 이 장의 기본 실습에는 `.env`, API 키, 인터넷 연결이 필요하지 않습니다.
 
 ## 6. 단계별 실습
 
@@ -82,7 +82,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume01/token_budget.py
+python examples/volume01/token_budget.py
 ```
 
 예제는 컨텍스트 윈도우 2,048토큰 중 400토큰을 출력용으로 예약합니다. 입력이 1,500토큰이면 148토큰이 남아 가능하고, 입력이 1,800토큰이면 총 2,200토큰이 되어 152토큰을 초과합니다. 숫자는 설명용으로 고정했으며 실제 토큰화 결과가 아닙니다.
@@ -91,7 +91,7 @@ uv run python examples/volume01/token_budget.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_context.py -q
+pytest tests/unit/test_context.py -q
 ```
 
 테스트는 `require_fits()`가 100토큰 윈도우에서 입력 81토큰과 예약 출력 20토큰의 조합을 거부하는지 확인합니다. HTTP 전송 계층을 만들거나 실제 모델을 호출하지 않으므로 API 키·네트워크·비용이 필요하지 않습니다.
@@ -131,7 +131,7 @@ uv run pytest tests/unit/test_context.py -q
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 저장소 루트가 아니거나 `uv run`을 생략했을 수 있습니다. | 저장소 루트에서 `uv sync --all-groups` 후 `uv run python ...`을 사용합니다. |
+| `No module named ai_platform` | 저장소 루트가 아니거나 Conda 환경을 활성화하지 않았을 수 있습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 후 `python ...`을 사용합니다. |
 | `reserved_output_tokens must not exceed context_window_tokens` | 출력 예약량이 모델의 전체 한도보다 큽니다. | 모델의 실제 컨텍스트 한도를 확인하고, 작업에 맞는 양의 윈도우와 그 이하의 예약량을 설정합니다. |
 | `input_tokens must be at most ...` | 입력과 예약 출력을 합친 계획이 한도를 넘었습니다. | 이력·검색 문서를 정책적으로 줄이거나 요약하고, 다시 토큰을 확인합니다. 단순히 출력 예약량을 0으로 만들지 않습니다. |
 | 글자 수는 짧은데 요청이 거절됨 | 모델별 토크나이저와 메시지 포맷의 오버헤드가 반영되지 않았을 수 있습니다. | 글자 수 추정을 실제 토크나이저 계산으로 교체하고, System 메시지·이력·도구 결과도 포함합니다. |

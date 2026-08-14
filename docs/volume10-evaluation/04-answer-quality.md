@@ -66,10 +66,10 @@ LLM API · LLM-as-a-Judge · Vector DB · 네트워크 · 시계 · 난수 ─�
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-이 실습에는 환경 변수, API 키, 모델 서버, 벡터 데이터베이스가 필요하지 않습니다. Windows Git Bash에서도 저장소 루트에서 같은 `uv` 명령을 실행할 수 있습니다.
+이 실습에는 환경 변수, API 키, 모델 서버, 벡터 데이터베이스가 필요하지 않습니다. Windows Git Bash에서도 저장소 루트에서 같은 Conda 환경 명령을 실행할 수 있습니다.
 
 ## 6. 단계별 실습
 
@@ -77,7 +77,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/answer_quality.py
+python examples/volume10/answer_quality.py
 ```
 
 명령은 다섯 고정 사례를 평가합니다. 네 개 `answer` 사례는 필수 사실을 모두 주장합니다. `office-parking`은 관련 문서가 없는 `abstain` 사례인데도 답변과 사실·인용을 기록했으므로 보류 실패 및 환각으로 드러납니다.
@@ -86,7 +86,7 @@ uv run python examples/volume10/answer_quality.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation/test_answer_metrics.py -q
+pytest tests/evaluation/test_answer_metrics.py -q
 ```
 
 테스트는 기준 수치뿐 아니라 no-answer 위반, 부정확한 인용, 누락 사례, 사전 키와 기록 답변 `case_id`의 불일치를 검사합니다. `abstain` 응답에 주장이나 인용을 넣는 입력도 조용히 계산하지 않고 거부합니다.
@@ -164,8 +164,8 @@ LLM-as-a-Judge는 넓은 자연어 범위를 빠르게 훑을 수 있지만 프�
 - [ ] 답변 정확도, 보류 정확도, 환각률, 인용 정확도의 분자와 분모를 설명할 수 있다.
 - [ ] `office-parking`의 보류 실패와 지원되지 않은 사실을 찾을 수 있다.
 - [ ] 인용 정확도와 인용 완전성이 다른 문제임을 이해했다.
-- [ ] `uv run python examples/volume10/answer_quality.py`를 실행했다.
-- [ ] `uv run pytest tests/evaluation/test_answer_metrics.py -q`를 통과시켰다.
+- [ ] `python examples/volume10/answer_quality.py`를 실행했다.
+- [ ] `pytest tests/evaluation/test_answer_metrics.py -q`를 통과시켰다.
 - [ ] API 키, 고객 데이터, 외부 서비스 없이 기준선을 재현했다.
 - [ ] 다음 장의 Router·Agent Task Success 평가로 연결할 준비가 되었다.
 

@@ -39,8 +39,8 @@ reviewed JSON-RPC object ──> immutable UTF-8 LF frame ──> <= 4 KiB binar
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv run python examples/volume03/mcp_stdio_bounded_input_write.py
-uv run pytest tests/volume03/test_mcp_input_write.py -q
+python examples/volume03/mcp_stdio_bounded_input_write.py
+pytest tests/volume03/test_mcp_input_write.py -q
 ```
 
 예상 출력입니다.

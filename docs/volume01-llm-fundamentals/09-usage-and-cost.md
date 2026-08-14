@@ -64,7 +64,7 @@ Mock TokenUsage + 고정 가격표 ─► 외부 API·네트워크 없이 계산
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 프로젝트 가상환경과 검사 도구를 준비합니다. 이 장의 예제와 테스트는 API 키, 제공자 계정, 외부 네트워크를 사용하지 않습니다.
@@ -75,7 +75,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume01/usage_and_cost.py
+python examples/volume01/usage_and_cost.py
 ```
 
 예제의 가격은 학습용 고정값입니다. `1200` 입력 토큰, `300` 출력 토큰과 입력 100만 토큰당 `2.50 USD`, 출력 100만 토큰당 `10.00 USD`를 사용합니다. 실제 모델의 가격으로 간주하지 않습니다.
@@ -105,7 +105,7 @@ CostBudget(maximum_cost=Decimal("0.01"), currency="USD").require_within(estimate
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_usage.py -q
+pytest tests/unit/test_usage.py -q
 ```
 
 테스트는 `Decimal` 계산으로 입력·출력 비용을 분리하고, 상한과 정확히 같은 비용은 허용하며, 상한 초과와 통화 불일치는 거부하는지 확인합니다. 전송 계층이나 실제 API 키를 만들지 않습니다.

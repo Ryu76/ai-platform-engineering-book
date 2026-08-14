@@ -37,9 +37,9 @@ Prompt는 문자열처럼 보여도 서비스 동작을 바꾸는 설정입니�
 저장소 루트의 Git Bash, WSL, Linux 터미널에서 실행합니다.
 
 ```bash
-uv sync --all-groups
-uv run python examples/volume02/prompt_version_comparison_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/prompt_version_comparison_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 정상 실행에는 `v2`의 `[PROMPT VERSION]`과 `[UNTRUSTED USER INPUT]` 경계가 보입니다. 이어지는 비교에는 다음처럼 고정 기록의 결과만 표시됩니다.

@@ -40,8 +40,8 @@ ToolResult
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv sync --all-groups
-uv run python examples/volume03/controlled_tool_execution.py
+conda env update --file environment.yml --prune
+python examples/volume03/controlled_tool_execution.py
 ```
 
 예제는 등록된 `retryable_upper` 하나만 사용합니다. 첫 호출은 코드에 고정된 테스트용 `RetryableToolError`이고, 두 번째 호출은 문자열 대문자 변환만 합니다. API 키, 네트워크, 파일·셸·환경 변수 접근은 없습니다.
@@ -53,7 +53,7 @@ retryable_upper: AI PLATFORM (2 attempts)
 회귀 테스트도 실행합니다.
 
 ```bash
-uv run pytest tests/volume03/test_tool_execution.py -q
+pytest tests/volume03/test_tool_execution.py -q
 ```
 
 테스트는 성공 전 두 번의 재시도, allowlist/추가 인자 실패의 **미재시도**, timeout의 즉시 반환, retry 횟수 소진과 정책 상한을 검증합니다. timeout 테스트의 worker는 `Event`로 해제해 테스트 뒤에도 남지 않게 합니다.

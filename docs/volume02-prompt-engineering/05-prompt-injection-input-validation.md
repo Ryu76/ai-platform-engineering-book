@@ -65,9 +65,9 @@ InjectionResistantPrompt.render()
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv sync --all-groups
-uv run python examples/volume02/injection_defense_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/injection_defense_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 첫 명령은 검사 도구를 준비합니다. 둘째 명령은 네트워크·API 키·LLM·Tool을 호출하지 않고 고정 문자열을 렌더링합니다. 셋째 명령은 입력과 Prompt의 계약만 검사합니다.
@@ -142,7 +142,7 @@ signals=ignore_previous_instructions_ko, system_prompt_request
 고위험 신호이므로 모델·Tool 호출 없이 후속 처리를 중단하고 검토합니다.
 ```
 
-정확한 줄바꿈은 달라질 수 있지만, `TRUST BOUNDARY`가 사용자 입력보다 먼저 나오고 입력 텍스트가 태그 안에 있어야 합니다. `uv run pytest tests/unit/test_prompts.py -q`는 `passed`로 끝나야 합니다.
+정확한 줄바꿈은 달라질 수 있지만, `TRUST BOUNDARY`가 사용자 입력보다 먼저 나오고 입력 텍스트가 태그 안에 있어야 합니다. `pytest tests/unit/test_prompts.py -q`는 `passed`로 끝나야 합니다.
 
 ## 9. 오류 해결
 
@@ -187,7 +187,7 @@ signals=ignore_previous_instructions_ko, system_prompt_request
 - [ ] 빈 값, 길이 초과, 위험 제어 문자가 모델 호출 전에 거부됨을 확인했다.
 - [ ] `high` 위험 신호가 자동 권한 부여가 아니라 중단·검토 신호임을 설명할 수 있다.
 - [ ] 경계 표기와 키워드 탐지가 충분한 보안 통제가 아님을 설명할 수 있다.
-- [ ] 오프라인 데모와 `uv run pytest tests/unit/test_prompts.py -q`를 실행했다.
+- [ ] 오프라인 데모와 `pytest tests/unit/test_prompts.py -q`를 실행했다.
 - [ ] 다음 장에서 Prompt Versioning과 버전별 결과 비교를 구현한다는 점을 이해했다.
 
 ## 14. 핵심 정리

@@ -46,11 +46,11 @@
 
 - 저장소 경로: `docs/volume02-prompt-engineering/`, `examples/volume02/`, `src/ai_platform/prompts/`
 - 실행 환경: WSL Ubuntu, Linux 또는 Git Bash의 저장소 루트
-- 필요 도구: `uv`, Python 3.12 이상
+- 필요 도구: Anaconda Distribution, Python 3.12 이상
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 잠긴 개발 의존성을 준비합니다. API 키를 설정하거나 외부 LLM 계정을 만들 필요가 없습니다.
@@ -63,9 +63,9 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv run python examples/volume02/prompt_template_demo.py
-uv run python examples/volume02/structured_output_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+python examples/volume02/prompt_template_demo.py
+python examples/volume02/structured_output_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 첫 두 명령은 고정 문자열을 렌더링하거나 검증합니다. 마지막 명령은 정상 입력과 실패 입력을 함께 검사합니다.
@@ -80,8 +80,8 @@ uv run pytest tests/unit/test_prompts.py -q
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv run python examples/volume02/shot_prompt_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+python examples/volume02/shot_prompt_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 예시 입력은 서비스 소유자가 검토한 demonstration이고, 새 입력은 신뢰되지 않은 데이터입니다. 두 영역을 섞어 Prompt 정책을 바꾸지 않습니다.
@@ -96,9 +96,9 @@ uv run pytest tests/unit/test_prompts.py -q
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv run python examples/volume02/injection_defense_demo.py
-uv run python examples/volume02/prompt_mini_project_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+python examples/volume02/injection_defense_demo.py
+python examples/volume02/prompt_mini_project_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 모든 명령은 네트워크, API 키, 라이브 모델, Tool 실행을 사용하지 않습니다. 위험 신호 평가는 차단 또는 검토 우선순위를 정하는 보조 수단이며, 권한 통제를 대체하지 않습니다.

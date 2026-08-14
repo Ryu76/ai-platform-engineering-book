@@ -36,8 +36,8 @@
 
 ## 4. 실습 환경
 
-- 실행 위치: WSL Ubuntu 또는 Linux 터미널의 저장소 루트
-- Python 환경: 프로젝트의 `uv` 환경
+- 실행 위치: 저장소 루트의 활성화된 Anaconda PowerShell Prompt
+- Python 환경: `ai-platform-engineering-book` Conda 환경
 - 외부 서비스: 필요 없음
 - API 키와 환경 변수: 필요 없음
 
@@ -48,8 +48,8 @@
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/router_mini_project.py
-uv run pytest tests/unit/test_volume08_router_mini_project.py -q
+python examples/volume08/router_mini_project.py
+pytest tests/unit/test_volume08_router_mini_project.py -q
 ```
 
 첫 명령은 여덟 Router 경로의 canonical strict JSON report 한 줄을 출력합니다. `render_audit_report()`는 출력 직전에 전체 경로 집합, field allowlist, 경로별 원문 비노출을 다시 검사하고 key를 정렬한 compact JSON만 반환합니다. 두 번째 명령은 target, fallback 순서, escalation 순서, API 응답, 결정론성, 원문 비노출을 검사합니다. 두 명령 모두 네트워크 연결이나 live API를 사용하지 않습니다.
@@ -58,7 +58,7 @@ uv run pytest tests/unit/test_volume08_router_mini_project.py -q
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run pytest tests/unit/test_volume08_router_audit.py -q
+pytest tests/unit/test_volume08_router_audit.py -q
 ```
 
 ## 6. 코드 설명

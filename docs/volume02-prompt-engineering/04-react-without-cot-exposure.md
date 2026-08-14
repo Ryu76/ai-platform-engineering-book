@@ -86,9 +86,9 @@ ReAct는 이를 다음 반복으로 표현합니다.
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv sync --all-groups
-uv run python examples/volume02/structured_reasoning_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/structured_reasoning_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 첫 명령은 의존성과 검사 도구를 준비합니다. 둘째 명령은 모델·네트워크·API 키·Tool을 호출하지 않습니다. 셋째 명령은 문자열과 JSON 계약만 검사합니다.
@@ -173,7 +173,7 @@ JSON 객체만 반환하세요. 정확히 status, answer, evidence_summary 키�
 {"status":"needs_clarification", ...}
 ```
 
-`uv run pytest tests/unit/test_prompts.py -q`는 `passed`로 끝나야 합니다. 데모는 고정 샘플만 검증하므로 실제 모델의 응답 품질을 보장하거나 측정하지 않습니다.
+`pytest tests/unit/test_prompts.py -q`는 `passed`로 끝나야 합니다. 데모는 고정 샘플만 검증하므로 실제 모델의 응답 품질을 보장하거나 측정하지 않습니다.
 
 ## 9. 오류 해결
 
@@ -214,7 +214,7 @@ ReAct의 “행동”은 모델이 만든 자유 문자열을 실행하는 기�
 - [ ] Prompt 텍스트가 Tool 권한이나 실행 권한을 부여하지 않음을 설명할 수 있다.
 - [ ] 상세 Chain of Thought 대신 최종 답과 관찰 가능한 근거 요약을 공개 계약에 넣었다.
 - [ ] 추가 내부 추론 필드가 `StructuredReasoningError`로 중단됨을 확인했다.
-- [ ] 오프라인 데모와 `uv run pytest tests/unit/test_prompts.py -q`를 실행했다.
+- [ ] 오프라인 데모와 `pytest tests/unit/test_prompts.py -q`를 실행했다.
 - [ ] 다음 장에서 Prompt Injection 방어와 입력 검증을 구현한다는 점을 이해했다.
 
 ## 14. 핵심 정리

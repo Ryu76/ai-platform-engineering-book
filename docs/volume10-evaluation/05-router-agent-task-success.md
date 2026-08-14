@@ -64,10 +64,10 @@ LLM API · Agent 도구 · Vector DB · 네트워크 · 시계 · 난수 ── 
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-환경 변수, API 키, 모델 서버, 네트워크 연결은 필요하지 않습니다. Windows Git Bash에서도 저장소 루트에서 같은 `uv` 명령을 실행할 수 있습니다.
+환경 변수, API 키, 모델 서버, 네트워크 연결은 필요하지 않습니다. Windows Git Bash에서도 저장소 루트에서 같은 Conda 환경 명령을 실행할 수 있습니다.
 
 ## 6. 단계별 실습
 
@@ -75,7 +75,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/workflow_quality.py
+python examples/volume10/workflow_quality.py
 ```
 
 다섯 고정 사례의 Router 정확도와 Agent Task Success를 출력합니다. `benefits-enrollment`는 올바른 `people` 라우트지만 작업이 누락됩니다. `office-parking`는 `abstain` 대신 `facilities`로 보내고 주차권 발급을 기록합니다.
@@ -84,7 +84,7 @@ uv run python examples/volume10/workflow_quality.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation/test_workflow_metrics.py -q
+pytest tests/evaluation/test_workflow_metrics.py -q
 ```
 
 테스트는 기준 수치, 골든 데이터셋과의 동일한 사례 ID, 누락·예상 밖 작업, 누락 결과, 키/객체 ID 불일치, no-answer 모순을 검사합니다.
@@ -156,8 +156,8 @@ Router Accuracy가 0.8인 이유는 `office-parking`만 기대한 `abstain` 라�
 - [ ] Router Accuracy와 Agent Task Success의 분자와 분모를 설명할 수 있다.
 - [ ] `benefits-enrollment`의 누락 작업을 찾을 수 있다.
 - [ ] `office-parking`의 no-answer 라우팅·행동·부수 작업 실패를 찾을 수 있다.
-- [ ] `uv run python examples/volume10/workflow_quality.py`를 실행했다.
-- [ ] `uv run pytest tests/evaluation/test_workflow_metrics.py -q`를 통과시켰다.
+- [ ] `python examples/volume10/workflow_quality.py`를 실행했다.
+- [ ] `pytest tests/evaluation/test_workflow_metrics.py -q`를 통과시켰다.
 - [ ] API 키, 고객 데이터, 도구 실행, 외부 서비스 없이 기준선을 재현했다.
 - [ ] 다음 장의 Latency·Token·Cost 측정으로 연결할 준비가 되었다.
 

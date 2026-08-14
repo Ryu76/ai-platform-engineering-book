@@ -88,12 +88,12 @@ JSON 객체: {"category": "..."}
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv sync --all-groups
-uv run python examples/volume02/shot_prompt_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/shot_prompt_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
-모든 명령은 API 키, 네트워크, 모델 호출 없이 실행됩니다. Windows Git Bash에서 저장소가 다른 드라이브에 있다면 해당 저장소 경로로 이동한 뒤 실행합니다. `uv sync --all-groups`는 `pyproject.toml`에 고정된 개발 의존성을 현재 저장소의 `.venv`에 준비합니다. 데모 명령은 세 Prompt 문자열을 출력하고, pytest 명령은 기대한 문자열 계약을 검사합니다. 정상 결과와 오류 해결 방법은 각각 8절과 9절에서 확인합니다.
+모든 명령은 API 키, 네트워크, 모델 호출 없이 실행됩니다. Windows Git Bash에서 저장소가 다른 드라이브에 있다면 해당 저장소 경로로 이동한 뒤 실행합니다. `conda env update --file environment.yml --prune`는 `pyproject.toml`에 고정된 개발 의존성을 교재 전용 Conda 환경에 준비합니다. 데모 명령은 세 Prompt 문자열을 출력하고, pytest 명령은 기대한 문자열 계약을 검사합니다. 정상 결과와 오류 해결 방법은 각각 8절과 9절에서 확인합니다.
 
 ## 7. 코드 설명
 

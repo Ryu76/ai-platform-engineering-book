@@ -11,7 +11,7 @@
 AI와 생성형 AI의 관계, Transformer 개요, Token·Context Window, System/User/Assistant 메시지, Temperature·Top-p·최대 출력 토큰, Hallucination, Streaming, 사용량과 비용을 다룹니다.
 
 ## 실습 범위
-1. Python 3.12와 uv 환경 구성
+1. Python 3.12와 Anaconda Conda 환경 구성
 2. `.env`와 `.env.example`의 역할 분리
 3. 설정 객체와 키 누락 오류 처리
 4. Timeout이 있는 LLM Client 인터페이스

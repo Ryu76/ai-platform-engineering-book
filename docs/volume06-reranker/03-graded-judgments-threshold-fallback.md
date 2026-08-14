@@ -9,8 +9,8 @@
 저장소 루트에서 실행합니다.
 
 ```bash
-uv run python examples/volume06/rerank_fixture.py
-uv run pytest tests/unit/test_volume06_reranker.py -q
+python examples/volume06/rerank_fixture.py
+pytest tests/unit/test_volume06_reranker.py -q
 ```
 
 두 명령 모두 고정 한국어 후보와 local lexical scorer만 사용합니다. 네트워크, API 키, 모델 다운로드, GPU, 생성 모델 fallback은 호출하지 않습니다.

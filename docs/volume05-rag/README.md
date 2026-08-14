@@ -1,5 +1,10 @@
 # Volume 05. RAG
 
+> **공식 실습 환경:** 저장소 루트의 Anaconda PowerShell Prompt에서 `conda activate ai-platform-engineering-book`를 먼저 실행합니다. Python 예제·테스트·검사는 `uv`, `.venv`, 시스템 Python을 섞지 않고 이 Conda 환경에서만 실행합니다. 전체 절차는 [Anaconda 환경 설정](../setup/anaconda.md)을 참고합니다.
+
+
+
+
 ## 목표
 
 문서를 로드·정제·청크·인덱싱하고 검색 근거·출처·No-answer 처리를 갖춘 RAG API를 구현합니다.
@@ -66,8 +71,8 @@ PRD의 결과물 명칭은 교육용 패키지 구조에 맞게 대응합니다.
 저장소 루트에서 다음 명령을 실행합니다.
 
 ```bash
-uv run python examples/volume05/local_rag.py
-uv run pytest tests/unit/test_volume05_rag.py -q
+python examples/volume05/local_rag.py
+pytest tests/unit/test_volume05_rag.py -q
 ```
 
 예제는 명시한 `handbook.md`·`returns.md`와 `exchange-notice.pdf`만 읽습니다. PDF 파일은 실제 엔진이 아니라 `SamplePdfTextExtractor`가 읽는 고정 로컬 바이트와 Mock 페이지 텍스트를 사용합니다. 이 경계는 실제 파서의 신뢰하지 않는 출력도 검증하도록 설계되어 있으므로, 학습자가 파서를 추가할 때도 네트워크·라이브 API 없이 교체 테스트할 수 있습니다. `SampleQueryTransformer`는 원 질문을 보존한 고정 로컬 확장 질문만, `SampleDenseRanker`는 로컬에 고정한 Mock 청크 ID만 반환합니다. 그 뒤 `SampleEvidenceReranker`는 이미 검색된 제한된 로컬 후보에만 0~1의 고정 점수를 부여하고, `DocumentDiversityIndex`는 문서당 한 청크만 남겨 한 문서에 근거가 집중되지 않게 합니다. `ContextBudgetIndex`는 후보 3개와 600문자의 명시적 예산 안에서 청크 일부를 자르지 않고 근거를 선택합니다. 마지막 `ConfidenceThresholdIndex`는 정규화된 재순위화 점수가 0.8 이상인 근거만 생성기에 전달해 낮은 신뢰도의 응답을 No-answer로 바꿉니다. 예제는 배송·반품·PDF 교환의 고정 질의와 기대 청크 ID를 `sample_data/retrieval-evaluation.json`에서 명시적으로 읽어 `RetrievalEvaluator`를 실행하고 Recall@1·Hit rate·MRR을 출력합니다. 이어서 동일 사례 순서·질문·기대 청크 ID·`top_k=1`, 각 지표 1.00 및 지표별 무하락 정책을 담은 `sample_data/retrieval-regression-baseline.json`을 `LocalRetrievalRegressionBaselineLoader`로 읽어 비교합니다. `RetrievalRegressionChecker`는 지표 하락이 없을 때만 통과를 출력하며, 데이터셋·관련성 정의·반환 깊이가 바뀐 보고서는 품질 비교 대신 거부합니다. 이 JSON 파일은 루트 객체의 `cases` 배열만 허용하며, 각 사례는 `case_id`·`query`·`expected_chunk_ids` 배열을 정확히 한 번씩 가져야 합니다. `LocalRetrievalEvaluationSetLoader`는 자동으로 디렉터리를 탐색하지 않고, UTF-8·파일 크기·경로·중복 키·사례 ID를 검증합니다. 이 파이프라인은 `LocalRagApi.handle()`에 고정 로컬 요청 객체로 전달되며, API 응답도 네트워크 서버 없이 출력됩니다. 따라서 어휘가 겹치지 않는 도착 예정 질문도 배송 근거와 인용을 출력합니다. 반품과 PDF 교환 질문도 근거와 인용을 출력하고, 샘플 문서에 없는 주차장 할인 질문은 No-answer를 출력합니다. 새 파일을 샘플 디렉터리에 추가해도 명시적 `load_many()`·`load()` 또는 평가 세트 로더 호출에 넣기 전에는 색인·평가되지 않습니다.

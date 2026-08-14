@@ -27,7 +27,7 @@ backpressure 및 shutdown ownership을 명시한 별도 adapter가 필요합니�
 ## 안전한 예제
 
 ```bash
-uv run python examples/volume03/mcp_stdio_fair_stream_pair_drain.py
+python examples/volume03/mcp_stdio_fair_stream_pair_drain.py
 ```
 
 예상 출력:

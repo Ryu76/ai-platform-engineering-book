@@ -17,7 +17,7 @@ Planner, Researcher, Developer, Reviewer, QA를 하나의 자동 권한으로 �
 저장소 루트에서 다음을 실행합니다.
 
 ```bash
-uv run python examples/volume07/offline_review_workflow.py
+python examples/volume07/offline_review_workflow.py
 ```
 
 예상되는 첫 줄은 다음이며 QA 메시지는 출력되지 않습니다.
@@ -29,7 +29,7 @@ status=awaiting_human_approval
 검토 결과를 사람이 확인하고 QA 진행을 명시적으로 승인하는 시연만 다음 명령으로 실행합니다.
 
 ```bash
-uv run python examples/volume07/offline_review_workflow.py --approve
+python examples/volume07/offline_review_workflow.py --approve
 ```
 
 이 실행도 고정 Mock만 사용하며, 출력의 마지막 역할은 `qa`입니다.
@@ -37,7 +37,7 @@ uv run python examples/volume07/offline_review_workflow.py --approve
 ## 검증
 
 ```bash
-uv run pytest tests/volume07/test_bounded_review_workflow.py -q
+pytest tests/volume07/test_bounded_review_workflow.py -q
 ```
 
 테스트는 승인 대기, 명시 승인 후 QA, 재작업 한도, 사람 거절의 fail-closed 동작, Reviewer 결정 누락을 네트워크 없이 검증합니다.

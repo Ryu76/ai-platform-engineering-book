@@ -67,13 +67,13 @@ Function Calling은 모델이 `name`과 JSON 인자를 **제안**하는 프로�
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 고정 Mock 모델은 두 Schema를 받은 뒤 `safe_text_case`의 `upper` 호출을 반환합니다. 네트워크나 API 키는 사용하지 않습니다.
 
 ```bash
-uv run python examples/volume03/mock_function_calling.py
+python examples/volume03/mock_function_calling.py
 ```
 
 정상 출력은 다음 한 줄입니다.
@@ -85,7 +85,7 @@ safe_text_case: AI PLATFORM
 회귀 경계도 실행합니다.
 
 ```bash
-uv run pytest tests/volume03/test_function_calling.py -q
+pytest tests/volume03/test_function_calling.py -q
 ```
 
 이 테스트는 (1) 두 allowlisted Tool만 직렬화되는지, (2) Mock 응답이 실행되는지, (3) JSON 배열·잘못된 JSON·누락 필드를 파싱 단계에서 거부하는지, (4) `delete_file`과 enum 밖 `title` 요청이 실행 경계에서 거부되는지를 확인합니다.

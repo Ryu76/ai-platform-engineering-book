@@ -36,8 +36,8 @@ def test_volume10_first_chapter_connects_fixed_dataset_to_verified_artifacts() -
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/retrieval_quality.py" in chapter
-    assert "uv run pytest tests/evaluation/test_retrieval_metrics.py -q" in chapter
+    assert "python examples/volume10/retrieval_quality.py" in chapter
+    assert "pytest tests/evaluation/test_retrieval_metrics.py -q" in chapter
     assert "네트워크와 API 키를 사용하지 않습니다" in chapter
     assert "Recall@3: 0.750000" in chapter
     assert all(artifact.is_file() for artifact in expected_artifacts)
@@ -57,8 +57,8 @@ def test_volume10_second_chapter_connects_versioned_labels_to_verified_artifacts
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/golden_dataset_audit.py" in chapter
-    assert "uv run pytest tests/evaluation/test_golden_dataset.py -q" in chapter
+    assert "python examples/volume10/golden_dataset_audit.py" in chapter
+    assert "pytest tests/evaluation/test_golden_dataset.py -q" in chapter
     assert "no-answer" in chapter
     assert "Version: 1.0.0" in chapter
     assert "네트워크, 시계, 난수에 의존하지 않습니다" in chapter
@@ -77,8 +77,8 @@ def test_volume10_third_chapter_connects_failure_analysis_to_verified_artifacts(
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/retrieval_failure_analysis.py" in chapter
-    assert "uv run pytest tests/evaluation/test_retrieval_metrics.py -q" in chapter
+    assert "python examples/volume10/retrieval_failure_analysis.py" in chapter
+    assert "pytest tests/evaluation/test_retrieval_metrics.py -q" in chapter
     assert "benefits-enrollment" in chapter
     assert "first_rank=none" in chapter
     assert "네트워크, 시계, 난수, 라이브 모델 상태에 의존하지 않습니다" in chapter
@@ -98,8 +98,8 @@ def test_volume10_fourth_chapter_connects_answer_quality_to_verified_artifacts()
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/answer_quality.py" in chapter
-    assert "uv run pytest tests/evaluation/test_answer_metrics.py -q" in chapter
+    assert "python examples/volume10/answer_quality.py" in chapter
+    assert "pytest tests/evaluation/test_answer_metrics.py -q" in chapter
     assert "office-parking" in chapter
     assert "Hallucination rate: 0.166667" in chapter
     assert (
@@ -122,8 +122,8 @@ def test_volume10_fifth_chapter_connects_router_and_agent_to_verified_artifacts(
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/workflow_quality.py" in chapter
-    assert "uv run pytest tests/evaluation/test_workflow_metrics.py -q" in chapter
+    assert "python examples/volume10/workflow_quality.py" in chapter
+    assert "pytest tests/evaluation/test_workflow_metrics.py -q" in chapter
     assert "benefits-enrollment" in chapter
     assert "Agent task success rate: 0.600000" in chapter
     assert "LLM API · Agent 도구 · Vector DB · 네트워크 · 시계 · 난수 ── 사용하지 않음" in chapter
@@ -143,8 +143,8 @@ def test_volume10_sixth_chapter_connects_usage_metrics_to_verified_artifacts() -
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/usage_quality.py" in chapter
-    assert "uv run pytest tests/evaluation/test_usage_metrics.py -q" in chapter
+    assert "python examples/volume10/usage_quality.py" in chapter
+    assert "pytest tests/evaluation/test_usage_metrics.py -q" in chapter
     assert "P95 latency (ms): 340" in chapter
     assert "Total cost (USD): 0.005240" in chapter
     assert (
@@ -167,8 +167,8 @@ def test_volume10_seventh_chapter_connects_regression_report_to_verified_artifac
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/regression_report.py" in chapter
-    assert "uv run pytest tests/evaluation/test_regression_report.py -q" in chapter
+    assert "python examples/volume10/regression_report.py" in chapter
+    assert "pytest tests/evaluation/test_regression_report.py -q" in chapter
     assert "Decision: REJECT" in chapter
     assert "retrieval.recall_at_3" in chapter
     assert (
@@ -191,8 +191,8 @@ def test_volume10_eighth_chapter_connects_offline_pipeline_to_verified_artifacts
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/offline_evaluation_pipeline.py" in chapter
-    assert "uv run pytest tests/evaluation/test_offline_pipeline.py -q" in chapter
+    assert "python examples/volume10/offline_evaluation_pipeline.py" in chapter
+    assert "pytest tests/evaluation/test_offline_pipeline.py -q" in chapter
     assert "Retrieval cases: 4" in chapter
     assert "Regression decision: REJECT" in chapter
     assert (
@@ -215,8 +215,8 @@ def test_volume10_final_chapter_closes_practice_interview_and_completion_contrac
     )
 
     assert all(section in chapter for section in REQUIRED_SECTIONS)
-    assert "uv run python examples/volume10/offline_evaluation_pipeline.py" in chapter
-    assert "uv run pytest tests/evaluation -q" in chapter
+    assert "python examples/volume10/offline_evaluation_pipeline.py" in chapter
+    assert "pytest tests/evaluation -q" in chapter
     assert "### 면접 질문" in chapter
     assert "no-answer" in chapter
     assert "Regression decision: REJECT" in chapter

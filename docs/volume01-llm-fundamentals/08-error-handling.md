@@ -60,7 +60,7 @@ Mock ScriptedTransport ─► 외부 네트워크 없이 위 분기를 검증
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 프로젝트 가상환경과 검사 도구를 준비합니다. 아래 테스트는 API 키와 네트워크를 사용하지 않습니다.
@@ -71,7 +71,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_llm_client.py -q
+pytest tests/unit/test_llm_client.py -q
 ```
 
 정상 결과에는 `503 → 성공`의 한 번 재시도, 401의 즉시 실패, 최대 3회 시도와 `0.1`, `0.2`초 백오프를 검증한 테스트가 포함됩니다. 테스트의 대기 함수는 리스트 기록용 Mock이므로 실제로 기다리거나 외부 전송하지 않습니다.
@@ -114,7 +114,7 @@ cp .env.example .env
 set -a
 . ./.env
 set +a
-uv run python examples/volume01/error_handling.py
+python examples/volume01/error_handling.py
 ```
 
 정상 응답이면 모델 텍스트가 출력됩니다. 실패하면 키를 포함하지 않는 한국어 안내가 출력됩니다. `.env`는 Git에 추가하지 않습니다.

@@ -41,7 +41,7 @@ LLM API · Agent 도구 · Vector DB · 네트워크 · 라이브 시계 · 난�
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 ## 6. 단계별 실습
@@ -50,7 +50,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/offline_evaluation_pipeline.py
+python examples/volume10/offline_evaluation_pipeline.py
 ```
 
 기준선은 Recall@3 `0.750000`, 답변 정확도 `0.800000`, Router 정확도 `0.800000`, Agent 작업 성공률 `0.600000`, P95 `340ms`, 총 비용 `0.005240 USD`를 출력합니다. 후보는 Agent 작업·P95·비용이 좋아져도 Recall@3가 `0.500000`으로 하락하므로 거부됩니다.
@@ -59,7 +59,7 @@ uv run python examples/volume10/offline_evaluation_pipeline.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation -q
+pytest tests/evaluation -q
 ```
 
 테스트는 고정 데이터셋, 각 지표의 수치와 입력 경계, no-answer 분리, 기준선·후보 회귀 거부, 리포트 순서, 모든 장의 실제 산출물 연결을 검사합니다.

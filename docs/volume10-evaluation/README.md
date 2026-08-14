@@ -1,5 +1,10 @@
 # Volume 10. Evaluation
 
+> **공식 실습 환경:** 저장소 루트의 Anaconda PowerShell Prompt에서 `conda activate ai-platform-engineering-book`를 먼저 실행합니다. Python 예제·테스트·검사는 `uv`, `.venv`, 시스템 Python을 섞지 않고 이 Conda 환경에서만 실행합니다. 전체 절차는 [Anaconda 환경 설정](../setup/anaconda.md)을 참고합니다.
+
+
+
+
 ## 목표
 
 고정된 골든 데이터셋(Golden Dataset)과 재현 가능한 측정으로 RAG·Router·Agent·LLM 응답의 품질, 지연 시간, 토큰 사용량, 비용을 평가합니다. 기본 실습은 네트워크·API 키·외부 서비스 없이 실행됩니다.
@@ -20,15 +25,15 @@
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/golden_dataset_audit.py
-uv run python examples/volume10/retrieval_quality.py
-uv run python examples/volume10/retrieval_failure_analysis.py
-uv run python examples/volume10/answer_quality.py
-uv run python examples/volume10/workflow_quality.py
-uv run python examples/volume10/usage_quality.py
-uv run python examples/volume10/regression_report.py
-uv run python examples/volume10/offline_evaluation_pipeline.py
-uv run pytest tests/evaluation/test_golden_dataset.py tests/evaluation/test_retrieval_metrics.py tests/evaluation/test_answer_metrics.py tests/evaluation/test_workflow_metrics.py tests/evaluation/test_usage_metrics.py tests/evaluation/test_regression_report.py tests/evaluation/test_offline_pipeline.py -q
+python examples/volume10/golden_dataset_audit.py
+python examples/volume10/retrieval_quality.py
+python examples/volume10/retrieval_failure_analysis.py
+python examples/volume10/answer_quality.py
+python examples/volume10/workflow_quality.py
+python examples/volume10/usage_quality.py
+python examples/volume10/regression_report.py
+python examples/volume10/offline_evaluation_pipeline.py
+pytest tests/evaluation/test_golden_dataset.py tests/evaluation/test_retrieval_metrics.py tests/evaluation/test_answer_metrics.py tests/evaluation/test_workflow_metrics.py tests/evaluation/test_usage_metrics.py tests/evaluation/test_regression_report.py tests/evaluation/test_offline_pipeline.py -q
 ```
 
 아홉 명령은 `src/ai_platform/evaluation/datasets.py`의 공개 가능한 고정 질의·라벨·정답·순위·기록 답변·워크플로·사용량·후보 스냅샷만 읽습니다. LLM, Agent 도구, 벡터 데이터베이스, 네트워크, API 키, 라이브 시계를 사용하지 않습니다. `abstain` no-answer 사례는 검색 Recall과 분리되어 있으며, 답변 보류·환각·인용 품질, Router·Agent 작업 품질, Latency·Token·Cost, 회귀 승인 결정은 별도 결정론적 지표로 평가합니다.

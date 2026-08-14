@@ -57,8 +57,8 @@ semantic 점수가 높다는 것은 특정 intent 후보가 강하다는 뜻일 
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/semantic_router.py
-uv run pytest tests/unit/test_volume08_semantic_router.py -q
+python examples/volume08/semantic_router.py
+pytest tests/unit/test_volume08_semantic_router.py -q
 ```
 
 예제는 `(3, 4)` query와 같은 `order_tracking` vector의 local cosine similarity `1` 및 0.80 threshold를 사용합니다. 허용 대상도 `offline-order-agent`로 고정합니다. 외부 서비스·환경 변수·API 키·네트워크를 사용하지 않습니다.
@@ -101,7 +101,7 @@ uv run pytest tests/unit/test_volume08_semantic_router.py -q
 - [ ] fixture 누락과 threshold 미달을 성공 route로 대체하지 않음을 확인했다.
 - [ ] semantic intent가 `PolicyRouter`의 capability·권한·비용·지연 시간 경계를 통과해야 함을 확인했다.
 - [ ] 감사 로그에 사용자 원문과 비밀값을 넣지 않았다.
-- [ ] `uv run pytest tests/unit/test_volume08_semantic_router.py -q`를 외부 호출 없이 실행했다.
+- [ ] `pytest tests/unit/test_volume08_semantic_router.py -q`를 외부 호출 없이 실행했다.
 
 ## 9. 핵심 정리
 

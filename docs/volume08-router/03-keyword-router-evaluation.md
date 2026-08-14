@@ -44,8 +44,8 @@ report.require_minimum_accuracy(Decimal("1"))
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/keyword_router_evaluation.py
-uv run pytest tests/unit/test_volume08_router_evaluation.py -q
+python examples/volume08/keyword_router_evaluation.py
+pytest tests/unit/test_volume08_router_evaluation.py -q
 ```
 
 예제에는 정상 `order_tracking`·`refund_request` route, keyword가 없는 요청의 confidence 안전 실패, 권한 제약으로 대상이 없는 policy 안전 실패가 각각 하나씩 있습니다. 외부 서비스·환경 변수·API 키·네트워크를 사용하지 않습니다.
@@ -96,7 +96,7 @@ uv run pytest tests/unit/test_volume08_router_evaluation.py -q
 - [ ] `NO_CONFIDENT_KEYWORD_ROUTE`와 `NO_ELIGIBLE_POLICY_ROUTE`의 차이를 설명할 수 있다.
 - [ ] 명시적 `Decimal` accuracy gate가 기준 미달을 막는 것을 확인했다.
 - [ ] 평가 로그에 사용자 원문과 비밀값을 넣지 않았다.
-- [ ] `uv run pytest tests/unit/test_volume08_router_evaluation.py -q`를 외부 호출 없이 실행했다.
+- [ ] `pytest tests/unit/test_volume08_router_evaluation.py -q`를 외부 호출 없이 실행했다.
 
 ## 9. 핵심 정리
 

@@ -47,9 +47,9 @@ no process started in this chapter
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv sync --all-groups
-uv run python examples/volume03/mcp_stdio_allowlisted_launch_plan.py
-uv run pytest tests/volume03/test_mcp_host.py -q
+conda env update --file environment.yml --prune
+python examples/volume03/mcp_stdio_allowlisted_launch_plan.py
+pytest tests/volume03/test_mcp_host.py -q
 ```
 
 예제 출력은 다음과 같습니다.

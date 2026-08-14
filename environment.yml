@@ -1,0 +1,15 @@
+name: ai-platform-engineering-book
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pydantic>=2.10,<3
+  - pydantic-settings>=2.7,<3
+  - pytest>=8.3,<9
+  - ruff>=0.9,<1
+  - mypy>=1.14,<2
+  - pip:
+      # Conda가 만든 격리 환경에 현재 저장소를 editable package로 등록한다.
+      # 외부 패키지는 위 conda-forge dependency로만 해결한다.
+      - -e .

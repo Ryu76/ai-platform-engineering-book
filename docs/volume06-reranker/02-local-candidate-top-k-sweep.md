@@ -9,7 +9,7 @@
 저장소 루트에서 다음을 실행합니다.
 
 ```bash
-uv run python examples/volume06/rerank_fixture.py
+python examples/volume06/rerank_fixture.py
 ```
 
 네트워크, API 키, 다운로드 모델, GPU를 사용하지 않습니다. `elapsed_ns`는 실행 호스트의 부하·CPU·Python 환경에 따라 달라지므로 fixture의 회귀 기준이 아닙니다. 품질 지표와 `pair_evaluations`만 결정론적인 회귀 값입니다.

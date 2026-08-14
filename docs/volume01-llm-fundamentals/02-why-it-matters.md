@@ -71,10 +71,10 @@ CLI 또는 API 입력 검증
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-`uv sync --all-groups`는 프로젝트 가상환경과 테스트 도구를 준비합니다. 이 장의 기본 경로에는 `.env` 작성, API 키 설정, 외부 서비스 가입이 필요하지 않습니다.
+`conda env update --file environment.yml --prune`는 프로젝트 가상환경과 테스트 도구를 준비합니다. 이 장의 기본 경로에는 `.env` 작성, API 키 설정, 외부 서비스 가입이 필요하지 않습니다.
 
 ## 6. 단계별 실습
 
@@ -83,7 +83,7 @@ uv sync --all-groups
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 printf '배송 상태를 확인하고 싶습니다.\n/exit\n' | \
-  uv run python examples/volume01/chat_cli.py --offline-demo
+  python examples/volume01/chat_cli.py --offline-demo
 ```
 
 이 명령은 로컬 표준 입력을 CLI에 전달합니다. `--offline-demo`는 `OfflineDemoClient`를 선택하므로 네트워크와 API 키를 사용하지 않습니다. 응답은 실제 배송 상태가 아니라 입력을 기록했다는 결정론적 데모입니다. 따라서 이 실습에서 확인하는 대상은 자연어 요청의 **입구와 종료 경계**입니다.
@@ -92,7 +92,7 @@ printf '배송 상태를 확인하고 싶습니다.\n/exit\n' | \
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_llm_client.py tests/integration/test_volume01_chat_cli.py -q
+pytest tests/unit/test_llm_client.py tests/integration/test_volume01_chat_cli.py -q
 ```
 
 단위 테스트는 실제 HTTP 대신 기록용 Mock 전송을 주입합니다. 통합 테스트는 오프라인 플래그를 가진 CLI가 질문을 받아 응답하고 `/exit`에서 종료하는지 검사합니다. 두 테스트 모두 외부 제공자에 데이터를 전송하지 않습니다.
@@ -135,7 +135,7 @@ AI> 오프라인 데모 응답: '배송 상태를 확인하고 싶습니다.' �
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 저장소 루트가 아니거나 `uv run`을 생략했을 수 있습니다. | 저장소 루트에서 `uv sync --all-groups` 후 `uv run python ...`을 사용합니다. |
+| `No module named ai_platform` | 저장소 루트가 아니거나 Conda 환경을 활성화하지 않았을 수 있습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 후 `python ...`을 사용합니다. |
 | `LLM 설정을 확인하세요` | `--offline-demo` 없이 라이브 모드로 시작했습니다. | 이 장의 실습에서는 `--offline-demo`를 붙입니다. 키를 임의로 만들거나 공유하지 않습니다. |
 | 응답이 배송 상태를 알려 주지 않음 | 오프라인 데모는 외부 시스템을 조회하지 않습니다. | 예상된 동작입니다. 실제 데이터 조회는 승인된 Tool과 권한 검증이 준비된 뒤에만 설계합니다. |
 | 테스트가 실패함 | 의존성 또는 이전 코드 변경 가능성이 있습니다. | 실패한 테스트를 먼저 다시 실행하고 Mock 계약·가상환경을 확인합니다. 실제 API 키나 네트워크를 추가해 우회하지 않습니다. |

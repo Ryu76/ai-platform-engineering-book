@@ -60,7 +60,7 @@ RoutingRequest
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 프로젝트와 검사 도구를 준비합니다. 예제는 네트워크·환경 변수·API 키를 사용하지 않습니다.
@@ -71,7 +71,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume08/policy_router.py
+python examples/volume08/policy_router.py
 ```
 
 예제에는 요약 기능을 가진 `general-agent`, 검색·요약 기능을 가진 `research-agent`, 요약 기능을 가진 `offline-summary-model`이 있습니다. 요청은 요약 기능, 비용 `0.005` 이하, 지연 시간 `150ms` 이하를 요구합니다. `general-agent`와 Model은 비용을 통과하지만 Model이 더 짧은 지연 시간을 가지므로 선택됩니다.
@@ -80,7 +80,7 @@ uv run python examples/volume08/policy_router.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_volume08_policy_router.py -q
+pytest tests/unit/test_volume08_policy_router.py -q
 ```
 
 테스트는 비용·지연 시간·이름 동점 해소, 기능·비용·지연 시간·허용 대상 조건, 비정상 대상 제외, 후보 부재 시 안전 실패, 원문을 제외한 로그, 잘못된 설정 거부를 검증합니다.
@@ -161,7 +161,7 @@ selected = min(
 - [ ] 허용 대상 목록이 권한 경계가 되는 이유를 설명할 수 있다.
 - [ ] 후보가 없을 때 임의 선택 대신 안전 실패가 필요한 이유를 설명할 수 있다.
 - [ ] 비용, 지연 시간, 이름의 결정론적 동점 해소 순서를 설명할 수 있다.
-- [ ] `uv run pytest tests/unit/test_volume08_policy_router.py -q`를 외부 호출 없이 실행했다.
+- [ ] `pytest tests/unit/test_volume08_policy_router.py -q`를 외부 호출 없이 실행했다.
 - [ ] 결정 로그에 사용자 원문과 비밀값을 넣지 않았다.
 
 ## 14. 핵심 정리

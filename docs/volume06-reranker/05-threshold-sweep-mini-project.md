@@ -45,18 +45,18 @@ acceptance + conditional/effective quality + shared pair work
 
 ## 5. 실습 환경
 
-- 실행 위치: 저장소 루트의 bash 또는 WSL 터미널
+- 실행 위치: 저장소 루트의 활성화된 Anaconda PowerShell Prompt
 - 구현: `src/ai_platform/reranker/cross_encoder.py`
 - 고정 fixture: `examples/volume06/rerank_fixture.py`
 - 검증: `tests/unit/test_volume06_reranker.py`
-- 필요 도구: 프로젝트에 설치된 `uv`
+- 필요 도구: Anaconda Conda 환경의 `python`, `pytest`
 
 외부 API, API key, secrets, 모델 다운로드, GPU, 배포는 사용하지 않습니다.
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume06/rerank_fixture.py
-uv run pytest tests/unit/test_volume06_reranker.py -q
+python examples/volume06/rerank_fixture.py
+pytest tests/unit/test_volume06_reranker.py -q
 ```
 
 첫 명령은 candidate/top-k sweep, threshold sweep, adapter fixture와 no-answer fixture를 실행합니다. 두 번째 명령은 threshold sweep이 candidate를 한 번만 score하고 policy별 결과를 보존하는지 확인합니다.

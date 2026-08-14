@@ -1,5 +1,10 @@
 # Volume 06. Reranker
 
+> **공식 실습 환경:** 저장소 루트의 Anaconda PowerShell Prompt에서 `conda activate ai-platform-engineering-book`를 먼저 실행합니다. Python 예제·테스트·검사는 `uv`, `.venv`, 시스템 Python을 섞지 않고 이 Conda 환경에서만 실행합니다. 전체 절차는 [Anaconda 환경 설정](../setup/anaconda.md)을 참고합니다.
+
+
+
+
 ## 목표
 검색 후보를 Cross-Encoder 방식으로 재정렬하고 Recall·Precision·지연시간의 균형을 측정합니다.
 
@@ -15,8 +20,8 @@
 ## 로컬 실행
 
 ```bash
-uv run python examples/volume06/rerank_fixture.py
-uv run pytest tests/unit/test_volume06_reranker.py -q
+python examples/volume06/rerank_fixture.py
+pytest tests/unit/test_volume06_reranker.py -q
 ```
 
 위 경로는 네트워크, API 키, 다운로드 모델을 사용하지 않습니다. `LexicalCrossEncoder`는 실제 모델이 아닌 교육용 결정론적 pair scorer입니다. 운영 모델 성능은 사람의 relevance judgment가 있는 별도 평가 집합에서 검증해야 합니다.

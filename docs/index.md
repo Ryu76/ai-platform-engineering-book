@@ -1,6 +1,15 @@
 # 교재 색인
 
-먼저 [Windows 준비](setup/windows.md)와 [WSL 준비](setup/wsl.md)를 완료합니다.
+## 먼저 할 일
+
+1. [Windows 준비](setup/windows.md)에서 Anaconda Prompt와 필요 시 WSL2를 준비합니다.
+2. [Anaconda 환경 설정](setup/anaconda.md)에서 `ai-platform-engineering-book` Conda 환경을 생성·활성화합니다.
+3. [VS Code와 Conda 환경](setup/vscode.md)에서 인터프리터를 고정합니다.
+4. [Volume 01 학습 목표와 진행 순서](volume01-llm-fundamentals/01-learning-objectives.md)의 첫 주차 계획을 따른 뒤 다음 Volume으로 이동합니다.
+
+> 모든 Python 명령은 활성화된 `ai-platform-engineering-book` Conda 환경에서 실행합니다. `uv`, `.venv`, 시스템 Python을 섞지 않습니다.
+
+## Volume
 
 - [Volume 01](volume01-llm-fundamentals/README.md)
 - [Volume 02](volume02-prompt-engineering/README.md)

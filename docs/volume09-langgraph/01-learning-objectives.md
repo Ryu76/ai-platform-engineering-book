@@ -70,10 +70,10 @@ approval Node
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-`uv sync --all-groups`는 프로젝트 코드와 pytest, Ruff, mypy를 준비합니다. 이 장은 API 키, `.env`, 네트워크, LangGraph 패키지를 요구하지 않습니다. 현재 `pyproject.toml`에 `langgraph`는 없으므로, 설치를 위해 프로젝트 설정을 임의로 변경하지 마십시오.
+`conda env update --file environment.yml --prune`는 프로젝트 코드와 pytest, Ruff, mypy를 준비합니다. 이 장은 API 키, `.env`, 네트워크, LangGraph 패키지를 요구하지 않습니다. 현재 `pyproject.toml`에 `langgraph`는 없으므로, 설치를 위해 프로젝트 설정을 임의로 변경하지 마십시오.
 
 ## 6. 단계별 실습
 
@@ -81,7 +81,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume09/single_node_workflow.py
+python examples/volume09/single_node_workflow.py
 ```
 
 예제는 `DEPLOY`를 선택하지만 실제 배포를 호출하지 않습니다. 첫 출력의 상태는 `waiting_for_approval`이고 결과는 `None`이어야 합니다. 이어서 코드 안의 `approved=True`가 사람의 명시적 승인 입력을 나타내며, 두 번째 출력에서만 `completed`가 됩니다.
@@ -90,7 +90,7 @@ uv run python examples/volume09/single_node_workflow.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_volume09_graph.py -q
+pytest tests/unit/test_volume09_graph.py -q
 ```
 
 테스트는 읽기 작업의 완료, 배포 작업의 승인 전 중단, 승인 후 재개, 거절 후 미실행, 없는 또는 완료된 Checkpoint 재개 실패, 빈 작업 입력 거부를 검사합니다. Mock, 네트워크, 실제 시스템 명령을 사용하지 않습니다.
@@ -99,8 +99,8 @@ uv run pytest tests/unit/test_volume09_graph.py -q
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
-uv run mypy src/ai_platform/graph
+ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+mypy src/ai_platform/graph
 ```
 
 첫 명령은 스타일과 잠재 오류를, 둘째 명령은 엄격한 타입 계약을 검사합니다. 실패하면 위험 작업의 승인 조건을 완화하지 말고 State 전이와 타입을 먼저 수정합니다.
@@ -140,7 +140,7 @@ events=plan | approval | approval | execute
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `ModuleNotFoundError: ai_platform` | 저장소 루트가 아니거나 환경이 준비되지 않았습니다. | 저장소 루트에서 `uv sync --all-groups` 후 `uv run ...`을 사용합니다. |
+| `ModuleNotFoundError: ai_platform` | 저장소 루트가 아니거나 환경이 준비되지 않았습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 후 활성 Conda 환경의 명령을 사용합니다. |
 | `checkpoint not found` | 잘못된 run ID로 재개를 요청했습니다. | 먼저 같은 run ID로 위험 작업을 `invoke()`하여 승인 대기 Checkpoint를 만듭니다. |
 | `resolve_approval_node requires a waiting state` | 이미 완료·거절된 실행 또는 안전 작업을 재개하려 했습니다. | `WAITING_FOR_APPROVAL` 상태만 한 번 승인 또는 거절합니다. |
 | 실제 배포가 될까 걱정됨 | 예제의 `DEPLOY` 이름을 실제 호출로 오해했습니다. | 이 장의 `execute_node()`가 문자열만 반환하는지 확인하고, 예제를 수정해 실제 명령을 추가하지 않습니다. |
@@ -171,7 +171,7 @@ Checkpoint를 영속화하면 재개 가능성은 높아지지만 개인정보·
 - [ ] 승인과 거절이 서로 다른 종료 경로를 만든다는 것을 확인했다.
 - [ ] run ID로 Checkpoint를 읽고 재개하는 이유를 설명할 수 있다.
 - [ ] 모든 기본 실습이 외부 API·네트워크·실제 배포·실제 삭제 없이 동작함을 확인했다.
-- [ ] `uv run pytest tests/unit/test_volume09_graph.py -q`가 통과했다.
+- [ ] `pytest tests/unit/test_volume09_graph.py -q`가 통과했다.
 - [ ] 실제 API 키, 회사 자료, 개인정보를 예제 입력이나 이벤트에 넣지 않았다.
 
 ## 14. 핵심 정리

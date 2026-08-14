@@ -1,5 +1,10 @@
 # Volume 01. LLM 기초
 
+> **공식 실습 환경:** 저장소 루트의 Anaconda PowerShell Prompt에서 `conda activate ai-platform-engineering-book`를 먼저 실행합니다. Python 예제·테스트·검사는 `uv`, `.venv`, 시스템 Python을 섞지 않고 이 Conda 환경에서만 실행합니다. 전체 절차는 [Anaconda 환경 설정](../setup/anaconda.md)을 참고합니다.
+
+
+
+
 ## 목표
 LLM의 토큰·메시지·컨텍스트·생성 파라미터와 API 호출 구조를 이해하고 안전한 CLI 챗봇을 설계합니다.
 

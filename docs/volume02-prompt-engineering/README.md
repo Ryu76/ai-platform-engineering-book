@@ -1,5 +1,10 @@
 # Volume 02. Prompt Engineering
 
+> **공식 실습 환경:** 저장소 루트의 Anaconda PowerShell Prompt에서 `conda activate ai-platform-engineering-book`를 먼저 실행합니다. Python 예제·테스트·검사는 `uv`, `.venv`, 시스템 Python을 섞지 않고 이 Conda 환경에서만 실행합니다. 전체 절차는 [Anaconda 환경 설정](../setup/anaconda.md)을 참고합니다.
+
+
+
+
 ## 목표
 
 Instruction, Context, Input Data, Output Format, Constraint를 분리해 재사용 가능한 Prompt와 오프라인 테스트를 작성합니다. 이 권의 모든 기본 실습은 API 키와 외부 LLM 호출 없이 실행할 수 있으며, 사용자 입력과 외부 문서를 신뢰되지 않은 데이터로 다룹니다.
@@ -29,9 +34,9 @@ Instruction, Context, Input Data, Output Format, Constraint를 분리해 재사�
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv sync --all-groups
-uv run python examples/volume02/prompt_template_demo.py
-uv run pytest tests/unit/test_prompts.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/prompt_template_demo.py
+pytest tests/unit/test_prompts.py -q
 ```
 
 첫 명령은 의존성을 준비합니다. 둘째 명령은 템플릿을 렌더링할 뿐 네트워크에 연결하지 않습니다. 셋째 명령은 고정 섹션 순서와 입력 검증을 테스트합니다. 실제 API 키, 회사 문서, 개인정보를 이 경로에 넣지 마세요.

@@ -29,7 +29,7 @@ def test_volume01_summary_links_concepts_to_offline_commands_and_next_volume() -
     assert "스트리밍" in content
     assert "제한된 재시도" in content
     assert "examples/volume01/chat_cli.py --offline-demo" in content
-    assert "uv run pytest tests/integration/test_volume01_chat_cli.py -q" in content
+    assert "pytest tests/integration/test_volume01_chat_cli.py -q" in content
     assert "bash scripts/run_all_tests.sh" in content
     assert "실제 API 키·네트워크 없이" in content
     assert "Volume 02" in content

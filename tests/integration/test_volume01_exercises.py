@@ -19,6 +19,6 @@ def test_volume01_exercises_link_all_assignment_levels_to_offline_boundaries() -
     assert "- **응용:**" in content
     assert "- **심화:**" in content
     assert "examples/volume01/chat_cli.py --offline-demo" in content
-    assert "uv run pytest tests/unit/test_chat.py -q" in content
-    assert "uv run pytest tests/integration/test_volume01_chat_cli.py -q" in content
+    assert "pytest tests/unit/test_chat.py -q" in content
+    assert "pytest tests/integration/test_volume01_chat_cli.py -q" in content
     assert "실제 API·키·네트워크 없이" in content

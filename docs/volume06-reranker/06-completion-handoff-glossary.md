@@ -23,13 +23,13 @@
 저장소 루트에서 아래 명령을 실행합니다.
 
 ```bash
-uv run pytest tests/unit/test_volume06_reranker.py -q
-uv run ruff check src/ai_platform/reranker examples/volume06 tests/unit/test_volume06_reranker.py
-uv run mypy src/ai_platform/reranker examples/volume06
-uv run python examples/volume06/rerank_fixture.py
-uv run python scripts/validate_links.py
-uv run python scripts/validate_docs.py
-uv run python scripts/validate_code_blocks.py
+pytest tests/unit/test_volume06_reranker.py -q
+ruff check src/ai_platform/reranker examples/volume06 tests/unit/test_volume06_reranker.py
+mypy src/ai_platform/reranker examples/volume06
+python examples/volume06/rerank_fixture.py
+python scripts/validate_links.py
+python scripts/validate_docs.py
+python scripts/validate_code_blocks.py
 ```
 
 `elapsed_ns`와 `shared_elapsed_ns`는 host 부하에 따라 달라지는 관측값이므로 정수 자체를 회귀 기준으로 쓰지 않습니다. 반면 고정 fixture의 candidate 수, pair evaluation 수, rank, outcome, fallback reason, binary/graded ranking metric은 회귀 기준입니다.

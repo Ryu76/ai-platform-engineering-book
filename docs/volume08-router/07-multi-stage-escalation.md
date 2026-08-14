@@ -78,8 +78,8 @@ fixture의 stage는 중복될 수 없고 모두 구성된 stage여야 합니다.
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/multi_stage_escalation_router.py
-uv run pytest tests/unit/test_volume08_multi_stage_escalation_router.py -q
+python examples/volume08/multi_stage_escalation_router.py
+pytest tests/unit/test_volume08_multi_stage_escalation_router.py -q
 ```
 
 예제는 고정 Agent와 Tool을 비정상 상태로 두고, `agent-stage → tool-stage → model-stage` 순으로 세 단계를 검토합니다. `offline-summary-model`은 비용 `0.004`, 지연 시간 `90ms`이며 요청의 비용 `0.005`, 지연 시간 `100ms`, 허용 대상 제약을 모두 만족해 최종적으로 선택됩니다. API 키, 환경 변수, 외부 서비스, 네트워크는 사용하지 않습니다.
@@ -123,7 +123,7 @@ uv run pytest tests/unit/test_volume08_multi_stage_escalation_router.py -q
 - [ ] 모든 stage가 capability·permission·cost·latency·health policy를 재검증함을 확인했다.
 - [ ] fixture 누락과 budget 소진을 임의 성공으로 대체하지 않았다.
 - [ ] 감사 로그에 사용자 원문, prompt, raw output, 비밀값을 넣지 않았다.
-- [ ] `uv run pytest tests/unit/test_volume08_multi_stage_escalation_router.py -q`를 외부 호출 없이 실행했다.
+- [ ] `pytest tests/unit/test_volume08_multi_stage_escalation_router.py -q`를 외부 호출 없이 실행했다.
 
 ## 10. 핵심 정리
 

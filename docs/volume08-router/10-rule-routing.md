@@ -48,9 +48,9 @@ RoutingRequest.requirements.required_capabilities
 
 ```bash
 # 실행 위치: 저장소 루트
-uv sync --all-groups
-uv run python examples/volume08/rule_router.py
-uv run pytest tests/unit/test_volume08_rule_router.py -q
+conda env update --file environment.yml --prune
+python examples/volume08/rule_router.py
+pytest tests/unit/test_volume08_rule_router.py -q
 ```
 
 모든 명령은 API 키·환경 변수·네트워크 연결 없이 실행됩니다.

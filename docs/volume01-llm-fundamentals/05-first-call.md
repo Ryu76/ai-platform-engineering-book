@@ -49,7 +49,7 @@ LlmSettings ──(model, URL, timeout)──► LlmClient
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 프로젝트 가상환경과 테스트 도구를 설치합니다. Windows 네이티브에서 작업한다면 Git Bash 또는 PowerShell에서 저장소 경로로 이동하되, 이후 명령을 같은 셸에서 실행합니다.
@@ -60,7 +60,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_llm_client.py -q
+pytest tests/unit/test_llm_client.py -q
 ```
 
 이 테스트는 `RecordingTransport`에 요청 URL, 메시지, Timeout을 기록하고 미리 정한 JSON 응답을 돌려줍니다. 따라서 API 키도 인터넷 연결도 필요 없습니다. 정상 결과는 다섯 개 테스트의 통과 표시입니다.
@@ -91,7 +91,7 @@ cp .env.example .env
 set -a
 . ./.env
 set +a
-uv run python examples/volume01/first_call.py
+python examples/volume01/first_call.py
 ```
 
 정상 응답은 세 줄입니다. 첫 줄은 모델의 한국어 답변, 둘째 줄은 모델명과 입력 토큰, 셋째 줄은 출력 토큰입니다. `LLM_BASE_URL`을 비워 두면 기본 OpenAI 호환 주소를 사용합니다. 다른 호환 제공자를 사용할 때만 해당 제공자의 HTTPS 주소를 넣습니다.

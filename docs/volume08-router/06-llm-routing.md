@@ -51,8 +51,8 @@ LLM classifier의 label과 confidence는 intent 후보를 나타낼 뿐 실행 �
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/llm_router.py
-uv run pytest tests/unit/test_volume08_llm_router.py -q
+python examples/volume08/llm_router.py
+pytest tests/unit/test_volume08_llm_router.py -q
 ```
 
 예제는 `order_tracking`의 0.92 고정 confidence와 0.80 threshold를 사용합니다. 허용 대상도 `offline-order-agent`로 고정합니다. 외부 서비스·환경 변수·API 키·네트워크를 사용하지 않습니다.
@@ -93,7 +93,7 @@ uv run pytest tests/unit/test_volume08_llm_router.py -q
 - [ ] fixture 누락과 threshold 미달을 성공 route로 대체하지 않음을 확인했다.
 - [ ] LLM intent가 `PolicyRouter`의 capability·권한·비용·지연 시간 경계를 통과해야 함을 확인했다.
 - [ ] 감사 로그에 사용자 원문, prompt, raw output, 비밀값을 넣지 않았다.
-- [ ] `uv run pytest tests/unit/test_volume08_llm_router.py -q`를 외부 호출 없이 실행했다.
+- [ ] `pytest tests/unit/test_volume08_llm_router.py -q`를 외부 호출 없이 실행했다.
 
 ## 9. 핵심 정리
 

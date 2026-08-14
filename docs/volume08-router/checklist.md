@@ -4,10 +4,10 @@
 
 ## 환경과 실행
 
-- [ ] 저장소 루트에서 `uv run pytest tests/unit/test_volume08_policy_router.py -q`를 실행했다.
+- [ ] 저장소 루트에서 `pytest tests/unit/test_volume08_policy_router.py -q`를 실행했다.
 - [ ] `examples/volume08/`의 Policy, Rule, Keyword, 평가, fallback, Semantic, LLM, escalation, API, 미니 프로젝트 예제를 실행했다.
 - [ ] 각 예제가 API 키, 환경 변수, 네트워크 연결 없이 실행됨을 확인했다.
-- [ ] `uv run pytest -q`로 전체 로컬 회귀를 실행했다.
+- [ ] `pytest -q`로 전체 로컬 회귀를 실행했다.
 
 ## 정책과 결정론성
 
@@ -48,10 +48,10 @@
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume08/router_mini_project.py
-uv run pytest tests/unit/test_volume08_router_mini_project.py -q
-uv run pytest tests/unit/test_volume08_router_audit.py -q
-uv run pytest -q
+python examples/volume08/router_mini_project.py
+pytest tests/unit/test_volume08_router_mini_project.py -q
+pytest tests/unit/test_volume08_router_audit.py -q
+pytest -q
 ```
 
 > [!NOTE]

@@ -1,5 +1,36 @@
 # LLM 기초: 학습 목표와 출발점
 
+## 0. 이 교본을 실제로 공부하는 방법
+
+이 문서는 "목표를 읽고 끝내는 소개"가 아닙니다. **읽기 → 오프라인 실행 → 결과 기록 → 체크리스트 확인 → 다음 장**의 순서로 진행하는 첫 번째 학습 안내서입니다.
+
+### 시작 전 한 번만 할 일
+
+1. [Windows 준비](../setup/windows.md)와 [Anaconda 환경 설정](../setup/anaconda.md)을 완료합니다.
+2. Anaconda PowerShell Prompt에서 저장소 루트로 이동해 `conda activate ai-platform-engineering-book`를 실행합니다.
+3. `python --version`이 3.12 계열인지, `python -c "import ai_platform"`가 오류 없이 끝나는지 확인합니다.
+4. API 키 없이 시작합니다. 이 Volume의 기본 경로는 모두 오프라인 데모와 Mock 테스트입니다.
+
+### 권장 진도: 6회 세션, 세션당 60~90분
+
+| 세션 | 읽을 순서 | 직접 실행할 것 | 남길 산출물 | 다음으로 갈 기준 |
+|---|---|---|---|---|
+| 1 | 이 문서 → [왜 필요한가](02-why-it-matters.md) | `chat_cli.py --offline-demo` | LLM이 보장하지 않는 것 3가지 | 오프라인 데모가 네트워크·키 없이 실행됨을 설명한다. |
+| 2 | [LLM·Transformer·Token](03-theory.md) → [환경 설정](04-environment-setup.md) | `token_budget.py`, 단위 테스트 | 입력·출력 토큰과 context window 관계 그림 | 활성 Conda 환경에서 테스트가 통과한다. |
+| 3 | [안전한 최초 호출](05-first-call.md) → [System Prompt와 생성 파라미터](06-system-prompt-and-parameters.md) | 파라미터 데모·Mock 테스트 | System/User/Assistant 메시지 각 1개 | 사용자 입력이 System 규칙을 바꾸면 안 되는 이유를 설명한다. |
+| 4 | [Streaming](07-streaming.md) → [오류 처리](08-error-handling.md) | streaming·error demo | timeout/retry가 필요한 경우 2개 | 실패를 키 추가나 재시도로 덮지 않는 경계를 설명한다. |
+| 5 | [토큰 사용량과 비용](09-usage-and-cost.md) → [CLI 챗봇](10-cli-chatbot.md) | usage demo·offline CLI | 비용 상한과 종료 명령 정책 | `/exit`이 모델 호출 없이 종료되는지 확인한다. |
+| 6 | [미니 프로젝트](11-mini-project.md) → [과제](12-exercises.md) → [핵심 정리](11-summary.md) | 통합 테스트·완료 체크리스트 | 과제 답안과 테스트 결과 | 체크리스트를 모두 스스로 설명하고 다음 Volume으로 이동한다. |
+
+> **한 세션의 최소 완료 규칙:** 문서를 읽은 뒤 반드시 코드 블록 한 개 이상을 실행하고, 결과·오류·이해가 안 된 점을 [학습 로그 템플릿](learning-log-template.md) 또는 개인 노트에 3줄 이상 남깁니다. 테스트가 실패하면 다음 장으로 넘어가지 말고 해당 장의 "오류 해결" 표를 먼저 사용합니다.
+
+### 막혔을 때의 순서
+
+1. 명령을 실행한 터미널에서 `conda activate ai-platform-engineering-book`를 다시 확인합니다.
+2. 오류 메시지 전문과 실행한 명령을 기록합니다. API 키나 패키지를 임의로 추가하지 않습니다.
+3. 해당 장의 오류 해결 표를 확인하고, 같은 테스트 한 개만 다시 실행합니다.
+4. 그래도 해결되지 않으면 "어떤 장의 어떤 명령에서 어떤 오류가 났는지"를 기준으로 질문합니다.
+
 ## 1. 학습 목표
 
 이 장은 이후 실습의 지도 역할을 합니다. 장을 마치면 다음을 할 수 있어야 합니다.
@@ -66,31 +97,33 @@ AI 업무 처리 플랫폼은 사용자의 자연어 요청을 받는 입구에�
 - `tests/unit/test_llm_client.py`: Mock 전송 계층을 사용하는 단위 테스트입니다.
 - `tests/integration/test_volume01_chat_cli.py`: 별도 프로세스에서 오프라인 CLI를 검증합니다.
 
-```bash
-# 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+```powershell
+# 실행 위치: 저장소 루트의 Anaconda PowerShell Prompt
+conda activate ai-platform-engineering-book
+conda env update --file environment.yml --prune
 ```
 
-`uv sync --all-groups`는 프로젝트 가상환경과 검사 도구를 준비합니다. Windows에서 Git Bash를 사용한다면 현재 저장소 경로로 이동해 같은 명령을 실행합니다. 실제 키를 설정할 필요는 없습니다.
+`conda env update --file environment.yml --prune`는 프로젝트와 검사 도구를 교재 전용 Conda 환경에 준비합니다. 실제 키를 설정할 필요는 없습니다.
 
 ## 6. 단계별 실습
 
 ### 6.1 안전한 오프라인 CLI 실행
 
-```bash
-# 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-printf '학습 목표를 한 문장으로 설명해 주세요.\n/exit\n' | \
-  uv run python examples/volume01/chat_cli.py --offline-demo
+```powershell
+# 실행 위치: 저장소 루트의 Anaconda PowerShell Prompt (Conda 활성화 뒤)
+@'
+학습 목표를 한 문장으로 설명해 주세요.
+/exit
+'@ | python examples/volume01/chat_cli.py --offline-demo
 ```
 
 이 명령은 두 줄의 로컬 입력을 CLI에 전달합니다. `OfflineDemoClient`가 마지막 사용자 입력을 포함한 결정론적 응답을 만들고 `/exit`은 모델에 전송하지 않고 종료합니다. 네트워크와 API 키를 사용하지 않습니다.
 
 ### 6.2 Mock 단위 테스트 실행
 
-```bash
-# 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_llm_client.py tests/unit/test_chat.py -q
+```powershell
+# 실행 위치: 저장소 루트의 Anaconda PowerShell Prompt (Conda 활성화 뒤)
+pytest tests/unit/test_llm_client.py tests/unit/test_chat.py -q
 ```
 
 이 테스트는 `RecordingTransport`와 테스트용 입력·출력 함수를 주입합니다. 요청 형식, 비밀값 없는 오류 안내, 대화 이력, 종료 명령을 실제 제공자 없이 확인합니다.
@@ -123,7 +156,7 @@ AI> 오프라인 데모 응답: '학습 목표를 한 문장으로 설명해 주
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | `uv run` 없이 시스템 Python으로 실행했을 수 있습니다. | 저장소 루트에서 `uv sync --all-groups` 후 `uv run python ...`을 사용합니다. |
+| `No module named ai_platform` | 활성 Conda 환경이 아닌 시스템 Python으로 실행했을 수 있습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 후 `python ...`을 사용합니다. |
 | `unrecognized arguments` | 이 예제는 `--offline-demo`만 지원합니다. | 메시지를 인자가 아니라 표준 입력으로 전달하거나, 대화형으로 실행합니다. |
 | `LLM 설정을 확인하세요` | `--offline-demo` 없이 라이브 모드를 시작했습니다. | 오프라인 학습에는 `--offline-demo`를 붙입니다. 라이브 모드는 키·모델을 환경 변수로 설정한 뒤에만 선택합니다. |
 | 응답에 입력 문장이 그대로 나타남 | 오프라인 데모의 의도된 결정론적 동작입니다. | 사실 답변으로 해석하지 말고 콘솔 흐름과 종료 경계만 확인합니다. |

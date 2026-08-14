@@ -63,15 +63,15 @@ ConfigMap: AI_PLATFORM_READY=true|false
 | `k8s/volume11/*.yaml` | Namespace, ConfigMap, Deployment, Service 예제 |
 | `tests/unit/test_volume11_health.py` | HTTP 계약의 정상·실패 경계 검사 |
 
-기본 실습은 Docker Desktop, kind, minikube, `kubectl` 또는 실제 클러스터가 없어도 됩니다. Python과 `uv`만 사용합니다.
+기본 실습은 Docker Desktop, kind, minikube, `kubectl` 또는 실제 클러스터가 없어도 됩니다. 활성화된 Anaconda Conda 환경의 Python만 사용합니다.
 
-```bash
-# 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+```powershell
+# 실행 위치: 저장소 루트의 Anaconda PowerShell Prompt
+conda activate ai-platform-engineering-book
+conda env update --file environment.yml --prune
 ```
 
-이 명령은 프로젝트와 검증 도구를 준비합니다. 파일 경로가 Windows에 있다면 WSL에서 `/mnt/c/...` 경로로 저장소를 열거나, 해당 터미널에서 저장소 루트로 이동합니다.
+이 명령은 프로젝트와 검증 도구를 Conda 환경에 준비합니다. Docker·Kubernetes 명령이 필요한 뒤쪽 절에서만 WSL을 사용하며, Windows Conda 환경을 WSL Python과 섞지 않습니다.
 
 ## 6. 단계별 실습
 
@@ -79,7 +79,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume11/health_probe_demo.py
+python examples/volume11/health_probe_demo.py
 ```
 
 이 데모는 WSGI 애플리케이션을 메모리에서 직접 호출하므로 네트워크 포트, Docker, Kubernetes, API 키가 필요하지 않습니다. `/livez`와 `/readyz`가 각각 `200 OK` 및 JSON 본문을 출력하면 계약이 연결된 것입니다.
@@ -88,7 +88,7 @@ uv run python examples/volume11/health_probe_demo.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_volume11_health.py tests/integration/test_volume11_health_artifacts.py -q
+pytest tests/unit/test_volume11_health.py tests/integration/test_volume11_health_artifacts.py -q
 ```
 
 단위 테스트는 readiness 콜백을 `False`로 주입합니다. 그때 `/readyz`가 `503`, `/livez`가 `200`인지 확인합니다. 통합 테스트는 예제 실행, 이미지 자리표시자, Manifest의 Probe 경로를 검사합니다. 테스트는 네트워크와 API 키를 사용하지 않으며 클러스터에 적용하거나 배포하지 않습니다.
@@ -134,7 +134,7 @@ kubectl kustomize k8s/volume11
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 저장소 루트가 아니거나 `uv run`을 생략했을 수 있습니다. | 저장소 루트에서 `uv sync --all-groups` 후 명령을 다시 실행합니다. |
+| `No module named ai_platform` | 저장소 루트가 아니거나 Conda 환경을 활성화하지 않았을 수 있습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 후 명령을 다시 실행합니다. |
 | `/readyz`가 `503` | `AI_PLATFORM_READY=false`이거나 테스트가 준비 실패를 주입했습니다. | 예제에서는 예상된 결과입니다. 무조건 liveness와 같은 응답으로 바꾸지 말고 준비 조건을 확인합니다. |
 | `AI_PLATFORM_READY must be true or false` | ConfigMap 또는 환경 변수의 Boolean 철자가 잘못되었습니다. | `true` 또는 `false`만 사용합니다. 비밀값을 환경 변수에 추가하지 않습니다. |
 | `docker compose`를 찾을 수 없음 | Docker Desktop 또는 Compose CLI가 설치되지 않았습니다. | 이 장의 필수 검증은 Python 테스트입니다. Docker 설치 후 6.3을 별도로 실행합니다. |
@@ -164,8 +164,8 @@ Probe는 관찰성의 시작점일 뿐입니다. HTTP 요청 지연, 오류율, 
 - [ ] liveness와 readiness가 각각 프로세스 생존과 트래픽 수신 준비를 확인함을 설명할 수 있다.
 - [ ] `/livez`는 readiness 실패와 독립적으로 `200`을 반환함을 테스트로 확인했다.
 - [ ] `/readyz`가 준비 실패에서 `503`을 반환함을 테스트로 확인했다.
-- [ ] `uv run python examples/volume11/health_probe_demo.py`를 실행했다.
-- [ ] `uv run pytest tests/unit/test_volume11_health.py tests/integration/test_volume11_health_artifacts.py -q`가 통과했다.
+- [ ] `python examples/volume11/health_probe_demo.py`를 실행했다.
+- [ ] `pytest tests/unit/test_volume11_health.py tests/integration/test_volume11_health_artifacts.py -q`가 통과했다.
 - [ ] Docker Compose를 실행하지 않고 `config`로만 해석할 수 있음을 이해했다.
 - [ ] Kubernetes Manifest가 예제 이미지와 ConfigMap만 사용하며 실제 Secret이 없음을 확인했다.
 - [ ] 클러스터에 적용하거나 배포하지 않았고, 실제 Secret·접속 정보·개인정보를 저장하지 않았다.

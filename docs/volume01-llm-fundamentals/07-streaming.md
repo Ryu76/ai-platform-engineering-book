@@ -55,7 +55,7 @@ StreamChunk(delta, finish_reason, usage?)
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 가상환경과 개발 도구를 동기화합니다. API 키 또는 네트워크 없이도 다음 테스트를 실행할 수 있습니다.
@@ -66,7 +66,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_llm_client.py -q
+pytest tests/unit/test_llm_client.py -q
 ```
 
 테스트는 `stream: true` 요청 필드, `안녕`과 `하세요.` delta의 결합, `stop` 종료 이유, 마지막 사용량 이벤트를 확인합니다. 실제 API 키와 네트워크는 사용하지 않습니다.
@@ -96,7 +96,7 @@ cp .env.example .env
 set -a
 . ./.env
 set +a
-uv run python examples/volume01/streaming.py
+python examples/volume01/streaming.py
 ```
 
 정상 실행이면 답변 글자가 순서대로 출력된 뒤 사용량 또는 사용량 미반환 안내가 출력됩니다. `.env`는 Git에 추가하지 않습니다.

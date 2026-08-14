@@ -49,11 +49,11 @@ Tool Registry는 권한 결정자이며 LLM이 아닙니다. 이 장에서는 �
 
 ## 5. 실습 환경
 
-실행 위치는 저장소 루트입니다. Python과 검사 도구는 `uv`가 관리합니다.
+실행 위치는 저장소 루트입니다. Python과 검사 도구는 활성화된 Anaconda Conda 환경이 관리합니다.
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 확인할 파일은 다음과 같습니다.
@@ -67,7 +67,7 @@ uv sync --all-groups
 ### 6.1 allowlisted 계산기 실행
 
 ```bash
-uv run python examples/volume03/safe_calculator.py
+python examples/volume03/safe_calculator.py
 ```
 
 예제는 `safe_calculator` 하나만 등록하고 `{ "left": 21, "right": 2, "operation": "multiply" }`를 전달합니다. 입력은 코드에 고정되어 있으며 외부 시스템을 변경하지 않습니다.
@@ -75,7 +75,7 @@ uv run python examples/volume03/safe_calculator.py
 ### 6.2 거부 경계 확인
 
 ```bash
-uv run pytest tests/volume03/test_tool_registry.py -q
+pytest tests/volume03/test_tool_registry.py -q
 ```
 
 테스트는 `delete_file`이라는 미등록 Tool, 누락 인자, `power`처럼 enum에 없는 연산, boolean 숫자, 추가 `path` 필드, 0 나누기를 모두 거부하는지 확인합니다. 실패 요청에서는 handler가 실행되지 않습니다.
@@ -100,7 +100,7 @@ uv run pytest tests/volume03/test_tool_registry.py -q
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 저장소 루트 밖에서 실행했거나 `uv run`을 생략했을 수 있습니다. | 루트에서 `uv sync --all-groups` 후 예제 명령을 다시 실행합니다. |
+| `No module named ai_platform` | 저장소 루트 밖에서 실행했거나 Conda 환경을 활성화하지 않았을 수 있습니다. | 루트에서 `conda env update --file environment.yml --prune` 후 예제 명령을 다시 실행합니다. |
 | `tool is not allowlisted` | Tool 이름이 등록된 이름과 다릅니다. | 임의 이름을 추가하지 말고 `allowed_tool_names()`와 코드 검토를 확인합니다. |
 | `missing required argument` | 모델 요청에 Schema 필수 필드가 없습니다. | 요청을 재시도하기 전에 Schema에 맞는 구조화 인자를 만듭니다. |
 | `unexpected argument` | 허용되지 않은 추가 필드가 들어왔습니다. | `additionalProperties: false`를 유지하고 필드를 무시하지 말고 거부합니다. |

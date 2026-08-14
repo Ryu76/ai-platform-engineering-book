@@ -51,10 +51,10 @@ GenerationParameters ─────────────┘          │
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-이 명령은 프로젝트 가상환경을 동기화합니다. Windows 네이티브 경로에서 실행한다면 저장소 루트로 이동한 뒤 동일한 `uv run` 명령을 사용합니다. API 키 없이도 다음 단위 테스트를 실행할 수 있습니다.
+이 명령은 프로젝트 가상환경을 동기화합니다. Windows 네이티브 경로에서 실행한다면 저장소 루트로 이동한 뒤 동일한 활성 Conda 환경의 명령을 사용합니다. API 키 없이도 다음 단위 테스트를 실행할 수 있습니다.
 
 ## 6. 단계별 실습
 
@@ -62,7 +62,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_llm_client.py -q
+pytest tests/unit/test_llm_client.py -q
 ```
 
 정상 결과에는 모든 테스트의 통과 수가 표시됩니다. 추가된 테스트는 `temperature=0.2`, `top_p=0.9`, `max_tokens=120`, `stop` 목록이 HTTP payload에 정확히 들어가는지 확인합니다. 실제 API 키나 네트워크는 사용하지 않습니다.
@@ -102,7 +102,7 @@ cp .env.example .env
 set -a
 . ./.env
 set +a
-uv run python examples/volume01/system_prompt_parameters.py
+python examples/volume01/system_prompt_parameters.py
 ```
 
 정상 실행 시 첫 줄은 모델의 답변이고, 다음 두 줄은 모델명·입력 토큰·출력 토큰입니다. `.env` 파일은 Git에 추가하지 않습니다.

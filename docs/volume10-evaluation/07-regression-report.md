@@ -59,7 +59,7 @@ LLM API · Agent 도구 · Vector DB · 네트워크 · 라이브 시계 · 난�
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 환경 변수, API 키, 고객 데이터, 라이브 LLM·Router·Agent, 네트워크 연결은 필요하지 않습니다.
@@ -70,7 +70,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/regression_report.py
+python examples/volume10/regression_report.py
 ```
 
 기준선과 후보는 모두 `volume10-support-policy@1.0.0`의 같은 다섯 사례를 사용합니다. 후보는 Agent 작업 성공률, P95, 비용을 개선하지만 `access-reset` 정답 문서를 회수하지 않아 전체 결정은 `REJECT`입니다.
@@ -79,7 +79,7 @@ uv run python examples/volume10/regression_report.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation/test_regression_report.py -q
+pytest tests/evaluation/test_regression_report.py -q
 ```
 
 테스트는 품질 저하가 비용 개선으로 상쇄되지 않는지, 허용치 경계가 승인되는지, 데이터셋 ID·버전·사례 순서·지표 집합·정책 집합 불일치를 거부하는지 검사합니다.
@@ -148,8 +148,8 @@ usage.total_cost_micro_usd: baseline=5240.000000; candidate=5080.000000; delta=-
 - [ ] 같은 dataset ID·version·사례 순서가 비교 전제임을 설명할 수 있다.
 - [ ] higher/lower 방향과 원래 단위의 절대 허용 저하량을 구분할 수 있다.
 - [ ] 하나의 품질 회귀가 비용·latency 개선으로 상쇄되지 않음을 설명할 수 있다.
-- [ ] `uv run python examples/volume10/regression_report.py`를 실행했다.
-- [ ] `uv run pytest tests/evaluation/test_regression_report.py -q`를 통과시켰다.
+- [ ] `python examples/volume10/regression_report.py`를 실행했다.
+- [ ] `pytest tests/evaluation/test_regression_report.py -q`를 통과시켰다.
 - [ ] API 키, 고객 데이터, 외부 서비스, 라이브 시계 없이 고정 리포트를 재현했다.
 - [ ] 다음 장의 오프라인 평가 파이프라인으로 연결할 준비가 되었다.
 

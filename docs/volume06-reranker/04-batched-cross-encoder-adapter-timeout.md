@@ -51,15 +51,15 @@ rank_source=cross_encoder        partial scores discarded
 
 ## 5. 실습 환경
 
-- 실행 위치: 저장소 루트의 bash/WSL 터미널
+- 실행 위치: 저장소 루트의 활성화된 Anaconda PowerShell Prompt
 - 파일: `src/ai_platform/reranker/cross_encoder.py`, `examples/volume06/rerank_fixture.py`
-- 필요한 명령: 프로젝트에 이미 설치된 `uv`
+- 필요한 명령: 활성 Conda 환경의 `python`, `pytest`
 - 외부 API, API key, model download, GPU는 사용하지 않습니다.
 
 ```bash
 # 실행 위치: 저장소 루트
-uv run python examples/volume06/rerank_fixture.py
-uv run pytest tests/unit/test_volume06_reranker.py -q
+python examples/volume06/rerank_fixture.py
+pytest tests/unit/test_volume06_reranker.py -q
 ```
 
 첫 명령은 고정된 두 한국어 candidate fixture의 lexical sweep, adapter batch 측정, threshold no-answer 결과를 출력합니다. 두 번째 명령은 adapter batch, 남은 timeout budget, timeout의 partial-score 폐기, retriever fallback 출처를 검증합니다.
@@ -130,7 +130,7 @@ if result.outcome == "retriever_fallback":
 
 ## 8. 정상 실행 결과
 
-2026-08-10에 실제로 실행한 `uv run python examples/volume06/rerank_fixture.py`에는 다음 adapter 행이 포함되었습니다. `elapsed_ns`는 host 부하에 따라 바뀌며 회귀 기준이 아닙니다.
+2026-08-10에 실제로 실행한 `python examples/volume06/rerank_fixture.py`에는 다음 adapter 행이 포함되었습니다. `elapsed_ns`는 host 부하에 따라 바뀌며 회귀 기준이 아닙니다.
 
 ```text
 adapter_candidate_count=3; top_k=1; batch_count=4; pair_evaluations=6; elapsed_ns=81200; outcome=reranked; retriever_precision=0.000; adapter_precision=1.000; retriever_graded_ndcg=0.143; adapter_graded_ndcg=1.000

@@ -77,7 +77,7 @@ Volume 01의 결과물은 같은 저장소의 다음 경로에 있습니다.
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 첫 명령은 WSL 안의 저장소로 이동합니다. 두 번째 명령은 프로젝트와 검사 도구를 준비합니다. Windows에서 WSL을 쓴다면 Windows PowerShell 경로와 WSL 경로를 섞지 않습니다.
@@ -88,7 +88,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-printf 'Context Window는 무엇인가요?\n/exit\n' | uv run python examples/volume01/chat_cli.py --offline-demo
+printf 'Context Window는 무엇인가요?\n/exit\n' | python examples/volume01/chat_cli.py --offline-demo
 ```
 
 이 명령은 질문과 종료 명령을 표준 입력으로 전달합니다. `--offline-demo`는 설정과 네트워크를 읽지 않으므로 API 키 없이 실행됩니다. 출력에 시작 안내, `오프라인 데모 응답`, `대화를 마칩니다.`가 차례로 포함되는지 확인합니다.
@@ -97,8 +97,8 @@ printf 'Context Window는 무엇인가요?\n/exit\n' | uv run python examples/vo
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_llm_client.py tests/unit/test_chat.py tests/unit/test_usage.py -q
-uv run pytest tests/integration/test_volume01_chat_cli.py -q
+pytest tests/unit/test_llm_client.py tests/unit/test_chat.py tests/unit/test_usage.py -q
+pytest tests/integration/test_volume01_chat_cli.py -q
 ```
 
 첫 명령은 클라이언트의 성공·실패·스트리밍, 대화 이력과 안전한 종료, 토큰 사용량·비용 추정을 확인합니다. 두 번째 명령은 실제 Python 하위 프로세스에서 오프라인 CLI가 시작하고 종료되는지 확인합니다. 두 명령 모두 실제 LLM 제공자에 요청하지 않습니다.
@@ -138,7 +138,7 @@ AI 업무 처리 플랫폼 챗봇입니다. 종료하려면 /exit 또는 /quit�
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 저장소 밖의 Python을 실행했거나 동기화가 되지 않았습니다. | 저장소 루트에서 `uv sync --all-groups` 후 `uv run ...` 명령을 사용합니다. |
+| `No module named ai_platform` | 저장소 밖의 Python을 실행했거나 동기화가 되지 않았습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 후 활성 Conda 환경의 명령 명령을 사용합니다. |
 | 제공자 설정 오류가 표시됨 | `--offline-demo` 없이 라이브 모드를 실행했습니다. | 검증 명령에 `--offline-demo`가 있는지 확인합니다. 학습 검증을 위해 `.env`나 키를 만들 필요가 없습니다. |
 | 테스트가 시간 초과됨 | 종료 명령이 입력되지 않았거나 CLI 종료 분기가 변경됐을 수 있습니다. | 입력에 `/exit\n`이 있는지와 `run_chat_loop()`의 종료 처리를 확인합니다. |
 | 비용 추정이 청구 금액과 다름 | 가격표·통화·입출력 토큰 기준이 제공자 청구 기준과 다를 수 있습니다. | `usage.py`의 가격표와 모델명을 명시하고 추정값을 청구서로 사용하지 않습니다. |

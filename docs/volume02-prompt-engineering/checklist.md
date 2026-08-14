@@ -46,12 +46,12 @@ Volume 02는 모델 호출 결과를 흉내 내는 고정 교육용 문자열만
 
 ```bash
 # 실행 위치: WSL Ubuntu, Linux 또는 Git Bash 터미널의 저장소 루트
-uv sync --all-groups
-uv run python examples/volume02/prompt_template_demo.py
-uv run python examples/volume02/structured_output_demo.py
-uv run python examples/volume02/injection_defense_demo.py
-uv run python examples/volume02/prompt_mini_project_demo.py
-uv run pytest tests/unit/test_prompts.py tests/integration/test_volume02_exercises.py -q
+conda env update --file environment.yml --prune
+python examples/volume02/prompt_template_demo.py
+python examples/volume02/structured_output_demo.py
+python examples/volume02/injection_defense_demo.py
+python examples/volume02/prompt_mini_project_demo.py
+pytest tests/unit/test_prompts.py tests/integration/test_volume02_exercises.py -q
 bash scripts/run_all_tests.sh
 ```
 

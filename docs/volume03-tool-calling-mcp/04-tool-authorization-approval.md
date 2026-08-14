@@ -45,9 +45,9 @@ HIGH + request_id·Tool·인자가 모두 일치한 승인
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv sync --all-groups
-uv run python examples/volume03/approved_tool_execution.py
-uv run pytest tests/volume03/test_tool_authorization.py -q
+conda env update --file environment.yml --prune
+python examples/volume03/approved_tool_execution.py
+pytest tests/volume03/test_tool_authorization.py -q
 ```
 
 예제는 `SAFE_TEXT_CASE` 하나를 registry allowlist에 등록하고, 교육 목적상 `HIGH`로 분류합니다. 승인 뒤 실행하는 handler는 고정 문자열의 소문자 변환만 수행합니다. 파일 삭제·쓰기, 셸, 네트워크, 환경 변수, 실제 결제·배포·권한 변경은 전혀 수행하지 않습니다.

@@ -46,10 +46,10 @@ LLM 기능은 모델 응답만 맞는다고 안전한 것이 아닙니다. 빈 �
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
 cd ~/projects/ai-platform-engineering-book
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-`uv sync --all-groups`는 과제의 테스트 도구를 준비합니다. Windows에서 WSL을 사용한다면 Windows PowerShell 경로가 아니라 WSL 안의 저장소 경로에서 실행합니다.
+`conda env update --file environment.yml --prune`는 과제의 테스트 도구를 준비합니다. Windows에서 WSL을 사용한다면 Windows PowerShell 경로가 아니라 WSL 안의 저장소 경로에서 실행합니다.
 
 ## 6. 단계별 실습
 
@@ -59,7 +59,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-printf 'Token이란 무엇인가요?\n/quit\n' | uv run python examples/volume01/chat_cli.py --offline-demo
+printf 'Token이란 무엇인가요?\n/quit\n' | python examples/volume01/chat_cli.py --offline-demo
 ```
 
 출력에 `오프라인 데모 응답`과 `대화를 마칩니다.`가 있어야 합니다. `/quit` 자체에 대한 데모 응답이 없어야 합니다. 이 명령은 API 키를 읽지 않고 네트워크에 연결하지 않습니다.
@@ -70,7 +70,7 @@ printf 'Token이란 무엇인가요?\n/quit\n' | uv run python examples/volume01
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/unit/test_chat.py -q
+pytest tests/unit/test_chat.py -q
 ```
 
 `test_chat_loop_does_not_record_failed_turn_and_shows_safe_error`를 찾아 다음을 설명합니다.
@@ -87,7 +87,7 @@ uv run pytest tests/unit/test_chat.py -q
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/integration/test_volume01_chat_cli.py -q
+pytest tests/integration/test_volume01_chat_cli.py -q
 ```
 
 `tests/integration/test_volume01_chat_cli.py`의 `timeout=10`, `check=True`, `capture_output=True`가 각각 잡는 실패를 한 가지씩 적습니다. 이어서 질문을 `Context Window는 무엇인가요?`로 바꾼 별도 테스트를 작성하거나, 기존 테스트의 입력을 바꾸어도 시작 안내·오프라인 응답·종료 안내 검사가 유지되는지 확인합니다.
@@ -108,7 +108,7 @@ if arguments.offline_demo:
 
 이 분기 뒤에는 `LlmSettings.from_environment()`가 호출되지 않습니다. 따라서 과제의 오프라인 실행은 키 누락 오류나 라이브 HTTP 요청과 독립적입니다.
 
-통합 테스트는 현재 `uv` 환경의 Python을 사용해 위 실행 파일을 별도 프로세스로 시작합니다.
+통합 테스트는 현재 활성 Conda 환경의 Python을 사용해 위 실행 파일을 별도 프로세스로 시작합니다.
 
 ```python
 result = subprocess.run(
@@ -144,7 +144,7 @@ AI 업무 처리 플랫폼 챗봇입니다. 종료하려면 /exit 또는 /quit�
 
 | 증상 | 원인 확인 | 해결 |
 |---|---|---|
-| `No module named ai_platform` | 저장소 밖에서 Python을 실행했거나 가상환경이 준비되지 않았습니다. | 저장소 루트에서 `uv sync --all-groups` 뒤 `uv run` 명령을 다시 실행합니다. |
+| `No module named ai_platform` | 저장소 밖에서 Python을 실행했거나 가상환경이 준비되지 않았습니다. | 저장소 루트에서 `conda env update --file environment.yml --prune` 뒤 활성 Conda 환경의 명령을 다시 실행합니다. |
 | 제공자 설정 오류가 보임 | `--offline-demo`를 빼고 기본 모드를 실행했습니다. | 과제 명령에 `--offline-demo`가 있는지 확인합니다. `.env`나 API 키를 과제를 위해 추가하지 않습니다. |
 | 통합 테스트가 시간 초과됨 | 종료 명령 입력 또는 루프의 종료 분기가 깨졌을 수 있습니다. | 입력 문자열에 `/exit\n` 또는 `/quit\n`이 있는지와 `is_exit_command()` 경로를 확인합니다. |
 | 테스트 출력에 민감한 문자열이 보임 | 원본 예외나 실제 입력을 그대로 출력하도록 바꿨을 수 있습니다. | 안전한 고정 안내만 출력하도록 복원하고 `test_chat_loop_does_not_record_failed_turn_and_shows_safe_error`를 실행합니다. |

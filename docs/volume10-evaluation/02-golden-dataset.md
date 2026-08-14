@@ -64,7 +64,7 @@ Retrieval Recall·MRR 등          보류 정확도·근거 없는 답변률 (�
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 실습에는 환경 변수, API 키, 모델 서버, 벡터 데이터베이스가 필요하지 않습니다.
@@ -75,7 +75,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/golden_dataset_audit.py
+python examples/volume10/golden_dataset_audit.py
 ```
 
 출력에서 데이터셋 ID와 버전, 전체 사례 수 5, `answer` 4건, `abstain` 1건을 확인합니다. 카테고리는 코드의 입력 순서가 아니라 정렬된 이름으로 출력하므로 같은 소스에서는 항상 동일합니다.
@@ -84,7 +84,7 @@ uv run python examples/volume10/golden_dataset_audit.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation/test_golden_dataset.py -q
+pytest tests/evaluation/test_golden_dataset.py -q
 ```
 
 테스트는 `answer`인데 정답 문서가 없거나 `abstain`인데 정답 문서가 있는 모순을 거부합니다. 또한 사례 ID 중복과 `MAJOR.MINOR.PATCH` 형식이 아닌 버전을 실패시킵니다.
@@ -152,8 +152,8 @@ Categories: facilities=1, finance=1, identity=1, people=1, security=1
 - [ ] `answer`와 `abstain` 라벨이 모순되면 안 되는 이유를 설명할 수 있다.
 - [ ] no-answer를 검색 Recall 평균에 섞지 않아야 하는 이유를 이해했다.
 - [ ] 데이터셋 ID와 `MAJOR.MINOR.PATCH` 버전을 회귀 비교에 기록할 수 있다.
-- [ ] `uv run python examples/volume10/golden_dataset_audit.py`를 실행했다.
-- [ ] `uv run pytest tests/evaluation/test_golden_dataset.py -q`를 통과시켰다.
+- [ ] `python examples/volume10/golden_dataset_audit.py`를 실행했다.
+- [ ] `pytest tests/evaluation/test_golden_dataset.py -q`를 통과시켰다.
 - [ ] 실제 고객 데이터·API 키·외부 서비스를 사용하지 않고 기준선을 재현했다.
 - [ ] 다음 장에서 이 데이터셋으로 검색 지표를 해석할 준비가 되었다.
 

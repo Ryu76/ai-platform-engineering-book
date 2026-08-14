@@ -38,8 +38,8 @@ bounded EOF raw capture ──> strict UTF-8 decode ──> fixed literal redact
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv run python examples/volume03/mcp_stdio_output_decode_redaction.py
-uv run pytest tests/volume03/test_mcp_output_decode.py -q
+python examples/volume03/mcp_stdio_output_decode_redaction.py
+pytest tests/volume03/test_mcp_output_decode.py -q
 ```
 
 예상 출력입니다.

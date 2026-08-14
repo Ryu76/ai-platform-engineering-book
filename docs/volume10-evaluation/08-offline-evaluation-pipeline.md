@@ -37,7 +37,7 @@ LLM API · Agent 도구 · Vector DB · 네트워크 · 라이브 시계 · 난�
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
 이 명령은 잠긴 로컬 개발 의존성을 준비합니다.
@@ -48,7 +48,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/offline_evaluation_pipeline.py
+python examples/volume10/offline_evaluation_pipeline.py
 ```
 
 명령은 `volume10-support-policy@1.0.0`의 고정 다섯 사례를 기준선과 후보에 모두 사용합니다. 검색은 네 개의 answer 사례만 평가하므로 no-answer `office-parking`이 Recall 분모에 들어가지 않습니다.
@@ -57,7 +57,7 @@ uv run python examples/volume10/offline_evaluation_pipeline.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation/test_offline_pipeline.py -q
+pytest tests/evaluation/test_offline_pipeline.py -q
 ```
 
 테스트는 고정 수치, 출력 순서, 후보 회귀 거부, 전체 사례 순서, 검색 부분집합과 보고서 계약을 검사합니다.
@@ -131,8 +131,8 @@ retrieval.recall_at_3: status=regression; delta=-0.250000
 
 - [ ] 전체 answer·workflow·usage 사례가 같은 ID·순서를 공유함을 확인했다.
 - [ ] no-answer를 검색 Recall 분모에서 분리했다.
-- [ ] `uv run python examples/volume10/offline_evaluation_pipeline.py`를 실행했다.
-- [ ] `uv run pytest tests/evaluation/test_offline_pipeline.py -q`를 통과시켰다.
+- [ ] `python examples/volume10/offline_evaluation_pipeline.py`를 실행했다.
+- [ ] `pytest tests/evaluation/test_offline_pipeline.py -q`를 통과시켰다.
 - [ ] 비용·latency 개선이 Recall 회귀를 상쇄하지 않음을 확인했다.
 - [ ] API 키, 고객 데이터, 외부 서비스, 라이브 시계 없이 리포트를 재현했다.
 

@@ -43,8 +43,8 @@ scheduler exception의 selector/handle detail과 stream exception의 raw detail�
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv run python examples/volume03/mcp_stdio_ready_drain.py
-uv run pytest tests/volume03/test_mcp_ready_drain.py -q
+python examples/volume03/mcp_stdio_ready_drain.py
+pytest tests/volume03/test_mcp_ready_drain.py -q
 ```
 
 예상 출력입니다.

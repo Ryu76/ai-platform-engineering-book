@@ -47,9 +47,9 @@
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv sync --all-groups
-uv run python examples/volume03/audited_tool_execution.py
-uv run pytest tests/volume03/test_tool_audit.py -q
+conda env update --file environment.yml --prune
+python examples/volume03/audited_tool_execution.py
+pytest tests/volume03/test_tool_audit.py -q
 ```
 
 예제는 `safe_text_case` 하나만 allowlist에 넣고, 고정된 교육용 승인 기록으로 문자열을 대문자로 바꿉니다. 생성되는 감사 이벤트에는 인자 `AI Platform` 또는 Tool 결과가 없고, 파일·셸·네트워크·환경 변수·외부 서비스에 접근하지 않습니다.

@@ -42,8 +42,8 @@ caller가 판단·실행해야 합니다.
 
 ```bash
 cd /e/python/ai-platform-engineering-book-volume-03
-uv run python examples/volume03/mcp_stdio_input_delivery_gate.py
-uv run pytest tests/volume03/test_mcp_input_delivery.py -q
+python examples/volume03/mcp_stdio_input_delivery_gate.py
+pytest tests/volume03/test_mcp_input_delivery.py -q
 ```
 
 예상 출력입니다.

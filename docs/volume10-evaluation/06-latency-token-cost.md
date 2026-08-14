@@ -60,10 +60,10 @@ LLM API · Agent 도구 · Vector DB · 네트워크 · 라이브 시계 · 난�
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv sync --all-groups
+conda env update --file environment.yml --prune
 ```
 
-환경 변수, API 키, 모델 서버, 네트워크 연결, 운영 계측기는 필요하지 않습니다. Windows Git Bash에서도 저장소 루트에서 같은 `uv` 명령을 실행할 수 있습니다.
+환경 변수, API 키, 모델 서버, 네트워크 연결, 운영 계측기는 필요하지 않습니다. Windows Git Bash에서도 저장소 루트에서 같은 Conda 환경 명령을 실행할 수 있습니다.
 
 ## 6. 단계별 실습
 
@@ -71,7 +71,7 @@ uv sync --all-groups
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run python examples/volume10/usage_quality.py
+python examples/volume10/usage_quality.py
 ```
 
 다섯 골든 사례의 평균·P95 latency, 총 token, 총 cost를 출력합니다. `benefits-enrollment`의 340ms는 가장 느린 기록이라 이 작은 표본의 P95를 결정합니다. 단, 이것은 실제 요청을 실행한 시간이 아니라 고정된 교육용 기록입니다.
@@ -80,7 +80,7 @@ uv run python examples/volume10/usage_quality.py
 
 ```bash
 # 실행 위치: WSL Ubuntu 또는 Linux 터미널, 저장소 루트
-uv run pytest tests/evaluation/test_usage_metrics.py -q
+pytest tests/evaluation/test_usage_metrics.py -q
 ```
 
 테스트는 기준 수치, 골든 데이터셋과의 동일 사례 ID, stable case 순서, nearest-rank P95, 누락 기록, 키/객체 ID 불일치, 음수·실수·불리언 측정값, 중복 사례를 검사합니다.
@@ -153,8 +153,8 @@ Total cost (USD): 0.005240
 - [ ] 평균과 nearest-rank P95의 분자·분모와 위치 규칙을 설명할 수 있다.
 - [ ] micro USD 정수 단가와 USD 표시 변환을 구분할 수 있다.
 - [ ] 다섯 고정 사례의 완전한 기록이 필요한 이유를 설명할 수 있다.
-- [ ] `uv run python examples/volume10/usage_quality.py`를 실행했다.
-- [ ] `uv run pytest tests/evaluation/test_usage_metrics.py -q`를 통과시켰다.
+- [ ] `python examples/volume10/usage_quality.py`를 실행했다.
+- [ ] `pytest tests/evaluation/test_usage_metrics.py -q`를 통과시켰다.
 - [ ] API 키, 고객 데이터, 외부 서비스, 라이브 시계 없이 기준선을 재현했다.
 - [ ] 다음 장의 회귀 비교와 평가 리포트로 연결할 준비가 되었다.
 
