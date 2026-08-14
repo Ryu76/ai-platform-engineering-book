@@ -547,6 +547,32 @@ def test_json_file_checkpoint_rejects_duplicate_json_keys_before_state_restore(
         checkpointer.load(run_id="duplicate-key-guard-001")
 
 
+def test_json_file_checkpoint_rejects_a_duplicate_nested_event_key_before_checksum(
+    tmp_path: Path,
+) -> None:
+    """중첩 감사 event의 중복 키도 checksum·State 복원 전에 거부한다."""
+    checkpoint_path = tmp_path / "duplicate-nested-key-checkpoints.json"
+    checkpointer = JsonFileCheckpointer(path=checkpoint_path)
+    state = WorkflowState.start(
+        task="로컬 문서를 읽는다", action=ActionKind.READ
+    ).record(
+        node="plan",
+        detail="오프라인 계획을 만듭니다.",
+        status=WorkflowStatus.PLANNED,
+    )
+    checkpointer.save(run_id="duplicate-nested-key-guard-001", state=state)
+    valid_payload = checkpoint_path.read_text(encoding="utf-8")
+    duplicate_event_sequence = valid_payload.replace(
+        '          "sequence": 1\n',
+        '          "sequence": 1,\n          "sequence": 1\n',
+    )
+    assert duplicate_event_sequence != valid_payload
+    checkpoint_path.write_text(duplicate_event_sequence, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicate object keys"):
+        checkpointer.load(run_id="duplicate-nested-key-guard-001")
+
+
 def test_json_file_checkpoint_rejects_an_existing_hard_link_alias(tmp_path: Path) -> None:
     """원자적 교체가 hard link 별칭을 분리하지 않도록 기존 다중 링크를 거부한다."""
     checkpoint_path = tmp_path / "checkpoints.json"

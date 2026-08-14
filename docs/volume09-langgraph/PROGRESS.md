@@ -967,3 +967,56 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+## 최신 슬라이스 — 중첩 감사 이벤트 JSON 키 모호성 차단
+
+- `docs/volume09-langgraph/27-json-checkpoint-nested-event-duplicate-key-guard.md`
+  - Checkpoint의 중첩 `events` 객체에 있는 중복 `sequence`가 parser의 값 선택·checksum 비교·State 복원 전에 fail-closed 되는 경계와 인증 한계를 14개 장 템플릿으로 문서화했습니다.
+- `docs/volume09-langgraph/README.md`
+  - 스물일곱 번째 중첩 감사 이벤트 키 모호성 차단 장과 해당 오프라인 검증 범위를 추가했습니다.
+- `examples/volume09/json_duplicate_key_guard_workflow.py`
+  - 감사 event가 있는 임시 Checkpoint에 중복 `sequence`를 삽입해 중첩 객체도 명시적으로 거부됨을 출력하도록 확장했습니다.
+- `tests/unit/test_volume09_graph.py`
+  - 중첩 event의 중복 `sequence`가 checksum과 `WorkflowState` 복원 전에 거부되는 회귀 계약을 추가했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. 위험 ActionKind는 JSON 구조 검사와 별개로 계속 별도의 엄격한 Boolean 승인 전에는 `WAITING_FOR_APPROVAL`에 머뭅니다.
+
+## 최신 검증 기록 — 중첩 감사 이벤트 JSON 키 모호성 차단 슬라이스
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-09`
+
+```text
+$ uv run python examples/volume09/json_duplicate_key_guard_workflow.py
+nested_duplicate_key_rejected=checkpoint file must not contain duplicate object keys
+
+$ uv run pytest tests/unit/test_volume09_graph.py::test_json_file_checkpoint_rejects_a_duplicate_nested_event_key_before_checksum -q
+1 passed in 0.54s
+
+$ uv run pytest tests/unit/test_volume09_graph.py -q
+50 passed in 0.96s
+
+$ uv run pytest -q
+111 passed in 1.58s
+
+$ uv run ruff check src/ai_platform/graph tests/unit/test_volume09_graph.py examples/volume09
+All checks passed!
+
+$ uv run mypy src/ai_platform/graph
+Success: no issues found in 6 source files
+
+$ uv run python scripts/validate_docs.py && uv run python scripts/validate_links.py && uv run python scripts/validate_code_blocks.py && uv run python scripts/check_secrets.py
+문서 검증 통과: Volume 11개
+링크 검증 통과
+코드 블록 검증 통과
+비밀값 검사 통과
+
+$ git diff --check
+(exit 0)
+```
+
+`uv run`은 Hermes 활성 가상환경과 프로젝트 `.venv` 경로가 다르다는 경고를 출력했지만, 프로젝트 `.venv`를 사용해 모든 검증 명령이 정상 종료했습니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
