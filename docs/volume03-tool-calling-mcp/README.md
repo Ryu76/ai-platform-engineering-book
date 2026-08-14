@@ -42,5 +42,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 32. [MCP STDIO queued input delivery: claimed frame 결과를 보수적으로 map하기](32-mcp-stdio-queued-input-delivery.md) — one claimed immutable frame을 injected delivery owner에 한 번만 넘기고 typed non-partial failure와 unknown/partial result를 `NOT_DELIVERED`/`AMBIGUOUS`로 분리하는 model
 33. [MCP STDIO process-group shutdown target: child-owned isolation intent를 fake seam으로 검증하기](33-mcp-stdio-process-group-shutdown-target.md) — allowlisted plan과 trusted POSIX/Windows isolation fixture를 typed graceful/force target으로만 바꾸고 foreign group·invalid platform은 sender 호출 전에 막는 model
 34. [MCP STDIO finite restart/backoff: exit-code와 fake monotonic time을 좁게 모델링하기](34-mcp-stdio-finite-restart-backoff.md) — allowlisted plan의 finite restart budget만 사용해 clean/unexpected/unknown exit을 분리하고 clock·sleeper failure가 replacement start 전에 멈추는 model
+35. [MCP Tool idempotency·approval·audit: durable store 전에 exact binding을 좁게 모델링하기](35-mcp-tool-idempotency-approval-audit.md) — immutable request digest binding·one-time expiring approval·pre/post audit을 memory fixture로 묶고 duplicate/replay/ambiguous result를 caller-owned reconciliation과 분리하는 model
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.

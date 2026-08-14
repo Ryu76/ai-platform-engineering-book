@@ -781,3 +781,86 @@ record의 exact request binding을 immutable in-memory fixture로 먼저 모델�
 approval expiry/replay, audit append failure와 ambiguous Tool result가 execution 전에 또는 caller-owned
 reconciliation signal로 안전하게 멈추는지 fake seams에서 검증하세요. 그 뒤 Hermes/Codex integration을
 독립적인 fixture·검증 경계로 진행해야 합니다.
+
+## 이번 슬라이스: idempotency·expiring approval·audit completion을 memory fixture로 묶기
+
+- `src/ai_platform/tools/idempotency.py`
+  - `McpToolExecutionBinding`은 allowlisted Tool request의 idempotency key, request ID, Tool name과
+    canonical finite JSON argument의 SHA-256 digest만 immutable하게 묶으며 raw arguments를 보관하지 않습니다.
+  - `InMemoryMcpToolExecutionLedger.reserve()`는 expired/replayed approval, duplicate key, conflicting
+    binding을 Tool execution 전에 거부하고 `AUTHORIZED` audit append 성공 뒤에만 one-time claim을 발급합니다.
+    pre-execution audit append failure는 key/approval을 소비하지 않으며 raw adapter detail도 숨깁니다.
+  - `resolve()`는 confirmed success의 completion audit을 남기거나 ambiguous result/audit failure를
+    `RECONCILIATION_REQUIRED` latch와 caller-owned signal로 바꿉니다. Tool handler, durable store, OS clock,
+    process, network, retry 또는 destructive action을 직접 호출하지 않습니다.
+- `src/ai_platform/tools/__init__.py`
+  - idempotency binding, approval, audit sink/event, ledger, claim/resolution/state public API를 export했습니다.
+- `examples/volume03/mcp_tool_idempotency_approval_audit.py`
+  - fixed `safe_calculator` intent와 in-memory approval/audit/ledger만 reserve/resolve하고 audit phase 및 final
+    state를 출력합니다. handler나 actual database, filesystem, process, shell, network, MCP server, Tool 또는
+    destructive action을 수행하지 않습니다.
+- `tests/volume03/test_tool_idempotency.py`
+  - exact digest/no raw argument, duplicate/collision, expiry/replay, pre-execution audit failure no-consume,
+    success completion, ambiguous/audit-failure reconciliation latch, forged claim, invalid time의 pre-execution
+    behavior를 memory fake seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/35-mcp-tool-idempotency-approval-audit.md`
+  - exact binding, one-time expiry, audit ordering, ambiguity ownership, safe offline exercise와 durable production
+    transaction/outbox·reconciliation follow-up을 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른다섯 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: idempotency·approval·audit fixture slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_tool_idempotency_approval_audit.py
+idempotency_key: idem-demo-001
+audit_phases: authorized,succeeded
+state: completed
+reconciliation_required: False
+
+$ uv run ruff format --check src/ai_platform/tools/idempotency.py src/ai_platform/tools/__init__.py examples/volume03/mcp_tool_idempotency_approval_audit.py tests/volume03/test_tool_idempotency.py
+4 files already formatted
+
+$ uv run ruff check src/ai_platform/tools/idempotency.py src/ai_platform/tools/__init__.py examples/volume03/mcp_tool_idempotency_approval_audit.py tests/volume03/test_tool_idempotency.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/tools/idempotency.py src/ai_platform/tools/__init__.py
+Success: no issues found in 2 source files
+
+$ uv run pytest tests/volume03/test_tool_idempotency.py -q
+13 passed
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 34 source files
+
+$ uv run pytest -q
+327 passed in 2.27s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+`uv`는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만 targeted command는
+project environment에서 정상 완료했습니다. Example/test는 fixed in-memory data와 fake audit seam만 사용했으며
+actual Tool handler, database, filesystem, process, shell, network, external MCP server 또는 destructive action을
+호출하지 않았습니다.
+
+## 다음 슬라이스
+
+Hermes/Codex integration은 real external service를 열지 않는 allowlisted configuration fixture와 typed
+request/audit binding으로 별도 모델링해야 합니다. 그 뒤 전체 Volume 03 DoD를 다시 점검하고, production
+integration의 credential·durable approval/audit/idempotency ownership은 explicitly out of scope로 검증하세요.
