@@ -114,6 +114,31 @@ def render_only_artifact_checks(repository_root: Path) -> dict[str, bool]:
                 "autoscaling/",
             )
         ),
+        "base_kustomization_is_local_resource_only_example_contract": all(
+            value in base_kustomization
+            for value in (
+                "apiVersion: kustomize.config.k8s.io/v1beta1",
+                "kind: Kustomization",
+                "resources:",
+            )
+        )
+        and all(
+            excluded not in base_kustomization
+            for excluded in (
+                "http://",
+                "https://",
+                "git::",
+                "bases:",
+                "components:",
+                "generators:",
+                "configMapGenerator:",
+                "secretGenerator:",
+                "images:",
+                "patches:",
+                "patchesStrategicMerge:",
+                "transformers:",
+            )
+        ),
         "deployment_references_example_configmap_in_its_declared_namespace": (
             "name: ai-platform-api-config\n  namespace: ai-platform-example" in configmap
             and "namespace: ai-platform-example" in deployment
