@@ -134,3 +134,8 @@ AI 업무 처리 플랫폼 챗봇입니다. 종료하려면 /exit 또는 /quit�
 ```
 
 모든 명령은 종료 코드 0으로 완료됐으며 실제 키·라이브 API·외부 서비스 호출을 사용하지 않았다. `uv`는 Hermes 활성 가상환경과 프로젝트 `.venv` 경로 차이에 대한 경고만 출력했다.
+
+## 일정 중지 확인
+
+- `hermes cron pause f9dcb63c71e4`가 `Paused job: ai-book-volume-01-author (f9dcb63c71e4)`를 반환했다.
+- 후속 `hermes cron list` 및 `hermes cron status`는 Volume 01 작업을 활성 목록에 표시하지 않았고, 활성 작업 수는 8개에서 7개가 됐다.
