@@ -1089,3 +1089,24 @@ $ git diff --check
 
 - Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
 - 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.
+
+
+## 최신 슬라이스 — 동시 Streaming 시작 CAS
+
+- `src/ai_platform/graph/workflow.py`
+  - `StreamingWorkflow.stream_new()`을 추가했습니다. 첫 `plan` Checkpoint를 `save_if_absent()`로 원자 생성한 producer만 `plan | approval` update를 기록하고, 같은 run ID의 후발 시작은 첫 update 전에 `WorkflowRunConflictError`로 끝납니다.
+- `tests/unit/test_volume09_graph.py`
+  - 동일한 `MemoryCheckpointer`를 공유하는 8개 동시 `DEPLOY` Streaming 시작에서 정확히 하나만 `WAITING_FOR_APPROVAL` update를 기록하고, 나머지 7개는 충돌하며 최종 Checkpoint가 `execute`·결과 없이 보존되는 회귀 계약을 추가했습니다.
+- `examples/volume09/streaming_concurrent_start_workflow.py`
+  - 8개 동시 새 스트림이 `waiting=1`, `conflicts=7`, `events=plan | approval`을 출력하는 결정론적 오프라인 데모를 추가했습니다.
+- `docs/volume09-langgraph/30-streaming-concurrent-start-cas.md`, `README.md`
+  - 새 Streaming run의 원자 생성, checkpoint-before-yield, 충돌 무-update 계약, 위험 작업 승인 경계 및 단일 프로세스 보장 한계를 문서화했습니다.
+
+검증: 예제 출력은 `waiting=1`, `conflicts=7`, `events=plan | approval`이었습니다. 새 동시 시작 계약 테스트는 10회 반복 모두 통과했고, Volume 09 테스트는 `53 passed`, 전체 테스트는 `114 passed`였습니다. Ruff, mypy, 문서·링크·코드 블록·비밀값 검사와 `git diff --check`도 통과했습니다.
+
+실제 LLM API 호출, 네트워크 전송, 파일 삭제, 배포, 비밀값 사용은 수행하지 않았습니다. `DEPLOY`는 별도의 엄격한 Boolean 승인 없이는 계속 `WAITING_FOR_APPROVAL`에 머물며, 이 슬라이스의 `COMPLETED` 경로도 외부 부작용이 없는 시뮬레이션에 한정됩니다.
+
+## 완료 상태
+
+- Volume 09 전체 PRD DoD는 아직 충족되지 않았습니다. `langgraph`와 `fastapi` 의존성 추가 및 실제 LangGraph·FastAPI 통합은 허용된 수정 범위 밖의 프로젝트 설정 변경을 요구합니다.
+- 따라서 `VOLUME09_COMPLETE=true`를 추가하거나 self-pause하지 않았습니다.

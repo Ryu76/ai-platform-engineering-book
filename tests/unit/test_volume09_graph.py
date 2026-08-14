@@ -643,6 +643,40 @@ def test_streaming_workflow_holds_risky_execution_until_explicit_approval() -> N
     assert resumed_updates[-1].state.approval_granted is True
 
 
+def test_concurrent_new_streams_create_one_risky_waiting_checkpoint() -> None:
+    """동시 Streaming 시작은 하나의 위험 run만 승인 대기와 update를 만든다."""
+    checkpointer = MemoryCheckpointer()
+    workflow = StreamingWorkflow(checkpointer=checkpointer)
+    run_id = "stream-concurrent-start-001"
+    barrier = Barrier(8)
+
+    def start_once() -> tuple[WorkflowStatus, tuple[str, ...]] | str:
+        barrier.wait(timeout=5)
+        try:
+            updates = tuple(
+                workflow.stream_new(
+                    run_id=run_id,
+                    task="학습용 배포를 준비한다",
+                    action=ActionKind.DEPLOY,
+                )
+            )
+        except WorkflowRunConflictError:
+            return "conflict"
+        return updates[-1].state.status, tuple(update.event.node for update in updates)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        outcomes = list(executor.map(lambda _: start_once(), range(8)))
+
+    assert outcomes.count((WorkflowStatus.WAITING_FOR_APPROVAL, ("plan", "approval"))) == 1
+    assert outcomes.count("conflict") == 7
+    waiting = checkpointer.load(run_id=run_id)
+    assert waiting.status is WorkflowStatus.WAITING_FOR_APPROVAL
+    assert waiting.approval_granted is None
+    assert waiting.result is None
+    assert [event.node for event in waiting.events] == ["plan", "approval"]
+    assert "execute" not in [event.node for event in waiting.events]
+
+
 def test_concurrent_streaming_approvals_emit_one_execution_and_preserve_terminal_checkpoint(
 ) -> None:
     """동시 스트리밍 재개는 한 승인만 소비하고 하나의 execute update만 내보낸다."""

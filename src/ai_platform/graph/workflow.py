@@ -123,6 +123,28 @@ class StreamingWorkflow:
             state = execute_node(state)
             yield self._save_and_update(run_id=run_id, state=state)
 
+    def stream_new(
+        self, *, run_id: str, task: str, action: ActionKind
+    ) -> Iterator[StreamUpdate]:
+        """새 run ID에만 첫 Streaming update를 원자적으로 기록한다.
+
+        재전송된 시작 요청이 같은 run ID의 위험 작업을 덮어쓰지 않게 첫 plan
+        Checkpoint를 ``save_if_absent()``로 만든다. 성공한 producer만 뒤의 approval
+        및 (안전 작업의) execute update를 기록한다. 이 참조 모델은 외부 부작용을
+        만들지 않으며, 위험 ActionKind는 별도의 명시적 Boolean 승인 전까지 execute
+        update에 도달하지 않는다.
+        """
+        state = WorkflowState.start(task=task, action=action)
+        state = plan_node(state)
+        if not self._checkpointer.save_if_absent(run_id=run_id, state=state):
+            raise WorkflowRunConflictError(f"run_id already exists: {run_id}")
+        yield StreamUpdate(run_id=run_id, state=state, event=state.events[-1])
+        state = approval_node(state)
+        yield self._save_and_update(run_id=run_id, state=state)
+        if state.status is WorkflowStatus.READY:
+            state = execute_node(state)
+            yield self._save_and_update(run_id=run_id, state=state)
+
     def resume_stream(self, *, run_id: str, approved: bool) -> Iterator[StreamUpdate]:
         """사람 결정을 CAS로 한 번만 기록한 뒤 저장된 전이만 내보낸다.
 
