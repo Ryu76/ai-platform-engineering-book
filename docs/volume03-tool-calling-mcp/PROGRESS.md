@@ -2,10 +2,10 @@
 
 ## 현재 상태
 
-- 현재 Phase: **MCP STDIO injected binary stdin writer의 bounded frame/partial delivery model**
-- 완료 선언: 아직 하지 않음. actual Popen stdin ownership/backpressure, cancellation/disconnect,
-  Windows/POSIX process-group/signal semantics, exit-code restart supervisor, durable audit/idempotency와
-  Hermes/Codex 연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
+- 현재 Phase: **MCP STDIO bounded pending-input queue의 single-worker claim/result policy model**
+- 완료 선언: 아직 하지 않음. actual OS pipe worker/cancellation·disconnect semantics, Windows/POSIX
+  process-group/signal semantics, exit-code restart supervisor, durable audit/idempotency와 Hermes/Codex
+  연동 및 전체 운영 DoD를 구현·문서화·검증해야 합니다.
 
 ## 이번 슬라이스: 두 binary output stream을 fake seam에서 공정하게 bounded drain하기
 
@@ -466,9 +466,89 @@ $ uv run python scripts/check_secrets.py
 project environment에서 정상 완료했습니다. example/tests는 in-memory fake만 사용했고 actual process,
 OS pipe, shell, filesystem, network, external MCP server, Tool 또는 destructive action을 호출하지 않았습니다.
 
+## 이번 슬라이스: bounded pending-input queue와 single-worker result policy를 fake model로 분리하기
+
+- `src/ai_platform/mcp/input_queue.py`
+  - `McpStdioInputQueue`는 typed JSON-RPC correlation ID와 existing immutable input frame만 받아
+    1–128 pending-frame budget 안에서 FIFO admission을 모델링합니다. process, pipe, thread, event
+    loop, actual writer 또는 Tool을 호출하지 않습니다.
+  - queue는 한 번에 하나의 exact claimed object만 worker ownership으로 넘깁니다. `DELIVERED`,
+    `NOT_DELIVERED`, `AMBIGUOUS` enum outcome만 raw adapter detail 없이 한 번 기록할 수 있습니다.
+  - cancel은 아직 claim되지 않은 typed frame만 제거하고 future admission을 막으며, disconnect는 pending을
+    버리고 future admission/claim을 막되 in-flight worker를 interrupt하지 않습니다.
+  - ambiguous worker outcome은 pending frame을 버리고 `SHUTDOWN_REQUIRED`와 caller-owned
+    `child_shutdown_requested=True` signal로 전이합니다. child signal/close/retry를 직접 실행하지 않습니다.
+- `src/ai_platform/mcp/__init__.py`
+  - queue state, outcome, queued item, resolution과 generic error를 public export에 추가했습니다.
+- `examples/volume03/mcp_stdio_bounded_input_queue.py`
+  - fixed `safe/test` JSON-RPC object 두 개를 in-memory immutable queue에 offer/claim/resolve하고
+    correlation ID, outcome, pending count, state를 출력합니다. actual process, OS pipe, worker, shell,
+    filesystem, network, MCP server, Tool 또는 destructive action은 수행하지 않습니다.
+- `tests/volume03/test_mcp_input_queue.py`
+  - bounded FIFO/single claim, typed cancellation, in-flight no-interrupt, disconnect discard/block,
+    ambiguous shutdown latch, forged/stale result, invalid outcome/capacity/ID/frame의 no-mutation behavior를
+    process-free fake policy seam으로 검증합니다.
+- `docs/volume03-tool-calling-mcp/31-mcp-stdio-bounded-input-queue.md`
+  - admission budget, single-worker ownership, disconnect/ambiguity signal, safe offline exercise와
+    actual platform worker adapter의 명시적 차이를 문서화했습니다.
+- `docs/volume03-tool-calling-mcp/README.md`
+  - 서른한 번째 학습 장을 목록에 추가했습니다.
+
+## 검증 기록: bounded input queue slice
+
+실행 위치: `E:\\python\\ai-platform-engineering-book-volume-03`
+
+```text
+$ uv run python examples/volume03/mcp_stdio_bounded_input_queue.py
+correlation_id: mcp-stdio:string:queue-demo-001
+outcome: delivered
+pending_frames: 1
+state: open
+
+$ uv run ruff format --check src/ai_platform/mcp/input_queue.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_bounded_input_queue.py tests/volume03/test_mcp_input_queue.py
+4 files already formatted
+
+$ uv run ruff check src/ai_platform/mcp/input_queue.py src/ai_platform/mcp/__init__.py examples/volume03/mcp_stdio_bounded_input_queue.py tests/volume03/test_mcp_input_queue.py
+All checks passed!
+
+$ uv run mypy src/ai_platform/mcp/input_queue.py src/ai_platform/mcp/__init__.py
+Success: no issues found in 2 source files
+
+$ uv run pytest tests/volume03/test_mcp_input_queue.py -q
+11 passed in 0.19s
+
+$ uv run ruff check .
+All checks passed!
+
+$ uv run mypy src
+Success: no issues found in 30 source files
+
+$ uv run pytest -q
+279 passed in 1.29s
+
+$ uv run python scripts/validate_docs.py
+문서 검증 통과: Volume 11개
+
+$ uv run python scripts/validate_links.py
+링크 검증 통과
+
+$ uv run python scripts/validate_code_blocks.py
+코드 블록 검증 통과
+
+$ uv run python scripts/check_secrets.py
+비밀값 검사 통과
+```
+
+모든 `uv` command는 Hermes 활성 가상환경과 project `.venv` 경로 불일치 warning을 출력했지만,
+project environment에서 정상 완료했습니다. example/test는 immutable in-memory queue와 fixed enum
+outcome만 사용했으며 actual process, OS pipe, thread, shell, filesystem, network, external MCP server,
+Tool 또는 destructive action을 호출하지 않았습니다.
+
 ## 다음 슬라이스
 
-actual OS pipe의 backpressure를 direct synchronous `write()`로 해결하려 하지 말고, Windows/POSIX별
-blocking/cancellation semantics를 노출하지 않는 bounded queue·worker result policy를 fake seam부터
-분리해 모델링해야 합니다. 이어 Windows/POSIX process group·signal, exit-code restart/backoff, durable
-approval/audit/idempotency, Hermes/Codex integration을 각각 독립적인 fixture·검증 경계로 진행하세요.
+actual OS pipe의 blocking write를 직접 해결하려 하지 말고, queue에서 claim한 item을 existing delivery
+gate/Popen owner에 전달하는 host-owned worker-result adapter를 fake seam으로 좁게 모델링해야 합니다.
+Worker outcome은 raw exception detail 없이 `NOT_DELIVERED` 또는 `AMBIGUOUS`로 보수적으로 map하고,
+disconnect의 in-flight ownership을 명시적으로 검증하세요. 이어 Windows/POSIX process group·signal,
+exit-code restart/backoff, durable approval/audit/idempotency, Hermes/Codex integration을 각각 독립적인
+fixture·검증 경계로 진행해야 합니다.

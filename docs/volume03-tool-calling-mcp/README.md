@@ -38,5 +38,6 @@ Function Calling · JSON Schema · Argument 검증 · Timeout/Retry · 권한 �
 28. [MCP STDIO bounded stdin write: immutable JSON-RPC frame을 partial write/flush 경계로 보내기](28-mcp-stdio-bounded-input-write.md) — strict LF frame만 injected binary writer에 4 KiB 이하로 전송하고 partial/flush failure의 ambiguous delivery를 retry·shutdown과 분리하는 model
 29. [MCP STDIO input delivery gate: cancellation·disconnect·partial frame을 새 write와 분리하기](29-mcp-stdio-input-delivery-gate.md) — typed JSON-RPC ID의 아직 시작하지 않은 frame만 취소·연결 해제 전에 차단하고, partial delivery ambiguity는 caller-owned shutdown signal로 분리하는 model
 30. [MCP STDIO Popen stdin owner: captured handle·liveness·delivery gate를 분리하기](30-mcp-stdio-popen-input-owner.md) — trusted Popen-like child의 binary stdin을 한 번 snapshot하고 exited child의 새 write를 막되 OS pipe backpressure·process close·signal은 별도 owner로 남기는 model
+31. [MCP STDIO bounded input queue: worker ownership·overload·ambiguity를 분리하기](31-mcp-stdio-bounded-input-queue.md) — immutable frame의 bounded FIFO admission과 single-worker claim/result만 모델링하고 disconnect·partial ambiguity를 actual worker·pipe·shutdown과 분리하는 model
 
 진행 중인 구현 범위와 검증 기록은 [PROGRESS.md](PROGRESS.md)에서 확인합니다. 이 권의 모든 실습은 실제 파일 삭제, 셸 실행, 네트워크 요청 없이 시작합니다.
