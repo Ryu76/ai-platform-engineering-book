@@ -3,8 +3,8 @@
 ## 현재 상태
 
 - 완료 표식: `VOLUME04_COMPLETE` 미설정
-- 현재 slice: 35 — dot product overflow cancellation 보존
-- 검증: Volume 04 테스트 81 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
+- 현재 slice: 37 — zero vector dot product 경계 보존
+- 검증: Volume 04 테스트 83 passed, ruff/mypy 통과, 네 개의 local mock 예제 실행.
 - 범위: 외부 API, 다운로드 모델, Docker, Qdrant를 실행하지 않았습니다.
 
 
@@ -941,3 +941,25 @@ git diff --check
 - 따라서 `VOLUME04_COMPLETE=true`를 추가하지 않았고 cron pause도 실행하지 않았습니다.
 
 `uv`는 PATH에 없어서 `/c/Users/HODI/.local/bin/uv`로 실행했습니다. Hermes 가상환경과 프로젝트 `.venv`가 다르다는 경고가 있었지만, uv가 프로젝트 환경으로 위 검증을 완료했습니다.
+
+## 2026-08-14 — Slice 37 완료: zero vector dot product 경계 보존
+
+### 추가한 결과물
+
+- `embedding_service.py`의 `dot_product`가 scale-first 수치 안정화 전에 zero operand를 감지하도록 보강했습니다.
+  - 내적은 cosine과 달리 zero vector에 정의되므로, 한쪽이 all-zero vector이면 `0.0`을 반환합니다.
+  - 따라서 zero scale로 나누어 `ZeroDivisionError`가 발생하지 않으며, large finite cancellation 및 `math.fsum` 경계는 유지됩니다.
+- `test_volume04_embedding_service.py`에 left/right 어느 쪽이 zero vector여도 `0.0`을 반환하는 두 방향 회귀 테스트를 추가했습니다.
+- 01장에 cosine의 zero vector 거부와 dot product의 정의된 zero 결과 차이를 기록했습니다.
+
+### 검증 결과
+
+- Volume 04 테스트 5개: **83 passed in 0.29s**.
+- `ruff check`: **All checks passed!**; `mypy src/ai_platform/embeddings`: **5 source files, no issues**.
+- 네 개의 결정적 local mock 예제를 실행했습니다: embedding/search top score `0.548`; retrieval `precision_at_1=1.0`, `recall_at_1=1.0`, `mrr=1.0`, `answerable=True`; lifecycle `deleted_count=1`, `reindexed_version=2`, `collection_size=3`, `top_1_recovered=True`.
+- `git diff --check`를 통과했습니다.
+
+### 범위 및 완료 상태
+
+- 이 slice는 결정적 local mock만 사용했으며 외부 API, 모델 다운로드, Docker, Qdrant, database, 비밀값을 사용하지 않았습니다.
+- 실제 Qdrant service DoD는 허용 범위와 실행 금지 조건 밖이므로 여전히 미검증입니다. 따라서 `VOLUME04_COMPLETE=true`를 추가하거나 cron을 pause하지 않았습니다.

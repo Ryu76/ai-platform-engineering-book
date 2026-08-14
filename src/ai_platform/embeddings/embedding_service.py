@@ -93,6 +93,11 @@ def dot_product(left: Sequence[float], right: Sequence[float]) -> float:
     _require_same_nonempty_dimension(left, right)
     left_scale = max(abs(value) for value in left)
     right_scale = max(abs(value) for value in right)
+    # Unlike cosine similarity, a zero vector has a defined dot product.
+    # Return before scaling so an all-zero operand never causes division by
+    # zero in the numerically stable path below.
+    if left_scale == 0.0 or right_scale == 0.0:
+        return 0.0
     # Scale each finite input before multiplying. `fsum` then preserves a
     # small residual when large positive and negative terms cancel, without
     # producing intermediate +/-inf values that make fsum fail.

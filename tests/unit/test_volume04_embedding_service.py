@@ -59,6 +59,17 @@ def test_dot_product_avoids_overflow_when_large_terms_cancel() -> None:
     assert result == 0.0
 
 
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [([0.0, 0.0], [1.0, -2.0]), ([3.0, -4.0], [0.0, 0.0])],
+)
+def test_dot_product_returns_zero_when_either_operand_is_zero(
+    left: list[float], right: list[float]
+) -> None:
+    """내적은 cosine과 달리 zero vector를 유효한 0.0 결과로 처리해야 한다."""
+    assert dot_product(left, right) == 0.0
+
+
 def test_cosine_similarity_clamps_floating_point_roundoff_to_its_public_range() -> None:
     """동일한 정규화 vector의 반올림 오차가 1.0보다 큰 score가 되면 안 된다."""
     model = DeterministicEmbeddingModel(dimensions=256)
